@@ -1,8 +1,11 @@
-# EVCC-Garagendisplay (ESP32 CYD)
+# EVCC-Garagendisplay (ESP32-4848S040C)
 
-Kleines Touch-Display neben dem Ladepunkt: zeigt die aktuelle Ladeleistung aus
-[EVCC](https://evcc.io) und schaltet zwischen **PV**, **Smart** und **Schnell** um.
-Hardware: ESP32-2432S028R („Cheap Yellow Display", 2,8", 320×240), Strom per USB.
+Touch-Display neben dem Ladepunkt: zeigt die aktuelle Ladeleistung aus [EVCC](https://evcc.io)
+und schaltet zwischen **PV**, **Smart** und **Schnell** um.
+Hardware: Guition ESP32-4848S040C – ESP32-S3, 4" IPS 480×480 (ST7701S), kapazitiver Touch (GT911),
+Strom per USB-C.
+
+Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-final`.
 
 ## Anzeige
 
@@ -10,37 +13,40 @@ Hardware: ESP32-2432S028R („Cheap Yellow Display", 2,8", 320×240), Strom per 
 | --- | --- |
 | Kopfzeile | Name des Ladepunkts, Uhrzeit, Warnsymbol bei WLAN-/EVCC-Problemen |
 | Mitte | Ladeleistung in kW – oder „Kein Fahrzeug", wenn nichts eingesteckt ist |
-| Statuszeile | z. B. „lädt · 3-phasig", „Wartet auf Sonnenüberschuss", „Genug Sonne – Start in 0:45" |
-| Balken | Sonnenanteil der Ladeleistung, dazu geladene Energie und Dauer der Sitzung |
-| Unten | Modusumschalter PV · Smart · Schnell |
+| Statuszeile | z. B. „Lädt · 3-phasig", „Wartet auf Sonnenüberschuss", „Genug Sonne – Start in 0:45" |
+| Balken | Sonnen- und Netzanteil der aktuellen Ladeleistung |
+| Kacheln | Geladene Energie, Dauer und durchschnittlicher Sonnenanteil der Sitzung |
+| Unten | Modustasten PV · Smart · Schnell, jeweils mit kurzer Beschreibung |
 
-**Tag/Nacht:** Das Display berechnet den Sonnenstand für den eingestellten Ort und wechselt
-automatisch zwischen hellem und dunklem Design (Farben wie in der EVCC-Weboberfläche). Nachts
-wird die Helligkeit reduziert.
+**Design:** hell, dunkel oder automatisch nach Sonnenstand (Farben angelehnt an EVCC). Das Display
+läuft immer mit voller Helligkeit – in der Garage ist Licht, wenn jemand davorsteht.
 
-**Bildschirm aus:** Wird nicht geladen und 2 Minuten nichts bedient, geht das Display aus.
-Antippen weckt es auf – die erste Berührung löst dabei nichts aus. Beim Einstecken des Autos
+**Bildschirm aus:** Wird nicht geladen und nichts bedient, geht das Display nach 2 Minuten aus
+(einstellbar, 0 = immer an). Antippen weckt es, ohne eine Taste auszulösen. Beim Einstecken des Autos
 und beim Start/Ende des Ladens geht es von selbst an.
 
 ## Modi
 
-EVCC ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bildet die drei
-Tasten so ab:
+EVCC ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bildet die drei Tasten so ab:
 
 | Taste | EVCC | Verhalten |
 | --- | --- | --- |
 | PV | `smart` + „Immer laden" aus | lädt nur mit Sonnenüberschuss |
-| Smart | `smart` + „Immer laden" an | lädt immer mit mindestens Mindestleistung, mehr bei Sonne; berücksichtigt günstige Tarife und Ladepläne |
+| Smart | `smart` + „Immer laden" an | lädt immer mindestens mit Mindestleistung, mehr bei Sonne; berücksichtigt günstige Tarife und Ladepläne |
 | Schnell | `now` | volle Leistung |
 
-„Aus" gibt es am Display bewusst nicht. Steht der Ladepunkt in EVCC auf Aus, zeigt das
-Display „Ladepunkt ist aus – Modus wählen".
-
-Ältere EVCC-Versionen werden automatisch erkannt (dann `pv` / `minpv`).
+„Aus" gibt es am Display bewusst nicht. Steht der Ladepunkt in EVCC auf Aus, zeigt das Display
+„Ladepunkt ist aus – Modus wählen". Ältere EVCC-Versionen werden erkannt (dann `pv` / `minpv`).
 
 ## Technik
 
-- PlatformIO / Arduino, [LVGL 9](https://lvgl.io) für die Oberfläche, LovyanGFX als Display-/Touch-Treiber
+- PlatformIO mit [pioarduino](https://github.com/pioarduino/platform-espressif32) (Arduino 3.x auf ESP-IDF 5.5)
+- Bild über den ESP-IDF-Treiber `esp_lcd` (RGB-Schnittstelle), Oberfläche mit [LVGL 9](https://lvgl.io)
+- **Stabil bei WLAN-Last** (getestet mit WLAN-Suchen und OTA-Updates):
+  - Bounce-Buffer im internen RAM – die Bildausgabe liest nicht direkt aus dem PSRAM
+  - `CONFIG_SPIRAM_XIP_FROM_PSRAM` und `CONFIG_LCD_RGB_ISR_IRAM_SAFE` – die Ausgabe läuft auch bei Flash-Zugriffen weiter
+  - `CONFIG_LCD_RGB_RESTART_IN_VSYNC` – falls doch etwas verrutscht, fängt sich das Bild im nächsten Frame
+  - Diese Einstellungen stehen unter `custom_sdkconfig` in `platformio.ini`; das Framework wird deshalb beim ersten Build neu kompiliert (einige Minuten)
 - Schriften: Inter (UI-Texte), Montserrat (große Leistungszahl), Tabler-Icons – erzeugt mit `tools/gen_fonts.sh`
 - Daten: alle 3 s `GET /api/state?jq=…` – der jq-Filter liefert nur die benötigten Felder (~300 Byte statt ~70 KB)
 - Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}` und `POST /api/loadpoints/<n>/mode/{smart|now}`
@@ -49,36 +55,50 @@ Display „Ladepunkt ist aus – Modus wählen".
 
 ## Flashen
 
+Erstes Mal per USB-C:
+
 ```bash
-pio run -e cyd -t upload
+pio run -e panel -t upload
 ```
 
-Hat das CYD **zwei** USB-Anschlüsse (Micro-USB + USB-C), ist meist ein ST7789-Display verbaut:
-`pio run -e cyd2usb -t upload`. Erkennbar daran, dass die Farben bei `cyd` falsch aussehen.
-
-Spätere Updates übers WLAN:
+Danach übers WLAN:
 
 ```bash
-pio run -e cyd_ota -t upload
+pio run -e panel_ota -t upload
 ```
 
 ## Erster Start
 
-1. **Touch kalibrieren:** Pfeilspitzen in den vier Ecken nacheinander antippen (am besten mit einem Stift).
-2. **WLAN einrichten:** Mit dem Handy ins WLAN `EVCC-Garage` wechseln – die Einrichtungsseite öffnet sich
-   (sonst `192.168.4.1`). WLAN auswählen, Passwort eingeben. Unter den WLAN-Feldern lassen sich
-   EVCC-Adresse (Standard `192.168.178.209:7070`), Ladepunkt-Nr. (Standard `1` = Garage), Standort
-   für Tag/Nacht und Drehung des Displays einstellen.
+Mit dem Handy ins WLAN `EVCC-Garage` wechseln – die Einrichtungsseite öffnet sich (sonst `192.168.4.1`).
+WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
+
+| Feld | Standard |
+| --- | --- |
+| EVCC-Adresse / Port | `192.168.178.209` / `7070` |
+| Ladepunkt-Nr. | `1` (Garage) |
+| Breiten-/Längengrad | Mitte Deutschlands – für die automatische Tag/Nacht-Umschaltung |
+| Drehung | `0` (je 90° im Uhrzeigersinn: 1, 2, 3) |
+| Design | `0` automatisch, `1` hell, `2` dunkel |
+| Bildschirm aus nach Minuten | `2` (`0` = immer an) |
 
 ## Später ändern
 
-- **Einstellungen:** Den Namen des Ladepunkts oben links **3 Sekunden gedrückt halten** → das Portal
-  `EVCC-Garage` startet erneut. Antippen des Hinweises bricht ab.
-- **Touch neu kalibrieren:** Beim Einstecken des USB-Kabels den Bildschirm berühren.
-- Nach einem Stromausfall wartet das Display auf den Router und startet nach 5 Minuten ohne WLAN
-  selbst neu.
+- **Einstellungen:** „Garage" oben links **3 Sekunden gedrückt halten** → das Portal `EVCC-Garage` startet
+  erneut. Antippen des Hinweises bricht ab.
+- Nach einem Stromausfall wartet das Display auf den Router und startet nach 5 Minuten ohne WLAN selbst neu.
+
+## Diagnose
+
+Im Heimnetz unter `http://evcc-garage.local:8080`:
+
+| Pfad | Zweck |
+| --- | --- |
+| `/screenshot.bmp` | aktueller Bildschirminhalt |
+| `/preview?s=charging\|solar\|fast\|nocar\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand; `/preview` ohne Parameter beendet |
+| `/wifiscan` | löst eine WLAN-Suche aus (Lasttest für die Bildausgabe) |
 
 ## Anpassen
 
-Helligkeit, Zeiten und Standardwerte stehen in [src/config.h](src/config.h). Für ein OTA-Passwort
-in `platformio.ini` unter `build_flags` `-DOTA_PASSWORD=\"…\"` ergänzen.
+Zeiten und Standardwerte stehen in [src/config.h](src/config.h), Pins und Display-Timings in
+[src/board.h](src/board.h). Für ein OTA-Passwort in `platformio.ini` unter `build_flags`
+`-DOTA_PASSWORD=\"…\"` ergänzen.
