@@ -6,7 +6,7 @@
 #define DEFAULT_LOADPOINT 1        // 1 = erster Ladepunkt in EVCC ("Garage")
 #define DEFAULT_LATITUDE 51.0f     // für Tag/Nacht-Umschaltung (Sonnenstand)
 #define DEFAULT_LONGITUDE 10.0f
-#define DEFAULT_ROTATION 1         // 1 oder 3 = Querformat, 3 dreht um 180°
+#define DEFAULT_ROTATION 0         // 0–3, jeweils 90° im Uhrzeigersinn
 #define DEFAULT_THEME 0            // 0 = automatisch nach Sonnenstand, 1 = immer hell, 2 = immer dunkel
 
 #define HOSTNAME "evcc-garage"
@@ -28,8 +28,3 @@
 #define NIGHT_SUN_ELEVATION -3.0                 // Sonne tiefer als -3° → dunkles Design (bei Einstellung automatisch)
 #define PREVIEW_DURATION_MS 60000                // Dauer einer Vorschau über /preview
 #define SETTINGS_LONG_PRESS_MS 3000              // Titel lange drücken → Einstellungen
-
-// CYD-Pins
-#define PIN_LED_R 4
-#define PIN_LED_G 16
-#define PIN_LED_B 17

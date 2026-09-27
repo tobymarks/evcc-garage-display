@@ -5,28 +5,31 @@
 #include "config.h"
 #include "icons.h"
 
-LV_FONT_DECLARE(font_14);
-LV_FONT_DECLARE(font_16);
-LV_FONT_DECLARE(font_20);
+LV_FONT_DECLARE(font_18);
+LV_FONT_DECLARE(font_22);
 LV_FONT_DECLARE(font_24);
+LV_FONT_DECLARE(font_26);
+LV_FONT_DECLARE(font_32);
 LV_FONT_DECLARE(font_big);
 LV_FONT_DECLARE(font_icon_big);
 
 // Farben angelehnt an die EVCC-Weboberfläche
 struct Theme {
-  lv_color_t bg, box, text, muted, activeBg, activeFg, pressed, solar, solarText, grid, warn, error;
+  lv_color_t bg, box, text, muted, activeBg, activeFg, pressed, solar, solarText, grid, warn, error, border;
 };
 
 static const Theme LIGHT = {
-    lv_color_hex(0xF3F3F7), lv_color_hex(0xFFFFFF), lv_color_hex(0x28293E), lv_color_hex(0x93949E),
+    // Grau und Grün dunkler als in EVCC: Kontrast ≥ 4,5:1, damit es aus 2–3 m lesbar bleibt
+    lv_color_hex(0xF3F3F7), lv_color_hex(0xFFFFFF), lv_color_hex(0x28293E), lv_color_hex(0x6E6F7C),
     lv_color_hex(0x28293E), lv_color_hex(0xFFFFFF), lv_color_hex(0xE4E4EC), lv_color_hex(0x0FDE41),
-    lv_color_hex(0x0BA631), lv_color_hex(0x28293E), lv_color_hex(0xE07F00), lv_color_hex(0xFC440F),
+    lv_color_hex(0x078A2C), lv_color_hex(0x28293E), lv_color_hex(0xC26A00), lv_color_hex(0xD9380A),
+    lv_color_hex(0xDCDCE4),
 };
-// Dunkel: neutrales Schwarz statt EVCC-Navy – das TN-Panel der CYD färbt dunkle Blautöne sonst kräftig blau
 static const Theme DARK = {
-    lv_color_hex(0x000000), lv_color_hex(0x232329), lv_color_hex(0xFFFFFF), lv_color_hex(0x9A9AA4),
-    lv_color_hex(0xFFFFFF), lv_color_hex(0x000000), lv_color_hex(0x3A3A44), lv_color_hex(0x0FDE41),
+    lv_color_hex(0x05060F), lv_color_hex(0x1C1D2E), lv_color_hex(0xFFFFFF), lv_color_hex(0x9A9BA8),
+    lv_color_hex(0xFFFFFF), lv_color_hex(0x05060F), lv_color_hex(0x33344A), lv_color_hex(0x0FDE41),
     lv_color_hex(0x0FDE41), lv_color_hex(0x93949E), lv_color_hex(0xFF9000), lv_color_hex(0xFC440F),
+    lv_color_hex(0x1C1D2E),
 };
 
 static const Theme* theme = &LIGHT;
@@ -38,13 +41,18 @@ static ui::ModeCallback modeCb;
 static ui::Callback settingsCb;
 static ui::Callback messageTapCb;
 
-static constexpr int MID_Y = 36;   // unter der Kopfzeile
-static constexpr int SEG_Y = 186;  // Modusumschalter (48 px hoch, 6 px Rand unten)
-static constexpr int BAR_W = 292, BAR_H = 10;
+// Raster für 480x480
+static constexpr int MARGIN = 24;
+static constexpr int HEADER_H = 64;
+static constexpr int SEG_H = 84;
+static constexpr int SEG_Y = 480 - MARGIN - SEG_H;  // Modusumschalter unten
+static constexpr int CONTENT_W = 480 - 2 * MARGIN;
+static constexpr int BAR_H = 14;
+static constexpr int TILE_GAP = 12;
+static constexpr int TILE_H = 64;
 
 // Hauptbildschirm
 static lv_obj_t* scrMain;
-static lv_obj_t* header;
 static lv_obj_t* lblTitle;
 static lv_obj_t* lblIcons;
 static lv_obj_t* lblClock;
@@ -58,13 +66,21 @@ static lv_obj_t* lblStatus;
 static lv_obj_t* barBlock;
 static lv_obj_t* barBg;
 static lv_obj_t* barFill;
-static lv_obj_t* lblLeft;
-static lv_obj_t* lblRight;
+static lv_obj_t* lblSolar;
+static lv_obj_t* lblGrid;
+static lv_obj_t* tiles;
+static lv_obj_t* tile[3];
+static lv_obj_t* tileLabel[3];
+static lv_obj_t* tileValue[3];
+static const char* TILE_TEXT[3] = {"Geladen", "Dauer", "Ø Sonne"};
 static lv_obj_t* segBg;
 static lv_obj_t* seg[3];
 static lv_obj_t* segLbl[3];
+static lv_obj_t* segSub[3];
 static const ChargeMode SEG_MODES[3] = {ChargeMode::PV, ChargeMode::Smart, ChargeMode::Fast};
-static const char* SEG_TEXT[3] = {ICON_SUN "  PV", ICON_SPARKLES "  Smart", ICON_BOLT "  Schnell"};
+// Nur Text wie in EVCC, dazu eine Zeile, die sagt, was der Modus tut
+static const char* SEG_TEXT[3] = {"PV", "Smart", "Schnell"};
+static const char* SEG_SUB[3] = {"nur Sonne", "Sonne + Netz", "volle Leistung"};
 
 // Hinweisbildschirm
 static lv_obj_t* scrMsg;
@@ -93,7 +109,7 @@ static void formatDecimal(char* buf, size_t len, float value) {
 }
 
 static void formatDuration(char* buf, size_t len, uint32_t seconds) {
-  snprintf(buf, len, "%u:%02u", (unsigned)(seconds / 3600), (unsigned)((seconds / 60) % 60));
+  snprintf(buf, len, "%u:%02u h", (unsigned)(seconds / 3600), (unsigned)((seconds / 60) % 60));
 }
 
 static void formatCountdown(char* buf, size_t len, uint32_t seconds) {
@@ -113,24 +129,24 @@ static void buildMain() {
   scrMain = lv_obj_create(nullptr);
   lv_obj_remove_flag(scrMain, LV_OBJ_FLAG_SCROLLABLE);
 
-  // Kopfzeile (lange drücken → Einstellungen)
-  header = makeBox(scrMain);
-  lv_obj_set_size(header, 200, 36);
+  // Kopfzeile (Titel lange drücken → Einstellungen)
+  lv_obj_t* header = makeBox(scrMain);
+  lv_obj_set_size(header, 300, HEADER_H);
   lv_obj_add_flag(header, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(header, onHeaderLongPress, LV_EVENT_LONG_PRESSED, nullptr);
-  lblTitle = makeLabel(header, &font_16);
-  lv_obj_set_pos(lblTitle, 14, 10);
+  lblTitle = makeLabel(header, &font_26);
+  lv_obj_align(lblTitle, LV_ALIGN_LEFT_MID, MARGIN + 4, 4);
 
-  lblClock = makeLabel(scrMain, &font_16);
-  lv_obj_align(lblClock, LV_ALIGN_TOP_RIGHT, -14, 10);
-  lblIcons = makeLabel(scrMain, &font_16);
-  lv_obj_align_to(lblIcons, lblClock, LV_ALIGN_OUT_LEFT_MID, -8, 0);
+  lblClock = makeLabel(scrMain, &font_26);
+  lv_obj_align(lblClock, LV_ALIGN_TOP_RIGHT, -MARGIN - 4, 0);
+  lv_obj_set_style_pad_top(lblClock, (HEADER_H - font_26.line_height) / 2 + 4, 0);
+  lblIcons = makeLabel(scrMain, &font_26);
 
   // Mittelteil: Inhalt vertikal zentriert zwischen Kopfzeile und Modusumschalter,
-  // ausgeblendete Elemente (Balken, Leistung) nehmen keinen Platz ein
+  // ausgeblendete Elemente nehmen keinen Platz ein
   lv_obj_t* mid = makeBox(scrMain);
-  lv_obj_set_pos(mid, 0, MID_Y);
-  lv_obj_set_size(mid, 320, SEG_Y - MID_Y);
+  lv_obj_set_pos(mid, 0, HEADER_H);
+  lv_obj_set_size(mid, 480, SEG_Y - HEADER_H);
   lv_obj_set_flex_flow(mid, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(mid, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
@@ -139,65 +155,93 @@ static void buildMain() {
   lv_obj_set_size(contPower, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(contPower, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(contPower, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
-  lv_obj_set_style_pad_column(contPower, 8, 0);
+  lv_obj_set_style_pad_column(contPower, 12, 0);
   lblPower = makeLabel(contPower, &font_big);
-  lblUnit = makeLabel(contPower, &font_24);
+  lblUnit = makeLabel(contPower, &font_32);
   lv_label_set_text(lblUnit, "kW");
-  lv_obj_set_style_pad_bottom(lblUnit, font_big.base_line - font_24.base_line, 0);
+  lv_obj_set_style_pad_bottom(lblUnit, font_big.base_line - font_32.base_line, 0);
 
   // Anzeige ohne Fahrzeug / ohne Daten
   contIdle = makeBox(mid);
   lv_obj_set_size(contIdle, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(contIdle, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(contIdle, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_column(contIdle, 14, 0);
+  lv_obj_set_style_pad_column(contIdle, 20, 0);
   lblIdleIcon = makeLabel(contIdle, &font_icon_big);
-  lblIdleText = makeLabel(contIdle, &font_24);
+  lblIdleText = makeLabel(contIdle, &font_32);
 
   // Statuszeile
-  lblStatus = makeLabel(mid, &font_16);
-  lv_obj_set_width(lblStatus, 300);
+  lblStatus = makeLabel(mid, &font_22);
+  lv_obj_set_width(lblStatus, CONTENT_W);
   lv_label_set_long_mode(lblStatus, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_align(lblStatus, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_pad_top(lblStatus, 4, 0);
 
-  // Sonnenanteil + Sitzungswerte
+  // Aktueller Sonnen-/Netzanteil der Ladeleistung
   barBlock = makeBox(mid);
-  lv_obj_set_size(barBlock, BAR_W, LV_SIZE_CONTENT);
-  lv_obj_set_style_pad_top(barBlock, 12, 0);
+  lv_obj_set_size(barBlock, CONTENT_W, LV_SIZE_CONTENT);
+  lv_obj_set_style_pad_top(barBlock, 18, 0);
   barBg = makeBox(barBlock);
-  lv_obj_set_size(barBg, BAR_W, BAR_H);
+  lv_obj_set_size(barBg, CONTENT_W, BAR_H);
   lv_obj_set_style_radius(barBg, BAR_H / 2, 0);
   lv_obj_set_style_bg_opa(barBg, LV_OPA_COVER, 0);
   lv_obj_set_style_clip_corner(barBg, true, 0);
   barFill = makeBox(barBg);
   lv_obj_set_height(barFill, BAR_H);
   lv_obj_set_style_bg_opa(barFill, LV_OPA_COVER, 0);
-  lblLeft = makeLabel(barBlock, &font_14);
-  lv_obj_set_pos(lblLeft, 0, BAR_H + 6);
-  lblRight = makeLabel(barBlock, &font_14);
-  lv_obj_align(lblRight, LV_ALIGN_TOP_RIGHT, 0, BAR_H + 6);
+  lblSolar = makeLabel(barBlock, &font_18);
+  lv_obj_set_pos(lblSolar, 0, BAR_H + 8);
+  lblGrid = makeLabel(barBlock, &font_18);
+  lv_obj_align(lblGrid, LV_ALIGN_TOP_RIGHT, 0, BAR_H + 8);
+
+  // Kacheln mit den Werten der Ladesitzung
+  tiles = makeBox(mid);
+  lv_obj_set_size(tiles, CONTENT_W, LV_SIZE_CONTENT);
+  lv_obj_set_style_pad_top(tiles, 14, 0);
+  lv_obj_set_style_pad_column(tiles, TILE_GAP, 0);
+  lv_obj_set_flex_flow(tiles, LV_FLEX_FLOW_ROW);
+  for (int i = 0; i < 3; i++) {
+    tile[i] = makeBox(tiles);
+    lv_obj_set_height(tile[i], TILE_H);
+    lv_obj_set_flex_grow(tile[i], 1);
+    lv_obj_set_style_radius(tile[i], 16, 0);
+    lv_obj_set_style_bg_opa(tile[i], LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_left(tile[i], 14, 0);
+    tileLabel[i] = makeLabel(tile[i], &font_18);
+    lv_label_set_text(tileLabel[i], TILE_TEXT[i]);
+    lv_obj_set_pos(tileLabel[i], 0, 7);
+    tileValue[i] = makeLabel(tile[i], &font_26);
+    lv_obj_set_pos(tileValue[i], 0, 29);
+  }
 
   // Modusumschalter wie in EVCC: Pill-Gruppe, aktiver Modus gefüllt
   segBg = makeBox(scrMain);
-  lv_obj_set_pos(segBg, 8, SEG_Y);
-  lv_obj_set_size(segBg, 304, 48);
-  lv_obj_set_style_radius(segBg, 24, 0);
+  lv_obj_set_pos(segBg, MARGIN, SEG_Y);
+  lv_obj_set_size(segBg, CONTENT_W, SEG_H);
+  lv_obj_set_style_radius(segBg, SEG_H / 2, 0);
   lv_obj_set_style_bg_opa(segBg, LV_OPA_COVER, 0);
-  lv_obj_set_style_pad_all(segBg, 4, 0);
-  lv_obj_set_style_pad_column(segBg, 4, 0);
+  lv_obj_set_style_border_width(segBg, 1, 0);
+  lv_obj_set_style_pad_all(segBg, 6, 0);
+  lv_obj_set_style_pad_column(segBg, 6, 0);
   lv_obj_set_flex_flow(segBg, LV_FLEX_FLOW_ROW);
   for (int i = 0; i < 3; i++) {
     seg[i] = makeBox(segBg);
     lv_obj_add_flag(seg[i], LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_height(seg[i], LV_PCT(100));
     lv_obj_set_flex_grow(seg[i], 1);
-    lv_obj_set_style_radius(seg[i], 20, 0);
+    lv_obj_set_style_radius(seg[i], SEG_H / 2 - 6, 0);
     lv_obj_set_style_bg_opa(seg[i], LV_OPA_COVER, LV_STATE_PRESSED);
     lv_obj_add_event_cb(seg[i], onSegment, LV_EVENT_CLICKED, (void*)(intptr_t)i);
-    segLbl[i] = makeLabel(seg[i], &font_16);
+    lv_obj_t* col = makeBox(seg[i]);
+    lv_obj_remove_flag(col, LV_OBJ_FLAG_CLICKABLE);  // Klicks gehen an die Taste
+    lv_obj_set_size(col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_center(col);
+    segLbl[i] = makeLabel(col, &font_24);
     lv_label_set_text(segLbl[i], SEG_TEXT[i]);
-    lv_obj_center(segLbl[i]);
+    segSub[i] = makeLabel(col, &font_18);
+    lv_label_set_text(segSub[i], SEG_SUB[i]);
   }
 }
 
@@ -209,16 +253,23 @@ static void buildMessage() {
   scrMsg = lv_obj_create(nullptr);
   lv_obj_remove_flag(scrMsg, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_event_cb(scrMsg, onMessageClicked, LV_EVENT_CLICKED, nullptr);
-  lblMsgIcon = makeLabel(scrMsg, &font_icon_big);
-  lv_obj_align(lblMsgIcon, LV_ALIGN_TOP_MID, 0, 30);
-  lblMsgTitle = makeLabel(scrMsg, &font_24);
-  lv_obj_align(lblMsgTitle, LV_ALIGN_TOP_MID, 0, 94);
-  lblMsgText = makeLabel(scrMsg, &font_16);
-  lv_obj_set_width(lblMsgText, 290);
+
+  lv_obj_t* col = makeBox(scrMsg);
+  lv_obj_set_size(col, 400, LV_SIZE_CONTENT);
+  lv_obj_center(col);
+  lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_remove_flag(col, LV_OBJ_FLAG_CLICKABLE);
+
+  lblMsgIcon = makeLabel(col, &font_icon_big);
+  lblMsgTitle = makeLabel(col, &font_32);
+  lv_obj_set_style_pad_top(lblMsgTitle, 16, 0);
+  lblMsgText = makeLabel(col, &font_22);
+  lv_obj_set_width(lblMsgText, 400);
   lv_label_set_long_mode(lblMsgText, LV_LABEL_LONG_WRAP);
   lv_obj_set_style_text_align(lblMsgText, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_line_space(lblMsgText, 4, 0);
-  lv_obj_align(lblMsgText, LV_ALIGN_TOP_MID, 0, 134);
+  lv_obj_set_style_text_line_space(lblMsgText, 6, 0);
+  lv_obj_set_style_pad_top(lblMsgText, 12, 0);
 }
 
 static void applyTheme() {
@@ -232,9 +283,14 @@ static void applyTheme() {
   lv_obj_set_style_text_color(lblUnit, t.muted, 0);
   lv_obj_set_style_text_color(lblIdleIcon, t.muted, 0);
   lv_obj_set_style_text_color(lblIdleText, t.text, 0);
-  lv_obj_set_style_text_color(lblRight, t.muted, 0);
+  lv_obj_set_style_text_color(lblGrid, t.muted, 0);
   lv_obj_set_style_bg_color(barFill, t.solar, 0);
+  for (int i = 0; i < 3; i++) {
+    lv_obj_set_style_bg_color(tile[i], t.box, 0);
+    lv_obj_set_style_text_color(tileLabel[i], t.muted, 0);
+  }
   lv_obj_set_style_bg_color(segBg, t.box, 0);
+  lv_obj_set_style_border_color(segBg, t.border, 0);
   lv_obj_set_style_text_color(lblMsgIcon, t.muted, 0);
   lv_obj_set_style_text_color(lblMsgTitle, t.text, 0);
   lv_obj_set_style_text_color(lblMsgText, t.muted, 0);
@@ -254,7 +310,10 @@ static void renderSegments(ChargeMode shown, bool pending) {
     lv_obj_set_style_bg_color(seg[i], active ? t.activeBg : t.box, 0);
     lv_obj_set_style_bg_opa(seg[i], active ? (pending ? LV_OPA_50 : LV_OPA_COVER) : LV_OPA_TRANSP, 0);
     lv_obj_set_style_bg_color(seg[i], active ? t.activeBg : t.pressed, LV_STATE_PRESSED);
-    lv_obj_set_style_text_color(segLbl[i], active && !pending ? t.activeFg : t.text, 0);
+    const bool filled = active && !pending;
+    lv_obj_set_style_text_color(segLbl[i], filled ? t.activeFg : t.text, 0);
+    lv_obj_set_style_text_color(segSub[i], filled ? t.activeFg : t.muted, 0);
+    lv_obj_set_style_text_opa(segSub[i], filled ? LV_OPA_80 : LV_OPA_COVER, 0);
   }
 }
 
@@ -272,7 +331,10 @@ static void renderStatus(const UiView& v, char* buf, size_t len, lv_color_t& col
     snprintf(buf, len, "Keine WLAN-Verbindung");
   } else if (v.stale) {
     color = t.error;
-    snprintf(buf, len, s.valid || millis() > STALE_AFTER_MS ? "EVCC nicht erreichbar" : "Verbinde mit EVCC …");
+    if (s.valid && v.lastUpdate[0])
+      snprintf(buf, len, "EVCC nicht erreichbar · Stand %s", v.lastUpdate);
+    else
+      snprintf(buf, len, millis() > STALE_AFTER_MS ? "EVCC nicht erreichbar" : "Verbinde mit EVCC …");
   } else if (v.pendingMode != ChargeMode::None) {
     snprintf(buf, len, "Modus wird gesetzt …");
   } else if (!s.connected) {
@@ -281,7 +343,7 @@ static void renderStatus(const UiView& v, char* buf, size_t len, lv_color_t& col
     color = t.warn;
     snprintf(buf, len, "Ladepunkt ist aus – Modus wählen");
   } else if (s.charging) {
-    int n = snprintf(buf, len, "lädt");
+    int n = snprintf(buf, len, "Lädt");
     if (s.phasesActive > 0) n += snprintf(buf + n, len - n, " · %d-phasig", s.phasesActive);
     if (s.vehicleSoc > 0) n += snprintf(buf + n, len - n, " · Akku %d %%", (int)lroundf(s.vehicleSoc));
     if (!strcmp(s.pvAction, "disable") && s.pvRemaining > 0) {
@@ -312,15 +374,9 @@ void ui::render(const UiView& v) {
 
   lv_label_set_text(lblTitle, s.valid ? s.title : "EVCC");
   lv_label_set_text(lblClock, v.clock);
-  if (!v.wifiConnected) {
-    lv_label_set_text(lblIcons, ICON_WIFI_OFF);
-  } else if (v.stale) {
-    lv_label_set_text(lblIcons, ICON_ALERT);
-  } else {
-    lv_label_set_text(lblIcons, "");
-  }
+  lv_label_set_text(lblIcons, !v.wifiConnected ? ICON_WIFI_OFF : v.stale ? ICON_ALERT : "");
   lv_obj_set_style_text_color(lblIcons, t.error, 0);
-  lv_obj_align_to(lblIcons, lblClock, LV_ALIGN_OUT_LEFT_MID, -8, 0);
+  lv_obj_align_to(lblIcons, lblClock, LV_ALIGN_OUT_LEFT_MID, -10, 0);
 
   // Hauptwert
   const bool showPower = s.valid && s.connected;
@@ -344,27 +400,36 @@ void ui::render(const UiView& v) {
   lv_label_set_text(lblStatus, buf);
   lv_obj_set_style_text_color(lblStatus, statusColor, 0);
 
-  // Sonnenanteil + Sitzungswerte
-  const bool showBar = showPower && (s.charging || s.chargedEnergy > 0);
+  // Balken: aktueller Sonnenanteil der Ladeleistung
+  const bool showBar = showPower && s.charging && s.greenShare >= 0;
   setVisible(barBlock, showBar);
   if (showBar) {
-    const float share = (s.charging && s.greenShare >= 0) ? s.greenShare * 100.0f : s.sessionSolarPct;
-    const int pct = constrain((int)lroundf(share), 0, 100);
-    lv_obj_set_width(barFill, BAR_W * pct / 100);
+    const int pct = constrain((int)lroundf(s.greenShare * 100.0f), 0, 100);
+    lv_obj_set_width(barFill, CONTENT_W * pct / 100);
     setVisible(barFill, pct > 0);
     lv_obj_set_style_bg_color(barBg, live ? t.grid : t.muted, 0);
     lv_obj_set_style_bg_opa(barBg, live ? LV_OPA_COVER : LV_OPA_40, 0);
+    snprintf(buf, sizeof(buf), ICON_SUN " Jetzt %d %% Sonne", pct);
+    lv_label_set_text(lblSolar, buf);
+    lv_obj_set_style_text_color(lblSolar, live ? t.solarText : t.muted, 0);
+    snprintf(buf, sizeof(buf), "%d %% Netz", 100 - pct);
+    lv_label_set_text(lblGrid, buf);
+    lv_obj_align(lblGrid, LV_ALIGN_TOP_RIGHT, 0, BAR_H + 8);
+  }
 
-    snprintf(buf, sizeof(buf), ICON_SUN " %d %% Sonne", pct);
-    lv_label_set_text(lblLeft, buf);
-    lv_obj_set_style_text_color(lblLeft, live ? t.solarText : t.muted, 0);
-
-    char energy[12], duration[12];
-    formatDecimal(energy, sizeof(energy), s.chargedEnergy / 1000.0f);
-    formatDuration(duration, sizeof(duration), s.chargeDuration);
-    snprintf(buf, sizeof(buf), "%s kWh · %s h", energy, duration);
-    lv_label_set_text(lblRight, buf);
-    lv_obj_align(lblRight, LV_ALIGN_TOP_RIGHT, 0, BAR_H + 6);
+  // Kacheln: Werte der laufenden bzw. letzten Sitzung
+  const bool showTiles = showPower && (s.charging || s.chargedEnergy > 0);
+  setVisible(tiles, showTiles);
+  if (showTiles) {
+    char num[16];
+    formatDecimal(num, sizeof(num), s.chargedEnergy / 1000.0f);
+    snprintf(buf, sizeof(buf), "%s kWh", num);
+    lv_label_set_text(tileValue[0], buf);
+    formatDuration(buf, sizeof(buf), s.chargeDuration);
+    lv_label_set_text(tileValue[1], buf);
+    snprintf(buf, sizeof(buf), "%d %%", (int)lroundf(s.sessionSolarPct));
+    lv_label_set_text(tileValue[2], buf);
+    for (int i = 0; i < 3; i++) lv_obj_set_style_text_color(tileValue[i], live ? t.text : t.muted, 0);
   }
 
   const bool pending = v.pendingMode != ChargeMode::None;

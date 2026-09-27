@@ -1,5 +1,5 @@
 /**
- * LVGL-Konfiguration für das CYD (ESP32 ohne PSRAM).
+ * LVGL-Konfiguration für das ESP32-4848S040C.
  * Nicht aufgeführte Optionen nutzen die Standardwerte aus lv_conf_internal.h.
  */
 #if 1
@@ -23,8 +23,8 @@
 
 /* Eigene Schriften (Montserrat mit Umlauten + Tabler-Icons), siehe tools/gen_fonts.sh */
 #define LV_FONT_MONTSERRAT_14 0
-#define LV_FONT_CUSTOM_DECLARE LV_FONT_DECLARE(font_14)
-#define LV_FONT_DEFAULT &font_14
+#define LV_FONT_CUSTOM_DECLARE LV_FONT_DECLARE(font_22)
+#define LV_FONT_DEFAULT &font_22
 
 /* Wir stylen alles selbst */
 #define LV_USE_THEME_DEFAULT 0

@@ -9,6 +9,7 @@ struct UiView {
   ChargeMode pendingMode = ChargeMode::None;
   const char* flash = nullptr;          // kurzzeitige Fehlermeldung
   char clock[6] = "";
+  char lastUpdate[6] = "";              // Uhrzeit der letzten EVCC-Daten
 };
 
 namespace ui {

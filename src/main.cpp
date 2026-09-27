@@ -1,5 +1,5 @@
 // EVCC-Garagendisplay: zeigt die Ladeleistung eines EVCC-Ladepunkts und schaltet
-// zwischen PV, Smart und Schnell um. Hardware: ESP32-2432S028R ("Cheap Yellow Display").
+// zwischen PV, Smart und Schnell um. Hardware: Guition ESP32-4848S040C (4", 480x480).
 
 #include <Arduino.h>
 #include <ArduinoOTA.h>
@@ -58,9 +58,7 @@ static void saveParams() {
   s.loadpoint = constrain(atoi(pLoadpoint->getValue()), 1, 9);
   s.latitude = atof(pLat->getValue());
   s.longitude = atof(pLon->getValue());
-  const uint8_t rotation = atoi(pRotate->getValue()) == 1 ? 3 : 1;
-  if (rotation != s.rotation) settings::clearTouchCal();  // gedreht → Touch neu kalibrieren
-  s.rotation = rotation;
+  s.rotation = constrain(atoi(pRotate->getValue()), 0, 3);
   s.theme = constrain(atoi(pTheme->getValue()), 0, 2);
   settings::save();
   restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
@@ -68,19 +66,20 @@ static void saveParams() {
 
 static void setupPortal() {
   const Settings& s = settings::get();
-  static char port[6], lp[3], lat[12], lon[12], theme[2];
+  static char port[6], lp[3], lat[12], lon[12], theme[2], rot[2];
   snprintf(port, sizeof(port), "%u", s.evccPort);
   snprintf(lp, sizeof(lp), "%u", s.loadpoint);
   snprintf(lat, sizeof(lat), "%.4f", s.latitude);
   snprintf(lon, sizeof(lon), "%.4f", s.longitude);
   snprintf(theme, sizeof(theme), "%u", s.theme);
+  snprintf(rot, sizeof(rot), "%u", s.rotation);
 
   pHost = new WiFiManagerParameter("host", "EVCC-Adresse", s.evccHost.c_str(), 40);
   pPort = new WiFiManagerParameter("port", "EVCC-Port", port, 5);
   pLoadpoint = new WiFiManagerParameter("lp", "Ladepunkt-Nr. (1 = erster in EVCC)", lp, 2);
   pLat = new WiFiManagerParameter("lat", "Breitengrad (für Tag/Nacht)", lat, 11);
   pLon = new WiFiManagerParameter("lon", "Längengrad (für Tag/Nacht)", lon, 11);
-  pRotate = new WiFiManagerParameter("rot", "Display um 180° drehen (0/1)", s.rotation == 3 ? "1" : "0", 1);
+  pRotate = new WiFiManagerParameter("rot", "Drehung: 0–3 (je 90° im Uhrzeigersinn)", rot, 1);
   pTheme = new WiFiManagerParameter("theme", "Design: 0 = automatisch (Sonnenstand), 1 = immer hell, 2 = immer dunkel", theme, 1);
   for (auto* p : {pHost, pPort, pLoadpoint, pLat, pLon, pRotate, pTheme}) wm.addParameter(p);
 
@@ -217,6 +216,12 @@ static void updateState() {
     v.pendingMode = pendingMode;
     v.flash = flashMsg;
     strlcpy(v.clock, clock, sizeof(v.clock));
+    if (state.valid && timeValid()) {
+      const time_t at = time(nullptr) - (millis() - state.updatedMs) / 1000;
+      struct tm t;
+      localtime_r(&at, &t);
+      strftime(v.lastUpdate, sizeof(v.lastUpdate), "%H:%M", &t);
+    }
     ui::render(v);
   }
 }
@@ -257,6 +262,7 @@ static void handlePreview() {
     p.greenShare = 0.62f;
     p.chargedEnergy = 12400;
     p.chargeDuration = 5820;
+    p.sessionSolarPct = 48;
     p.vehicleSoc = 64;
     previewStale = name == "stale";
   } else if (name == "solar") {
@@ -267,6 +273,7 @@ static void handlePreview() {
     p.greenShare = 1.0f;
     p.chargedEnergy = 2900;
     p.chargeDuration = 1680;
+    p.sessionSolarPct = 97;
   } else if (name == "fast") {
     p.mode = ChargeMode::Fast;
     p.charging = true;
@@ -275,6 +282,7 @@ static void handlePreview() {
     p.greenShare = 0.04f;
     p.chargedEnergy = 7400;
     p.chargeDuration = 2460;
+    p.sessionSolarPct = 6;
   } else if (name == "nocar") {
     p.connected = false;
   } else if (name == "waiting") {
@@ -305,6 +313,12 @@ static void handlePreview() {
 static void startWebServer() {
   web.on("/screenshot.bmp", []() { display::sendScreenshot(web); });
   web.on("/preview", handlePreview);
+  // Lasttest gegen Bildstörungen: löst eine WLAN-Suche aus (wie das Einstellungsportal)
+  web.on("/wifiscan", []() {
+    const uint32_t start = millis();
+    const int n = WiFi.scanNetworks();
+    web.send(200, "text/plain", String(n) + " Netze in " + String(millis() - start) + " ms\n");
+  });
   web.begin();
 }
 
@@ -337,12 +351,6 @@ static void startNetworkServices() {
 void setup() {
   Serial.begin(115200);
 
-  // RGB-LED auf der Rückseite aus (low-aktiv)
-  for (int pin : {PIN_LED_R, PIN_LED_G, PIN_LED_B}) {
-    pinMode(pin, OUTPUT);
-    digitalWrite(pin, HIGH);
-  }
-
   settings::load();
   display::begin(settings::get().rotation);
   brightness = BRIGHTNESS;
@@ -352,6 +360,7 @@ void setup() {
   ui::onMessageTap(closeSettings);
   ui::showMessage(ICON_SETTINGS, "Verbinde …", "WLAN-Verbindung wird aufgebaut");
   lv_refr_now(nullptr);
+  display::setBrightness(BRIGHTNESS);  // erst einschalten, wenn ein Bild im Speicher steht
 
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
