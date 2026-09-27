@@ -25,6 +25,7 @@ gen_text() { # name size weight
 }
 
 # Größen für das 4"-Display (480x480)
+gen_text font_16 16 Medium
 gen_text font_18 18 Medium
 gen_text font_22 22 Medium
 gen_text font_24 24 SemiBold

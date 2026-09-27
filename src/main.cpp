@@ -24,6 +24,7 @@ static WiFiManagerParameter* pLat;
 static WiFiManagerParameter* pLon;
 static WiFiManagerParameter* pRotate;
 static WiFiManagerParameter* pTheme;
+static WiFiManagerParameter* pTimeout;
 static WebServer web(8080);  // Port 80 gehört dem Einstellungsportal
 
 static bool portalActive = false;
@@ -60,19 +61,21 @@ static void saveParams() {
   s.longitude = atof(pLon->getValue());
   s.rotation = constrain(atoi(pRotate->getValue()), 0, 3);
   s.theme = constrain(atoi(pTheme->getValue()), 0, 2);
+  s.screenTimeoutMin = constrain(atoi(pTimeout->getValue()), 0, 240);
   settings::save();
   restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
 }
 
 static void setupPortal() {
   const Settings& s = settings::get();
-  static char port[6], lp[3], lat[12], lon[12], theme[2], rot[2];
+  static char port[6], lp[3], lat[12], lon[12], theme[2], rot[2], timeout[4];
   snprintf(port, sizeof(port), "%u", s.evccPort);
   snprintf(lp, sizeof(lp), "%u", s.loadpoint);
   snprintf(lat, sizeof(lat), "%.4f", s.latitude);
   snprintf(lon, sizeof(lon), "%.4f", s.longitude);
   snprintf(theme, sizeof(theme), "%u", s.theme);
   snprintf(rot, sizeof(rot), "%u", s.rotation);
+  snprintf(timeout, sizeof(timeout), "%u", s.screenTimeoutMin);
 
   pHost = new WiFiManagerParameter("host", "EVCC-Adresse", s.evccHost.c_str(), 40);
   pPort = new WiFiManagerParameter("port", "EVCC-Port", port, 5);
@@ -81,7 +84,8 @@ static void setupPortal() {
   pLon = new WiFiManagerParameter("lon", "Längengrad (für Tag/Nacht)", lon, 11);
   pRotate = new WiFiManagerParameter("rot", "Drehung: 0–3 (je 90° im Uhrzeigersinn)", rot, 1);
   pTheme = new WiFiManagerParameter("theme", "Design: 0 = automatisch (Sonnenstand), 1 = immer hell, 2 = immer dunkel", theme, 1);
-  for (auto* p : {pHost, pPort, pLoadpoint, pLat, pLon, pRotate, pTheme}) wm.addParameter(p);
+  pTimeout = new WiFiManagerParameter("timeout", "Bildschirm aus nach Minuten ohne Ladung und Bedienung (0 = immer an)", timeout, 3);
+  for (auto* p : {pHost, pPort, pLoadpoint, pLat, pLon, pRotate, pTheme, pTimeout}) wm.addParameter(p);
 
   wm.setTitle("EVCC-Garage");
   wm.setHostname(HOSTNAME);
@@ -231,7 +235,8 @@ static void updateBacklight() {
   if (display::lastTouchMs() > lastActivity) lastActivity = display::lastTouchMs();
 
   const bool keepOn = portalActive || (state.valid && state.charging) ||
-                      millis() - lastActivity < SCREEN_TIMEOUT_MS;
+                      settings::get().screenTimeoutMin == 0 ||
+                      millis() - lastActivity < settings::get().screenTimeoutMin * 60000UL;
   display::setSleeping(!keepOn);
 
   const int target = keepOn ? BRIGHTNESS : 0;

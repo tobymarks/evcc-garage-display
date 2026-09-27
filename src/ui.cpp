@@ -5,6 +5,7 @@
 #include "config.h"
 #include "icons.h"
 
+LV_FONT_DECLARE(font_16);
 LV_FONT_DECLARE(font_18);
 LV_FONT_DECLARE(font_22);
 LV_FONT_DECLARE(font_24);
@@ -240,7 +241,7 @@ static void buildMain() {
     lv_obj_center(col);
     segLbl[i] = makeLabel(col, &font_24);
     lv_label_set_text(segLbl[i], SEG_TEXT[i]);
-    segSub[i] = makeLabel(col, &font_18);
+    segSub[i] = makeLabel(col, &font_16);
     lv_label_set_text(segSub[i], SEG_SUB[i]);
   }
 }

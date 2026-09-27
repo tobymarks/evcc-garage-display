@@ -16,6 +16,7 @@ void settings::load() {
   s.longitude = prefs.getFloat("lon", DEFAULT_LONGITUDE);
   s.rotation = prefs.getUChar("rot", DEFAULT_ROTATION);
   s.theme = prefs.getUChar("theme", DEFAULT_THEME);
+  s.screenTimeoutMin = prefs.getUChar("timeout", DEFAULT_SCREEN_TIMEOUT_MIN);
   prefs.end();
 
   if (s.loadpoint < 1) s.loadpoint = 1;
@@ -32,6 +33,7 @@ void settings::save() {
   prefs.putFloat("lon", s.longitude);
   prefs.putUChar("rot", s.rotation);
   prefs.putUChar("theme", s.theme);
+  prefs.putUChar("timeout", s.screenTimeoutMin);
   prefs.end();
 }
 

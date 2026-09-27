@@ -24,7 +24,7 @@
 
 // Display
 #define BRIGHTNESS 255                    // die Garage ist hell, wenn jemand drin ist → nicht dimmen
-#define SCREEN_TIMEOUT_MS (2UL * 60UL * 1000UL)  // aus, wenn nicht geladen und nicht bedient wird
+#define DEFAULT_SCREEN_TIMEOUT_MIN 2              // aus, wenn nicht geladen und nicht bedient wird; 0 = immer an
 #define NIGHT_SUN_ELEVATION -3.0                 // Sonne tiefer als -3° → dunkles Design (bei Einstellung automatisch)
 #define PREVIEW_DURATION_MS 60000                // Dauer einer Vorschau über /preview
 #define SETTINGS_LONG_PRESS_MS 3000              // Titel lange drücken → Einstellungen
