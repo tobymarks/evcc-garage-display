@@ -3,7 +3,7 @@
 Touch-Display neben dem Ladepunkt: zeigt die aktuelle Ladeleistung aus [EVCC](https://evcc.io)
 und schaltet zwischen **Smart**, **Langsam** und **Schnell** um.
 Hardware: Guition ESP32-4848S040C – ESP32-S3, 4" IPS 480×480 (ST7701S), kapazitiver Touch (GT911),
-Strom per USB-C.
+Strom per USB-C. Bezugsquelle, die ich genutzt habe: [AliExpress](https://de.aliexpress.com/item/1005012911942193.html).
 
 Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-final`.
 
