@@ -14,19 +14,19 @@ LV_FONT_DECLARE(font_32);
 LV_FONT_DECLARE(font_big);
 LV_FONT_DECLARE(font_icon_big);
 
-// Farben angelehnt an die EVCC-Weboberfläche
+// Farben angelehnt an die evcc-Weboberfläche
 struct Theme {
   lv_color_t bg, box, text, muted, activeBg, activeFg, pressed, solar, solarText, grid, warn, error, border;
 };
 
 static const Theme LIGHT = {
-    // Grau und Grün dunkler als in EVCC: Kontrast ≥ 4,5:1, damit es aus 2–3 m lesbar bleibt
+    // Grau und Grün dunkler als in evcc: Kontrast ≥ 4,5:1, damit es aus 2–3 m lesbar bleibt
     lv_color_hex(0xF3F3F7), lv_color_hex(0xFFFFFF), lv_color_hex(0x28293E), lv_color_hex(0x6E6F7C),
     lv_color_hex(0x28293E), lv_color_hex(0xFFFFFF), lv_color_hex(0xE4E4EC), lv_color_hex(0x0FDE41),
     lv_color_hex(0x078A2C), lv_color_hex(0x28293E), lv_color_hex(0xC26A00), lv_color_hex(0xD9380A),
     lv_color_hex(0xDCDCE4),
 };
-// Dunkles Navy wie EVCC ab 0.317
+// Dunkles Navy wie evcc ab 0.317
 static const Theme DARK = {
     lv_color_hex(0x010322), lv_color_hex(0x151630), lv_color_hex(0xFFFFFF), lv_color_hex(0xB5B6C3),
     lv_color_hex(0xFFFFFF), lv_color_hex(0x010322), lv_color_hex(0x2A2C4C), lv_color_hex(0x0FDE41),
@@ -75,15 +75,15 @@ static lv_obj_t* tiles;
 static lv_obj_t* tile[3];
 static lv_obj_t* tileLabel[3];
 static lv_obj_t* tileValue[3];
-// Beschriftungen wie in EVCC: klein, grau, in Großbuchstaben
+// Beschriftungen wie in evcc: klein, grau, in Großbuchstaben
 static const char* TILE_TEXT[3] = {"GELADEN", "DAUER", "Ø SONNE"};
 static lv_obj_t* segBg;
 static lv_obj_t* seg[3];
 static lv_obj_t* segLbl[3];
 static lv_obj_t* segSub[3];
 static const ChargeMode SEG_MODES[3] = {ChargeMode::Smart, ChargeMode::Slow, ChargeMode::Fast};
-// Nur Text wie in EVCC, dazu eine Zeile, die sagt, was der Modus tut.
-// "Smart" heißt wie in EVCC; "Langsam" ist Smart mit "Immer laden".
+// Nur Text wie in evcc, dazu eine Zeile, die sagt, was der Modus tut.
+// "Smart" heißt wie in evcc; "Langsam" ist Smart mit "Immer laden".
 static const char* SEG_TEXT[3] = {"Smart", "Langsam", "Schnell"};
 static const char* SEG_SUB[3] = {"nur Sonne", "lädt immer", "volle Leistung"};
 
@@ -165,7 +165,7 @@ static void buildMain() {
   lblUnit = makeLabel(contPower, &font_32);
   lv_label_set_text(lblUnit, "kW");
   lv_obj_set_style_pad_bottom(lblUnit, font_big.base_line - font_32.base_line, 0);
-  // Grüner Blitz wie in EVCC, solange geladen wird; unsichtbar statt ausgeblendet, damit die Zahl nicht springt
+  // Grüner Blitz wie in evcc, solange geladen wird; unsichtbar statt ausgeblendet, damit die Zahl nicht springt
   lblBolt = makeLabel(contPower, &font_icon_big);
   lv_label_set_text(lblBolt, ICON_BOLT);
   // Der Blitz hat breite Ränder im Glyph und reicht etwas unter die Grundlinie: näher an "kW" rücken
@@ -226,7 +226,7 @@ static void buildMain() {
     lv_obj_set_pos(tileValue[i], 0, 29);
   }
 
-  // Modusumschalter wie in EVCC: Pill-Gruppe, aktiver Modus gefüllt
+  // Modusumschalter wie in evcc: Pill-Gruppe, aktiver Modus gefüllt
   segBg = makeBox(scrMain);
   lv_obj_set_pos(segBg, MARGIN, SEG_Y);
   lv_obj_set_size(segBg, CONTENT_W, SEG_H);
@@ -358,9 +358,9 @@ static void renderStatus(const UiView& v, char* buf, size_t len, lv_color_t& col
   } else if (v.stale) {
     color = t.error;
     if (s.valid && v.lastUpdate[0])
-      snprintf(buf, len, "EVCC nicht erreichbar · Stand %s", v.lastUpdate);
+      snprintf(buf, len, "evcc nicht erreichbar · Stand %s", v.lastUpdate);
     else
-      snprintf(buf, len, millis() > STALE_AFTER_MS ? "EVCC nicht erreichbar" : "Verbinde mit EVCC …");
+      snprintf(buf, len, millis() > STALE_AFTER_MS ? "evcc nicht erreichbar" : "Verbinde mit evcc …");
   } else if (v.pendingMode != ChargeMode::None) {
     snprintf(buf, len, "Modus wird gesetzt …");
   } else if (!s.connected) {
@@ -398,7 +398,7 @@ void ui::render(const UiView& v) {
   const bool live = s.valid && !v.stale;
   char buf[64];
 
-  lv_label_set_text(lblTitle, s.valid ? s.title : "EVCC");
+  lv_label_set_text(lblTitle, s.valid ? s.title : "evcc");
   lv_label_set_text(lblClock, v.clock);
   lv_label_set_text(lblIcons, !v.wifiConnected ? ICON_WIFI_OFF : v.stale ? ICON_ALERT : "");
   lv_obj_set_style_text_color(lblIcons, t.error, 0);

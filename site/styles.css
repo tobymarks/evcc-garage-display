@@ -1,4 +1,4 @@
-/* Farben und Schrift wie die EVCC-Oberfläche (siehe src/ui.cpp) */
+/* Farben und Schrift wie die evcc-Oberfläche (siehe src/ui.cpp) */
 @font-face {
   font-family: "Montserrat";
   src: url("fonts/Montserrat-Medium.ttf") format("truetype");

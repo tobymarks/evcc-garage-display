@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Erzeugt die LVGL-Schriften – wie die EVCC-Weboberfläche:
+# Erzeugt die LVGL-Schriften – wie die evcc-Weboberfläche:
 #  - Montserrat für alle Texte (SIL Open Font License, tools/fonts/OFL-Montserrat.txt)
 #  - Icons aus tools/icons: Shopicons und Material Symbols (Apache-2.0), zusammengefasst in evcc-icons.ttf
 # Aufruf aus dem Projektverzeichnis: ./tools/gen_fonts.sh (braucht fontforge und npx)
@@ -32,7 +32,7 @@ gen_text font_24 24 SemiBold
 gen_text font_26 26 Bold
 gen_text font_32 32 Bold
 
-# Große Ziffern für die Ladeleistung (fett wie die Werte in EVCC)
+# Große Ziffern für die Ladeleistung (fett wie die Werte in evcc)
 $CONV --bpp 4 --size 112 --no-compress --format lvgl --lv-include lvgl.h \
   --font "$FONTS/Montserrat-Bold.ttf" -r "0x20,0x2C-0x2E,0x30-0x39,0x2013" \
   --lv-font-name font_big -o "$OUT/font_big.c"

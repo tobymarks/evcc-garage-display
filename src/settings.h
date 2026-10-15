@@ -5,7 +5,7 @@
 struct Settings {
   String evccHost;
   uint16_t evccPort;
-  uint8_t loadpoint;  // 1-basiert, wie in der EVCC-API
+  uint8_t loadpoint;  // 1-basiert, wie in der evcc-API
   float latitude;
   float longitude;
   uint8_t rotation;   // 0–3 (× 90°)

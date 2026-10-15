@@ -1,6 +1,6 @@
-# EVCC-Garagendisplay (ESP32-4848S040C)
+# evcc-Garagendisplay (ESP32-4848S040C)
 
-Touch-Display neben dem Ladepunkt: zeigt die aktuelle Ladeleistung aus [EVCC](https://evcc.io)
+Touch-Display neben dem Ladepunkt: zeigt die aktuelle Ladeleistung aus [evcc](https://evcc.io)
 und schaltet zwischen **Smart**, **Langsam** und **Schnell** um.
 Hardware: Guition ESP32-4848S040C – ESP32-S3, 4" IPS 480×480 (ST7701S), kapazitiver Touch (GT911),
 Strom per USB-C. Bezugsquelle, die ich genutzt habe: [AliExpress](https://de.aliexpress.com/item/1005012911942193.html).
@@ -11,14 +11,14 @@ Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-
 
 | Bereich | Inhalt |
 | --- | --- |
-| Kopfzeile | Name des Ladepunkts, Uhrzeit, Warnsymbol bei WLAN-/EVCC-Problemen |
+| Kopfzeile | Name des Ladepunkts, Uhrzeit, Warnsymbol bei WLAN-/evcc-Problemen |
 | Mitte | Ladeleistung in kW mit grünem Blitz beim Laden – oder „Kein Fahrzeug", wenn nichts eingesteckt ist |
 | Statuszeile | z. B. „Lädt · 3-phasig", „Wartet auf Sonnenüberschuss", „Genug Sonne – Start in 0:45" |
 | Balken | Sonnen- und Netzanteil der aktuellen Ladeleistung |
 | Kacheln | Geladene Energie, Dauer und durchschnittlicher Sonnenanteil der Sitzung |
 | Unten | Modustasten Smart · Langsam · Schnell, jeweils mit kurzer Beschreibung |
 
-**Design:** angelehnt an die EVCC-Weboberfläche (ab 0.317): gleiche Farben, Schrift (Montserrat) und Icons –
+**Design:** angelehnt an die evcc-Weboberfläche (ab 0.317): gleiche Farben, Schrift (Montserrat) und Icons –
 hell, dunkel oder automatisch nach Sonnenstand. Das Display
 läuft immer mit voller Helligkeit – in der Garage ist Licht, wenn jemand davorsteht.
 
@@ -28,16 +28,16 @@ und beim Start/Ende des Ladens geht es von selbst an.
 
 ## Modi
 
-EVCC ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bildet die drei Tasten so ab:
+evcc ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bildet die drei Tasten so ab:
 
-| Taste | EVCC | Verhalten |
+| Taste | evcc | Verhalten |
 | --- | --- | --- |
 | Smart | `smart` + „Immer laden" aus | lädt nur mit Sonnenüberschuss (bzw. günstigem Tarif oder Ladeplan) – z. B. wenn ein Auto länger steht |
 | Langsam | `smart` + „Immer laden" an (∞) | lädt sofort und ohne Pause mit Mindestleistung, mehr bei Sonne |
 | Schnell | `now` | volle Leistung |
 
-„Aus" gibt es am Display bewusst nicht. Steht der Ladepunkt in EVCC auf Aus, zeigt das Display
-„Ladepunkt ist aus – Modus wählen". Ältere EVCC-Versionen werden erkannt (dann `pv` / `minpv`).
+„Aus" gibt es am Display bewusst nicht. Steht der Ladepunkt in evcc auf Aus, zeigt das Display
+„Ladepunkt ist aus – Modus wählen". Ältere evcc-Versionen werden erkannt (dann `pv` / `minpv`).
 
 ## Technik
 
@@ -48,12 +48,12 @@ EVCC ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
   - `CONFIG_SPIRAM_XIP_FROM_PSRAM` und `CONFIG_LCD_RGB_ISR_IRAM_SAFE` – die Ausgabe läuft auch bei Flash-Zugriffen weiter
   - `CONFIG_LCD_RGB_RESTART_IN_VSYNC` – falls doch etwas verrutscht, fängt sich das Bild im nächsten Frame
   - Diese Einstellungen stehen unter `custom_sdkconfig` in `platformio.ini`; das Framework wird deshalb beim ersten Build neu kompiliert (einige Minuten)
-- Schriften: Montserrat (SIL OFL) und die Icons der EVCC-Oberfläche – [Shopicons](https://github.com/H2D2-Design/h2d2-shopicons)
+- Schriften: Montserrat (SIL OFL) und die Icons der evcc-Oberfläche – [Shopicons](https://github.com/H2D2-Design/h2d2-shopicons)
   und Material Symbols (beide Apache-2.0), SVGs in `tools/icons`. Erzeugt mit `tools/gen_fonts.sh` (braucht fontforge)
 - Daten: alle 3 s `GET /api/state?jq=…` – der jq-Filter liefert nur die benötigten Felder (~300 Byte statt ~70 KB)
 - Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}` und `POST /api/loadpoints/<n>/mode/{smart|now}`
 - Netzwerk läuft in einem eigenen Task auf Kern 0, die Oberfläche bleibt dadurch flüssig
-- Eine Taste zeigt den neuen Modus erst voll an, wenn EVCC ihn bestätigt hat (vorher halbtransparent)
+- Eine Taste zeigt den neuen Modus erst voll an, wenn evcc ihn bestätigt hat (vorher halbtransparent)
 
 ## Flashen
 
@@ -74,12 +74,12 @@ pio run -e panel_ota -t upload
 
 ## Erster Start
 
-Mit dem Handy ins WLAN `EVCC-Garage` wechseln – die Einrichtungsseite öffnet sich (sonst `192.168.4.1`).
+Mit dem Handy ins WLAN `evcc-Garage` wechseln – die Einrichtungsseite öffnet sich (sonst `192.168.4.1`).
 WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
 
 | Feld | Standard |
 | --- | --- |
-| EVCC-Adresse / Port | `192.168.178.209` / `7070` |
+| evcc-Adresse / Port | `192.168.178.209` / `7070` |
 | Ladepunkt-Nr. | `1` (Garage) |
 | Breiten-/Längengrad | Mitte Deutschlands – für die automatische Tag/Nacht-Umschaltung |
 | Drehung | `0` (je 90° im Uhrzeigersinn: 1, 2, 3) |
@@ -88,7 +88,7 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
 
 ## Später ändern
 
-- **Einstellungen:** „Garage" oben links **3 Sekunden gedrückt halten** → das Portal `EVCC-Garage` startet
+- **Einstellungen:** „Garage" oben links **3 Sekunden gedrückt halten** → das Portal `evcc-Garage` startet
   erneut. Antippen des Hinweises bricht ab.
 - Nach einem Stromausfall wartet das Display auf den Router und startet nach 5 Minuten ohne WLAN selbst neu.
 
@@ -114,4 +114,4 @@ MIT – siehe [LICENSE](LICENSE). Mitgelieferte Fremdinhalte:
 
 - [Montserrat](https://github.com/JulietaUla/Montserrat) – SIL Open Font License 1.1 ([tools/fonts/OFL-Montserrat.txt](tools/fonts/OFL-Montserrat.txt))
 - [Shopicons](https://github.com/H2D2-Design/h2d2-shopicons) und [Material Symbols](https://github.com/google/material-design-icons) – Apache-2.0 ([tools/icons/LICENSE-shopicons](tools/icons/LICENSE-shopicons))
-- Die Icons entsprechen denen der [EVCC](https://github.com/evcc-io/evcc)-Weboberfläche; dieses Projekt ist nicht offiziell mit EVCC verbunden.
+- Die Icons entsprechen denen der [evcc](https://github.com/evcc-io/evcc)-Weboberfläche; dieses Projekt ist nicht offiziell mit evcc verbunden.

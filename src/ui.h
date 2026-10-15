@@ -5,11 +5,11 @@
 struct UiView {
   EvccState state;
   bool wifiConnected = false;
-  bool stale = true;                    // keine aktuellen Daten von EVCC
+  bool stale = true;                    // keine aktuellen Daten von evcc
   ChargeMode pendingMode = ChargeMode::None;
   const char* flash = nullptr;          // kurzzeitige Fehlermeldung
   char clock[6] = "";
-  char lastUpdate[6] = "";              // Uhrzeit der letzten EVCC-Daten
+  char lastUpdate[6] = "";              // Uhrzeit der letzten evcc-Daten
 };
 
 namespace ui {

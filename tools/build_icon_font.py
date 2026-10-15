@@ -1,5 +1,5 @@
 # Baut tools/fonts/evcc-icons.ttf aus den SVGs in tools/icons (Aufruf über tools/gen_fonts.sh).
-# Shopicons (Apache-2.0, wie in der EVCC-Weboberfläche) und Material Symbols (Apache-2.0).
+# Shopicons (Apache-2.0, wie in der evcc-Weboberfläche) und Material Symbols (Apache-2.0).
 # Ausführen mit: fontforge -lang=py -script tools/build_icon_font.py
 import os
 import fontforge

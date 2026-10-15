@@ -1,4 +1,4 @@
-// EVCC-Garagendisplay: zeigt die Ladeleistung eines EVCC-Ladepunkts und schaltet
+// evcc-Garagendisplay: zeigt die Ladeleistung eines evcc-Ladepunkts und schaltet
 // zwischen PV, Smart und Schnell um. Hardware: Guition ESP32-4848S040C (4", 480x480).
 
 #include <Arduino.h>
@@ -77,9 +77,9 @@ static void setupPortal() {
   snprintf(rot, sizeof(rot), "%u", s.rotation);
   snprintf(timeout, sizeof(timeout), "%u", s.screenTimeoutMin);
 
-  pHost = new WiFiManagerParameter("host", "EVCC-Adresse", s.evccHost.c_str(), 40);
-  pPort = new WiFiManagerParameter("port", "EVCC-Port", port, 5);
-  pLoadpoint = new WiFiManagerParameter("lp", "Ladepunkt-Nr. (1 = erster in EVCC)", lp, 2);
+  pHost = new WiFiManagerParameter("host", "evcc-Adresse", s.evccHost.c_str(), 40);
+  pPort = new WiFiManagerParameter("port", "evcc-Port", port, 5);
+  pLoadpoint = new WiFiManagerParameter("lp", "Ladepunkt-Nr. (1 = erster in evcc)", lp, 2);
   pLat = new WiFiManagerParameter("lat", "Breitengrad (für Tag/Nacht)", lat, 11);
   pLon = new WiFiManagerParameter("lon", "Längengrad (für Tag/Nacht)", lon, 11);
   pRotate = new WiFiManagerParameter("rot", "Drehung: 0–3 (je 90° im Uhrzeigersinn)", rot, 1);
@@ -87,7 +87,7 @@ static void setupPortal() {
   pTimeout = new WiFiManagerParameter("timeout", "Bildschirm aus nach Minuten ohne Ladung und Bedienung (0 = immer an)", timeout, 3);
   for (auto* p : {pHost, pPort, pLoadpoint, pLat, pLon, pRotate, pTheme, pTimeout}) wm.addParameter(p);
 
-  wm.setTitle("EVCC-Garage");
+  wm.setTitle("evcc-Garage");
   wm.setHostname(HOSTNAME);
   static std::vector<const char*> menu = {"wifi", "param", "info", "restart"};
   wm.setMenu(menu);
@@ -169,7 +169,7 @@ static void updateState() {
       dirty = true;
     } else if (millis() - pendingSince > MODE_CONFIRM_TIMEOUT_MS) {
       pendingMode = ChargeMode::None;
-      flash("EVCC hat den Modus nicht übernommen");
+      flash("evcc hat den Modus nicht übernommen");
     }
   }
   if (flashMsg && (int32_t)(millis() - flashUntil) > 0) {

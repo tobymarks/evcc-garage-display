@@ -48,8 +48,8 @@ static int httpRequest(const String& url, bool post, String* body) {
 static ChargeMode deriveMode(const char* mode, const char* alwaysCharge, bool& off) {
   off = false;
   if (!strcmp(mode, "now")) return ChargeMode::Fast;
-  if (!strcmp(mode, "minpv")) return ChargeMode::Slow;  // EVCC vor 0.316
-  if (!strcmp(mode, "pv")) return ChargeMode::Smart;    // EVCC vor 0.316
+  if (!strcmp(mode, "minpv")) return ChargeMode::Slow;  // evcc vor 0.316
+  if (!strcmp(mode, "pv")) return ChargeMode::Smart;    // evcc vor 0.316
   if (!strcmp(mode, "smart")) {
     return (!strcmp(alwaysCharge, "on") || !strcmp(alwaysCharge, "once")) ? ChargeMode::Slow
                                                                            : ChargeMode::Smart;
@@ -64,7 +64,7 @@ static void poll() {
 
   JsonDocument doc;
   if (deserializeJson(doc, body)) return;
-  // Ältere EVCC-Versionen verpacken die Antwort in {"result": ...}
+  // Ältere evcc-Versionen verpacken die Antwort in {"result": ...}
   JsonObject root = doc["result"].is<JsonObject>() ? doc["result"].as<JsonObject>()
                                                    : doc.as<JsonObject>();
   JsonObject lp = root["lp"];
@@ -109,7 +109,7 @@ static bool setMode(ChargeMode mode) {
     case ChargeMode::Smart:
     case ChargeMode::Slow: {
       const bool always = mode == ChargeMode::Slow;
-      // EVCC ≥ 0.316: "immer laden" + smart
+      // evcc ≥ 0.316: "immer laden" + smart
       if (post(always ? "/alwayscharge/on" : "/alwayscharge/off")) return post("/mode/smart");
       // Ältere Versionen kennen alwayscharge nicht, dafür pv/minpv
       return post(always ? "/mode/minpv" : "/mode/pv");

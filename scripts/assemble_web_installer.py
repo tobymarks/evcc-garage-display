@@ -22,7 +22,7 @@ def main() -> None:
     shutil.copy2(factory, firmware_dir / "evcc-garage-display.bin")
 
     manifest = {
-        "name": "EVCC-Garagendisplay",
+        "name": "evcc-Garagendisplay",
         "version": args.version,
         "new_install_prompt_erase": True,
         "builds": [{"chipFamily": "ESP32-S3", "parts": [{"path": "evcc-garage-display.bin", "offset": 0}]}],
