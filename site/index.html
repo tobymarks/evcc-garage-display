@@ -11,7 +11,7 @@
     <meta name="theme-color" content="#010322" />
     <meta property="og:title" content="EVCC-Garagendisplay" />
     <meta property="og:description" content="Touch-Display neben der Wallbox – Ladeleistung, Sonnenanteil und Lademodus aus EVCC." />
-    <meta property="og:image" content="img/charging-dark.png" />
+    <meta property="og:image" content="https://tobymarks.github.io/esp32-evcc-switch/img/garage-wall.jpg" />
     <link rel="icon" href="img/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
     <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
@@ -84,6 +84,24 @@
           <h3>Läuft einfach</h3>
           <p>Kein Flackern bei WLAN-Last, Updates übers WLAN, Neustart nach Stromausfall. Bildschirm geht aus, wenn niemand lädt.</p>
         </article>
+      </section>
+
+      <section class="wrap scene">
+        <figure>
+          <img
+            src="img/garage-wall.jpg"
+            srcset="img/garage-wall-800.jpg 800w, img/garage-wall.jpg 1600w"
+            sizes="(max-width: 1168px) calc(100vw - 48px), 1120px"
+            width="1600"
+            height="1063"
+            loading="lazy"
+            alt="Das Display hängt in der Garage neben der Wallbox und zeigt 7,4 kW Ladeleistung"
+          />
+          <figcaption>
+            <span><b>Klein wie ein Lichtschalter.</b> 86,5 × 86,5 mm, passt auf eine Unterputzdose neben der Wallbox.</span>
+            <span class="tag">Visualisierung</span>
+          </figcaption>
+        </figure>
       </section>
 
       <section class="wrap modes" id="modi">
