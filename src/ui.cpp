@@ -168,7 +168,10 @@ static void buildMain() {
   // Grüner Blitz wie in EVCC, solange geladen wird; unsichtbar statt ausgeblendet, damit die Zahl nicht springt
   lblBolt = makeLabel(contPower, &font_icon_big);
   lv_label_set_text(lblBolt, ICON_BOLT);
-  lv_obj_set_style_pad_bottom(lblBolt, font_big.base_line - font_icon_big.base_line, 0);
+  // Der Blitz hat breite Ränder im Glyph und reicht etwas unter die Grundlinie: näher an "kW" rücken
+  // und auf die Grundlinie stellen
+  lv_obj_set_style_margin_left(lblBolt, -font_icon_big.line_height / 5, 0);
+  lv_obj_set_style_pad_bottom(lblBolt, font_big.base_line - font_icon_big.base_line + font_icon_big.line_height / 9, 0);
 
   // Anzeige ohne Fahrzeug / ohne Daten
   contIdle = makeBox(mid);
@@ -237,7 +240,6 @@ static void buildMain() {
     seg[i] = makeBox(segBg);
     lv_obj_add_flag(seg[i], LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_height(seg[i], LV_PCT(100));
-    lv_obj_set_flex_grow(seg[i], 1);
     lv_obj_set_style_radius(seg[i], SEG_H / 2 - 6, 0);
     lv_obj_set_style_bg_opa(seg[i], LV_OPA_COVER, LV_STATE_PRESSED);
     lv_obj_add_event_cb(seg[i], onSegment, LV_EVENT_CLICKED, (void*)(intptr_t)i);
@@ -252,6 +254,20 @@ static void buildMain() {
     segSub[i] = makeLabel(col, &font_16);
     lv_label_set_text(segSub[i], SEG_SUB[i]);
   }
+
+  // Breite nach Textlänge statt gleicher Drittel: jede Taste bekommt ihren Text plus gleich viel Rand,
+  // damit auch "Langsam" und "volle Leistung" in der gefüllten Taste nicht an den Rand stoßen
+  int textW[3], sum = 0;
+  for (int i = 0; i < 3; i++) {
+    lv_point_t a, b;
+    lv_text_get_size(&a, SEG_TEXT[i], &font_24, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    lv_text_get_size(&b, SEG_SUB[i], &font_16, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    textW[i] = LV_MAX(a.x, b.x);
+    sum += textW[i];
+  }
+  const int inner = CONTENT_W - 2 * 6 - 2 * 6 - 2;  // Innenabstand, Lücken, Rahmen
+  const int extra = (inner - sum) / 3;
+  for (int i = 0; i < 3; i++) lv_obj_set_width(seg[i], textW[i] + extra);
 }
 
 static void onMessageClicked(lv_event_t*) {
