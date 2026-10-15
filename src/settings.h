@@ -11,6 +11,7 @@ struct Settings {
   uint8_t rotation;   // 0–3 (× 90°)
   uint8_t theme;      // 0 = automatisch, 1 = hell, 2 = dunkel
   uint8_t screenTimeoutMin;  // 0 = Bildschirm immer an
+  bool autoUpdate;           // neue Firmware selbst installieren
 };
 
 namespace settings {

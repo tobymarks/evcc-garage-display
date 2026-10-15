@@ -17,6 +17,7 @@ void settings::load() {
   s.rotation = prefs.getUChar("rot", DEFAULT_ROTATION);
   s.theme = prefs.getUChar("theme", DEFAULT_THEME);
   s.screenTimeoutMin = prefs.getUChar("timeout", DEFAULT_SCREEN_TIMEOUT_MIN);
+  s.autoUpdate = prefs.getBool("autoupd", DEFAULT_AUTO_UPDATE);
   prefs.end();
 
   if (s.loadpoint < 1) s.loadpoint = 1;
@@ -34,6 +35,7 @@ void settings::save() {
   prefs.putUChar("rot", s.rotation);
   prefs.putUChar("theme", s.theme);
   prefs.putUChar("timeout", s.screenTimeoutMin);
+  prefs.putBool("autoupd", s.autoUpdate);
   prefs.end();
 }
 

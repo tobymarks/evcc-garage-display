@@ -11,11 +11,13 @@
 #include "config.h"
 #include "display.h"
 #include "evcc_client.h"
+#include "fw_version.h"
 #include "icons.h"
 #include "preview.h"
 #include "settings.h"
 #include "sun.h"
 #include "ui.h"
+#include "updater.h"
 
 static WiFiManager wm;
 static WiFiManagerParameter* pHost;
@@ -26,6 +28,7 @@ static WiFiManagerParameter* pLon;
 static WiFiManagerParameter* pRotate;
 static WiFiManagerParameter* pTheme;
 static WiFiManagerParameter* pTimeout;
+static WiFiManagerParameter* pAutoUpdate;
 static WebServer web(8080);  // Port 80 gehört dem Einstellungsportal
 
 static bool portalActive = false;
@@ -63,13 +66,14 @@ static void saveParams() {
   s.rotation = constrain(atoi(pRotate->getValue()), 0, 3);
   s.theme = constrain(atoi(pTheme->getValue()), 0, 2);
   s.screenTimeoutMin = constrain(atoi(pTimeout->getValue()), 0, 240);
+  s.autoUpdate = atoi(pAutoUpdate->getValue()) != 0;
   settings::save();
   restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
 }
 
 static void setupPortal() {
   const Settings& s = settings::get();
-  static char port[6], lp[3], lat[12], lon[12], theme[2], rot[2], timeout[4];
+  static char port[6], lp[3], lat[12], lon[12], theme[2], rot[2], timeout[4], autoUpdate[2];
   snprintf(port, sizeof(port), "%u", s.evccPort);
   snprintf(lp, sizeof(lp), "%u", s.loadpoint);
   snprintf(lat, sizeof(lat), "%.4f", s.latitude);
@@ -77,6 +81,7 @@ static void setupPortal() {
   snprintf(theme, sizeof(theme), "%u", s.theme);
   snprintf(rot, sizeof(rot), "%u", s.rotation);
   snprintf(timeout, sizeof(timeout), "%u", s.screenTimeoutMin);
+  snprintf(autoUpdate, sizeof(autoUpdate), "%u", s.autoUpdate);
 
   pHost = new WiFiManagerParameter("host", "evcc-Adresse", s.evccHost.c_str(), 40);
   pPort = new WiFiManagerParameter("port", "evcc-Port", port, 5);
@@ -86,7 +91,10 @@ static void setupPortal() {
   pRotate = new WiFiManagerParameter("rot", "Drehung: 0–3 (je 90° im Uhrzeigersinn)", rot, 1);
   pTheme = new WiFiManagerParameter("theme", "Design: 0 = automatisch (Sonnenstand), 1 = immer hell, 2 = immer dunkel", theme, 1);
   pTimeout = new WiFiManagerParameter("timeout", "Bildschirm aus nach Minuten ohne Ladung und Bedienung (0 = immer an)", timeout, 3);
-  for (auto* p : {pHost, pPort, pLoadpoint, pLat, pLon, pRotate, pTheme, pTimeout}) wm.addParameter(p);
+  pAutoUpdate = new WiFiManagerParameter("autoupd", "Automatische Updates: 1 = an, 0 = aus", autoUpdate, 1);
+  static WiFiManagerParameter version("<p>Firmware " FW_VERSION "</p>");
+  for (auto* p : {pHost, pPort, pLoadpoint, pLat, pLon, pRotate, pTheme, pTimeout, pAutoUpdate, &version})
+    wm.addParameter(p);
 
   wm.setTitle("evcc-Garage");
   wm.setHostname(HOSTNAME);
@@ -274,6 +282,12 @@ static void handlePreview() {
 static void startWebServer() {
   web.on("/screenshot.bmp", []() { display::sendScreenshot(web); });
   web.on("/preview", handlePreview);
+  // Update-Status; ?check=1 prüft sofort, ?install=1 installiert eine gefundene neue Version sofort
+  web.on("/update", []() {
+    if (web.hasArg("check")) updater::checkNow();
+    if (web.hasArg("install")) updater::installNow();
+    web.send(200, "text/plain; charset=utf-8", updater::status());
+  });
   // Lasttest gegen Bildstörungen: löst eine WLAN-Suche aus (wie das Einstellungsportal)
   web.on("/wifiscan", []() {
     const uint32_t start = millis();
@@ -336,6 +350,29 @@ void setup() {
   }
 
   evcc::begin();
+  updater::begin();
+}
+
+// Automatische Updates nur, wenn das Display gerade niemand braucht
+static void handleUpdates() {
+  const bool idle = !portalActive && !previewActive() && pendingMode == ChargeMode::None &&
+                    !(state.valid && state.charging) && millis() - lastActivity >= UPDATE_IDLE_MS;
+  switch (updater::loop(idle)) {
+    case updater::Event::Installing: {
+      static char text[80];
+      snprintf(text, sizeof(text), "Version %s wird geladen und installiert …", updater::availableVersion());
+      ui::showMessage(ICON_SETTINGS, "Update", text);
+      break;
+    }
+    case updater::Event::Done:
+      restartAt = millis() + 1000;
+      break;
+    case updater::Event::Failed:
+      ui::showMain();
+      break;
+    default:
+      break;
+  }
 }
 
 void loop() {
@@ -347,6 +384,7 @@ void loop() {
     ArduinoOTA.handle();
     web.handleClient();
   }
+  handleUpdates();
 
   if (restartAt && (int32_t)(millis() - restartAt) > 0) ESP.restart();
 

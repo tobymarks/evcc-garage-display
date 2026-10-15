@@ -2,3 +2,5 @@
 .vscode/
 site/firmware/
 site/fonts/
+include/fw_version.h
+__pycache__/

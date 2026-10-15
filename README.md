@@ -73,6 +73,19 @@ Danach übers WLAN:
 pio run -e panel_ota -t upload
 ```
 
+### Automatische Updates
+
+Die Displays halten sich selbst aktuell: Alle 6 Stunden (erstmals 2 Minuten nach dem Start) lesen sie
+`firmware/update.json` von der Projektseite. Gibt es eine andere Version, laden sie die Firmware über HTTPS
+(Zertifikat geprüft, MD5-Prüfsumme) – aber erst, wenn nicht geladen wird und 10 Minuten niemand das Display bedient hat.
+Startet die neue Firmware nicht sauber, kehrt der Bootloader beim nächsten Neustart zur alten zurück; sie gilt erst
+nach einer Minute Laufzeit als gut.
+
+- Abschalten in den Einstellungen: „Automatische Updates“ auf `0`
+- Version: [scripts/version.py](scripts/version.py) – Commit-Datum und Kurz-Hash, lokal und in GitHub Actions gleich.
+  Ein lokal gebauter, sauberer Stand von `main` wird deshalb nicht erneut installiert; Builds mit ungespeicherten
+  Änderungen (`-dirty`) ersetzt das Display beim nächsten Update durch den veröffentlichten Stand
+
 ## Erster Start
 
 Mit dem Handy ins WLAN `evcc-Garage` wechseln – die Einrichtungsseite öffnet sich (sonst `192.168.4.1`).
@@ -86,6 +99,7 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
 | Drehung | `0` (je 90° im Uhrzeigersinn: 1, 2, 3) |
 | Design | `0` automatisch, `1` hell, `2` dunkel |
 | Bildschirm aus nach Minuten | `2` (`0` = immer an) |
+| Automatische Updates | `1` an (`0` = aus) |
 
 ## Später ändern
 
@@ -101,6 +115,7 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | --- | --- |
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
 | `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)); `/preview` ohne Parameter beendet |
+| `/update` | Firmware-Version und Stand der automatischen Updates; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
 | `/wifiscan` | löst eine WLAN-Suche aus (Lasttest für die Bildausgabe) |
 
 Ohne Gerät: `./tools/sim/render.sh <Ordner> nocar charging …` rendert dieselben Beispielzustände mit der

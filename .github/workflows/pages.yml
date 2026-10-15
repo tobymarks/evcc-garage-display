@@ -39,11 +39,8 @@ jobs:
         run: pio run -e panel
 
       - name: Website zusammenstellen
-        run: |
-          python scripts/assemble_web_installer.py \
-            --build-dir .pio/build/panel \
-            --site-dir site \
-            --version "$(date -u +%Y-%m-%d)-${GITHUB_SHA::7}"
+        # Version aus Git wie im Firmware-Build (scripts/version.py)
+        run: python scripts/assemble_web_installer.py --build-dir .pio/build/panel --site-dir site
 
       - uses: actions/upload-pages-artifact@v3
         with:
