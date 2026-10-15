@@ -170,7 +170,7 @@ String updater::status() {
   s += "Automatische Updates: ";
   s += settings::get().autoUpdate ? "an\n" : "aus\n";
   s += "Letzte Prüfung: ";
-  s += busy ? "läuft …" : lastResult;
+  s += !busy ? lastResult : job == Job::Install ? "Installation läuft …" : "läuft …";
   s += "\n";
   return s;
 }

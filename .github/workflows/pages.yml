@@ -30,7 +30,7 @@ jobs:
           path: |
             ~/.platformio
             .pio
-          key: pio-${{ hashFiles('platformio.ini', 'sdkconfig.defaults') }}
+          key: pio-${{ hashFiles('platformio.ini') }}
 
       - name: PlatformIO installieren
         run: pip install platformio

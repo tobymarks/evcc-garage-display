@@ -4,3 +4,8 @@ site/firmware/
 site/fonts/
 include/fw_version.h
 __pycache__/
+# erzeugt pioarduino beim Build (custom_sdkconfig)
+managed_components/
+.dummy/
+sdkconfig.*
+dependencies.lock

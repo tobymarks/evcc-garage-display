@@ -23,8 +23,7 @@ def firmware_version() -> str:
     try:
         date = _git("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d")
         sha = _git("rev-parse", "--short=7", "HEAD")
-        # sdkconfig.* schreibt der Build selbst neu – zählt nicht als Änderung
-        dirty = _git("status", "--porcelain", "--untracked-files=no", "--", ".", ":!sdkconfig.*")
+        dirty = _git("status", "--porcelain", "--untracked-files=no")
     except (OSError, subprocess.CalledProcessError):
         return "dev"
     return f"{date}-{sha}" + ("-dirty" if dirty else "")
