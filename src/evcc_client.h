@@ -30,6 +30,12 @@ struct EvccState {
   uint32_t pvRemaining = 0;   // s
   bool planActive = false;
   bool smartCostActive = false;
+
+  // Hausdaten – damit man ohne Fahrzeug sieht, ob sich Anstecken gerade lohnt
+  float pvPower = -1;         // W, -1 = keine PV-Anlage bekannt
+  float homePower = 0;        // W, Verbrauch im Haus ohne Ladepunkte
+  float batterySoc = -1;      // %, -1 = kein Hausakku
+  float minChargePower = 0;   // W, ab diesem Überschuss startet Smart (Mindeststrom × Phasen × 230 V)
 };
 
 enum class CommandResult : uint8_t { None, Ok, Failed };

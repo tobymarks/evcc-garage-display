@@ -65,6 +65,7 @@ static lv_obj_t* lblBolt;
 static lv_obj_t* contIdle;
 static lv_obj_t* lblIdleIcon;
 static lv_obj_t* lblIdleText;
+static lv_obj_t* lblNoCar;
 static lv_obj_t* lblStatus;
 static lv_obj_t* barBlock;
 static lv_obj_t* barBg;
@@ -77,6 +78,11 @@ static lv_obj_t* tileLabel[3];
 static lv_obj_t* tileValue[3];
 // Beschriftungen wie in evcc: klein, grau, in Großbuchstaben
 static const char* TILE_TEXT[3] = {"GELADEN", "DAUER", "Ø SONNE"};
+static const char* HOUSE_TILE_TEXT[3] = {"SONNE", "HAUS", "AKKU"};
+// Ab dieser PV-Leistung zeigt das Display ohne Fahrzeug den Sonnenüberschuss (darunter, z. B. nachts,
+// nur "Kein Fahrzeug"); zwei Schwellen, damit es in der Dämmerung nicht hin- und herspringt
+static constexpr float SUN_ON_W = 150;
+static constexpr float SUN_OFF_W = 50;
 static lv_obj_t* segBg;
 static lv_obj_t* seg[3];
 static lv_obj_t* segLbl[3];
@@ -130,6 +136,16 @@ static void onHeaderLongPress(lv_event_t*) {
   if (settingsCb) settingsCb();
 }
 
+// Icon neben der großen Zahl: Blitz beim Laden, Sonne beim Überschuss ohne Fahrzeug.
+// Die Glyphen haben breite Ränder: näher an "kW" rücken und optisch auf die Grundlinie stellen.
+static void setBigIcon(const char* icon) {
+  const bool sun = !strcmp(icon, ICON_SUN);
+  const int lh = font_icon_big.line_height;
+  lv_label_set_text(lblBolt, icon);
+  lv_obj_set_style_margin_left(lblBolt, sun ? -lh / 8 : -lh / 5, 0);
+  lv_obj_set_style_pad_bottom(lblBolt, font_big.base_line - font_icon_big.base_line + (sun ? lh / 12 : lh / 9), 0);
+}
+
 static void buildMain() {
   scrMain = lv_obj_create(nullptr);
   lv_obj_remove_flag(scrMain, LV_OBJ_FLAG_SCROLLABLE);
@@ -155,6 +171,11 @@ static void buildMain() {
   lv_obj_set_flex_flow(mid, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(mid, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
+  // Ohne Fahrzeug, aber mit Sonne: kleine Zeile über dem Überschuss
+  lblNoCar = makeLabel(mid, &font_22);
+  lv_label_set_text(lblNoCar, ICON_PLUG " Kein Fahrzeug");
+  lv_obj_set_style_pad_bottom(lblNoCar, 10, 0);
+
   // Ladeleistung – Zahl und Einheit auf gemeinsamer Grundlinie
   contPower = makeBox(mid);
   lv_obj_set_size(contPower, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
@@ -167,11 +188,7 @@ static void buildMain() {
   lv_obj_set_style_pad_bottom(lblUnit, font_big.base_line - font_32.base_line, 0);
   // Grüner Blitz wie in evcc, solange geladen wird; unsichtbar statt ausgeblendet, damit die Zahl nicht springt
   lblBolt = makeLabel(contPower, &font_icon_big);
-  lv_label_set_text(lblBolt, ICON_BOLT);
-  // Der Blitz hat breite Ränder im Glyph und reicht etwas unter die Grundlinie: näher an "kW" rücken
-  // und auf die Grundlinie stellen
-  lv_obj_set_style_margin_left(lblBolt, -font_icon_big.line_height / 5, 0);
-  lv_obj_set_style_pad_bottom(lblBolt, font_big.base_line - font_icon_big.base_line + font_icon_big.line_height / 9, 0);
+  setBigIcon(ICON_BOLT);
 
   // Anzeige ohne Fahrzeug / ohne Daten
   contIdle = makeBox(mid);
@@ -206,7 +223,7 @@ static void buildMain() {
   lblGrid = makeLabel(barBlock, &font_18);
   lv_obj_align(lblGrid, LV_ALIGN_TOP_RIGHT, 0, BAR_H + 8);
 
-  // Kacheln mit den Werten der Ladesitzung
+  // Kacheln mit den Werten der Ladesitzung bzw. ohne Fahrzeug Sonne, Haus und Akku
   tiles = makeBox(mid);
   lv_obj_set_size(tiles, CONTENT_W, LV_SIZE_CONTENT);
   lv_obj_set_style_pad_top(tiles, 14, 0);
@@ -220,7 +237,6 @@ static void buildMain() {
     lv_obj_set_style_bg_opa(tile[i], LV_OPA_COVER, 0);
     lv_obj_set_style_pad_left(tile[i], 14, 0);
     tileLabel[i] = makeLabel(tile[i], &font_18);
-    lv_label_set_text(tileLabel[i], TILE_TEXT[i]);
     lv_obj_set_pos(tileLabel[i], 0, 7);
     tileValue[i] = makeLabel(tile[i], &font_24);
     lv_obj_set_pos(tileValue[i], 0, 29);
@@ -309,6 +325,7 @@ static void applyTheme() {
   lv_obj_set_style_text_color(lblBolt, t.solar, 0);
   lv_obj_set_style_text_color(lblIdleIcon, t.muted, 0);
   lv_obj_set_style_text_color(lblIdleText, t.text, 0);
+  lv_obj_set_style_text_color(lblNoCar, t.muted, 0);
   lv_obj_set_style_text_color(lblGrid, t.muted, 0);
   lv_obj_set_style_bg_color(barFill, t.solar, 0);
   for (int i = 0; i < 3; i++) {
@@ -343,7 +360,16 @@ static void renderSegments(ChargeMode shown, bool pending) {
   }
 }
 
-static void renderStatus(const UiView& v, char* buf, size_t len, lv_color_t& color) {
+static float surplus(const EvccState& s) { return LV_MAX(0.0f, s.pvPower - s.homePower); }
+
+// Ohne Fahrzeug den Sonnenüberschuss zeigen, solange die PV-Anlage nennenswert liefert
+static bool showHouse(const EvccState& s) {
+  static bool sunUp = false;
+  sunUp = s.pvPower >= (sunUp ? SUN_OFF_W : SUN_ON_W);
+  return s.valid && !s.connected && sunUp;
+}
+
+static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_color_t& color) {
   const EvccState& s = v.state;
   const Theme& t = *theme;
   color = t.muted;
@@ -363,6 +389,17 @@ static void renderStatus(const UiView& v, char* buf, size_t len, lv_color_t& col
       snprintf(buf, len, millis() > STALE_AFTER_MS ? "evcc nicht erreichbar" : "Verbinde mit evcc …");
   } else if (v.pendingMode != ChargeMode::None) {
     snprintf(buf, len, "Modus wird gesetzt …");
+  } else if (!s.connected && house && s.minChargePower > 0) {
+    // Hilft bei der Entscheidung: reicht die Sonne gerade für Smart?
+    if (surplus(s) >= s.minChargePower) {
+      color = t.solarText;
+      snprintf(buf, len, "Überschuss reicht für Smart");
+    } else {
+      formatDecimal(tmp, sizeof(tmp), s.minChargePower / 1000.0f);
+      snprintf(buf, len, "Smart startet ab %s kW Überschuss", tmp);
+    }
+  } else if (!s.connected && house) {
+    snprintf(buf, len, "Sonnenüberschuss");
   } else if (!s.connected) {
     snprintf(buf, len, "Modus für die nächste Ladung wählen");
   } else if (s.modeOff) {
@@ -404,15 +441,25 @@ void ui::render(const UiView& v) {
   lv_obj_set_style_text_color(lblIcons, t.error, 0);
   lv_obj_align_to(lblIcons, lblClock, LV_ALIGN_OUT_LEFT_MID, -10, 0);
 
-  // Hauptwert
+  // Hauptwert: Ladeleistung, ohne Fahrzeug der Sonnenüberschuss
   const bool showPower = s.valid && s.connected;
-  setVisible(contPower, showPower);
-  setVisible(contIdle, !showPower);
+  const bool house = showHouse(s);
+  setVisible(contPower, showPower || house);
+  setVisible(contIdle, !showPower && !house);
+  setVisible(lblNoCar, house);
   if (showPower) {
     formatDecimal(buf, sizeof(buf), s.chargePower / 1000.0f);
     lv_label_set_text(lblPower, buf);
     lv_obj_set_style_text_color(lblPower, live && s.charging ? t.text : t.muted, 0);
+    setBigIcon(ICON_BOLT);
     lv_obj_set_style_text_opa(lblBolt, live && s.charging ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+  } else if (house) {
+    formatDecimal(buf, sizeof(buf), surplus(s) / 1000.0f);
+    lv_label_set_text(lblPower, buf);
+    const bool enough = surplus(s) >= LV_MAX(s.minChargePower, 1.0f);
+    lv_obj_set_style_text_color(lblPower, live && enough ? t.text : t.muted, 0);
+    setBigIcon(ICON_SUN);
+    lv_obj_set_style_text_opa(lblBolt, live ? LV_OPA_COVER : LV_OPA_40, 0);
   } else if (!s.valid) {
     const bool starting = millis() < STALE_AFTER_MS;
     lv_label_set_text(lblIdleIcon, !v.wifiConnected ? ICON_WIFI_OFF : ICON_CLOUD_OFF);
@@ -423,7 +470,7 @@ void ui::render(const UiView& v) {
   }
 
   lv_color_t statusColor;
-  renderStatus(v, buf, sizeof(buf), statusColor);
+  renderStatus(v, house, buf, sizeof(buf), statusColor);
   lv_label_set_text(lblStatus, buf);
   lv_obj_set_style_text_color(lblStatus, statusColor, 0);
 
@@ -444,11 +491,28 @@ void ui::render(const UiView& v) {
     lv_obj_align(lblGrid, LV_ALIGN_TOP_RIGHT, 0, BAR_H + 8);
   }
 
-  // Kacheln: Werte der laufenden bzw. letzten Sitzung
+  // Kacheln: Werte der laufenden bzw. letzten Sitzung, ohne Fahrzeug Sonne, Haus und Akku
   const bool showTiles = showPower && (s.charging || s.chargedEnergy > 0);
-  setVisible(tiles, showTiles);
-  if (showTiles) {
-    char num[16];
+  setVisible(tiles, showTiles || house);
+  char num[16];
+  if (house) {
+    const bool battery = s.batterySoc >= 0;
+    for (int i = 0; i < 3; i++) lv_label_set_text(tileLabel[i], HOUSE_TILE_TEXT[i]);
+    formatDecimal(num, sizeof(num), s.pvPower / 1000.0f);
+    snprintf(buf, sizeof(buf), "%s kW", num);
+    lv_label_set_text(tileValue[0], buf);
+    formatDecimal(num, sizeof(num), s.homePower / 1000.0f);
+    snprintf(buf, sizeof(buf), "%s kW", num);
+    lv_label_set_text(tileValue[1], buf);
+    setVisible(tile[2], battery);
+    if (battery) {
+      snprintf(buf, sizeof(buf), "%d %%", (int)lroundf(s.batterySoc));
+      lv_label_set_text(tileValue[2], buf);
+    }
+    for (int i = 0; i < 3; i++) lv_obj_set_style_text_color(tileValue[i], live ? t.text : t.muted, 0);
+  } else if (showTiles) {
+    for (int i = 0; i < 3; i++) lv_label_set_text(tileLabel[i], TILE_TEXT[i]);
+    setVisible(tile[2], true);
     formatDecimal(num, sizeof(num), s.chargedEnergy / 1000.0f);
     snprintf(buf, sizeof(buf), "%s kWh", num);
     lv_label_set_text(tileValue[0], buf);

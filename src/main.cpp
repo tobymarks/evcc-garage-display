@@ -12,6 +12,7 @@
 #include "display.h"
 #include "evcc_client.h"
 #include "icons.h"
+#include "preview.h"
 #include "settings.h"
 #include "sun.h"
 #include "ui.h"
@@ -249,63 +250,18 @@ static void updateBacklight() {
 
 // ---------- Netzwerkdienste ----------
 
-// Beispielzustände zum Prüfen der Oberfläche ohne echtes Auto
+// Beispielzustände zum Prüfen der Oberfläche ohne echtes Auto, siehe src/preview.cpp
 static void handlePreview() {
   EvccState p;
-  p.valid = true;
-  p.updatedMs = millis();
-  strlcpy(p.title, state.valid ? state.title : "Garage", sizeof(p.title));
-  p.connected = true;
-  p.mode = ChargeMode::Slow;
-  previewStale = false;
-
-  const String name = web.arg("s");
-  if (name == "charging" || name == "stale") {
-    p.charging = true;
-    p.chargePower = 7360;
-    p.phasesActive = 3;
-    p.greenShare = 0.62f;
-    p.chargedEnergy = 12400;
-    p.chargeDuration = 5820;
-    p.sessionSolarPct = 48;
-    p.vehicleSoc = 64;
-    previewStale = name == "stale";
-  } else if (name == "solar") {
-    p.mode = ChargeMode::Smart;
-    p.charging = true;
-    p.chargePower = 4140;
-    p.phasesActive = 1;
-    p.greenShare = 1.0f;
-    p.chargedEnergy = 2900;
-    p.chargeDuration = 1680;
-    p.sessionSolarPct = 97;
-  } else if (name == "fast") {
-    p.mode = ChargeMode::Fast;
-    p.charging = true;
-    p.chargePower = 11040;
-    p.phasesActive = 3;
-    p.greenShare = 0.04f;
-    p.chargedEnergy = 7400;
-    p.chargeDuration = 2460;
-    p.sessionSolarPct = 6;
-  } else if (name == "nocar") {
-    p.connected = false;
-  } else if (name == "waiting") {
-    p.mode = ChargeMode::Smart;
-  } else if (name == "start") {
-    p.mode = ChargeMode::Smart;
-    strlcpy(p.pvAction, "enable", sizeof(p.pvAction));
-    p.pvRemaining = 45;
-  } else if (name == "off") {
-    p.mode = ChargeMode::None;
-    p.modeOff = true;
-  } else {
+  if (!preview::scene(web.arg("s").c_str(), p, previewStale)) {
     previewUntil = 0;
     dirty = true;
     web.send(200, "text/plain",
-             "Vorschau beendet. Zustaende: ?s=charging|solar|fast|nocar|waiting|start|off|stale [&dark=0|1]\n");
+             String("Vorschau beendet. Zustaende: ?s=") + preview::NAMES + " [&dark=0|1]\n");
     return;
   }
+  p.updatedMs = millis();
+  if (state.valid) strlcpy(p.title, state.title, sizeof(p.title));
 
   previewState = p;
   previewDark = web.hasArg("dark") ? web.arg("dark").toInt() != 0 : -1;

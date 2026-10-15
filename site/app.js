@@ -4,7 +4,7 @@ const heroShots = [
   ["solar-light", "Nur Sonne – 100 % vom Dach"],
   ["start-dark", "Genug Sonne – gleich geht's los"],
   ["fast-light", "Schnell: volle Leistung"],
-  ["nocar-dark", "Kein Fahrzeug – Modus vorwählen"],
+  ["nocar-dark", "Kein Fahrzeug – 5,3 kW Überschuss"],
 ];
 const heroImg = document.getElementById("hero-screen");
 const heroCaption = document.getElementById("hero-caption");

@@ -89,6 +89,15 @@ static void poll() {
   s.pvRemaining = (uint32_t)(lp["pvRemaining"] | 0.0f);
   s.planActive = lp["planActive"] | false;
   s.smartCostActive = lp["smartCostActive"] | false;
+  if (root["pv"].is<float>()) s.pvPower = root["pv"];
+  s.homePower = root["home"] | 0.0f;
+  if (root["bat"].is<float>()) s.batterySoc = root["bat"];
+  // Phasen, mit denen Smart startet: fest eingestellt oder bei Umschaltung (0 = automatisch) einphasig
+  const int phasesConfigured = lp["phasesConfigured"] | 0;
+  const int phases = phasesConfigured == 1 || phasesConfigured == 3 ? phasesConfigured
+                     : (lp["chargerPhases1p3p"] | false)              ? 1
+                                                                       : 3;
+  s.minChargePower = (lp["minCurrent"] | 0.0f) * 230.0f * phases;
 
   xSemaphoreTake(lock, portMAX_DELAY);
   shared = s;
@@ -142,11 +151,14 @@ void evcc::begin() {
   const Settings& s = settings::get();
   baseUrl = "http://" + s.evccHost + ":" + String(s.evccPort) + "/api/loadpoints/" + String(s.loadpoint);
 
-  char jq[400];
+  // Ältere evcc-Versionen liefern den Akku-Ladestand als batterySoc, neuere unter battery.soc
+  char jq[640];
   snprintf(jq, sizeof(jq),
            "{lp:.loadpoints[%d]|{title,mode,alwaysCharge,chargePower,charging,connected,chargedEnergy,"
            "chargeDuration,phasesActive,sessionSolarPercentage,vehicleTitle,vehicleSoc,pvAction,pvRemaining,"
-           "planActive,smartCostActive},green:.greenShareLoadpoints}",
+           "planActive,smartCostActive,minCurrent:(.effectiveMinCurrent // .minCurrent),phasesConfigured,"
+           "chargerPhases1p3p},green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
+           "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc)}",
            s.loadpoint - 1);
   stateUrl = "http://" + s.evccHost + ":" + String(s.evccPort) + "/api/state?jq=" + urlEncode(jq);
 

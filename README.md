@@ -12,7 +12,7 @@ Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-
 | Bereich | Inhalt |
 | --- | --- |
 | Kopfzeile | Name des Ladepunkts, Uhrzeit, Warnsymbol bei WLAN-/evcc-Problemen |
-| Mitte | Ladeleistung in kW mit grünem Blitz beim Laden – oder „Kein Fahrzeug", wenn nichts eingesteckt ist |
+| Mitte | Ladeleistung in kW mit grünem Blitz beim Laden. Ohne Fahrzeug der aktuelle Sonnenüberschuss (PV minus Hausverbrauch) mit Kacheln für Sonne, Haus und Akku – und ob der Überschuss für Smart reicht. Nachts nur „Kein Fahrzeug“ |
 | Statuszeile | z. B. „Lädt · 3-phasig", „Wartet auf Sonnenüberschuss", „Genug Sonne – Start in 0:45" |
 | Balken | Sonnen- und Netzanteil der aktuellen Ladeleistung |
 | Kacheln | Geladene Energie, Dauer und durchschnittlicher Sonnenanteil der Sitzung |
@@ -50,7 +50,8 @@ evcc ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
   - Diese Einstellungen stehen unter `custom_sdkconfig` in `platformio.ini`; das Framework wird deshalb beim ersten Build neu kompiliert (einige Minuten)
 - Schriften: Montserrat (SIL OFL) und die Icons der evcc-Oberfläche – [Shopicons](https://github.com/H2D2-Design/h2d2-shopicons)
   und Material Symbols (beide Apache-2.0), SVGs in `tools/icons`. Erzeugt mit `tools/gen_fonts.sh` (braucht fontforge)
-- Daten: alle 3 s `GET /api/state?jq=…` – der jq-Filter liefert nur die benötigten Felder (~300 Byte statt ~70 KB)
+- Daten: alle 3 s `GET /api/state?jq=…` – der jq-Filter liefert nur die benötigten Felder (~400 Byte statt ~70 KB),
+  darunter `pvPower`, `homePower` und den Akku-Ladestand für die Anzeige ohne Fahrzeug
 - Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}` und `POST /api/loadpoints/<n>/mode/{smart|now}`
 - Netzwerk läuft in einem eigenen Task auf Kern 0, die Oberfläche bleibt dadurch flüssig
 - Eine Taste zeigt den neuen Modus erst voll an, wenn evcc ihn bestätigt hat (vorher halbtransparent)
@@ -99,8 +100,12 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | Pfad | Zweck |
 | --- | --- |
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
-| `/preview?s=charging\|solar\|fast\|nocar\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand; `/preview` ohne Parameter beendet |
+| `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)); `/preview` ohne Parameter beendet |
 | `/wifiscan` | löst eine WLAN-Suche aus (Lasttest für die Bildausgabe) |
+
+Ohne Gerät: `./tools/sim/render.sh <Ordner> nocar charging …` rendert dieselben Beispielzustände mit der
+echten Oberfläche (LVGL, Schriften) auf dem Rechner als PNG, hell und dunkel. Ohne Argumente erneuert es die
+Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
 
 ## Anpassen
 
