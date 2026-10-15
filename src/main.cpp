@@ -6,6 +6,9 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
+#include <esp_core_dump.h>
+#include <esp_heap_caps.h>
+#include <esp_ota_ops.h>
 #include <lvgl.h>
 
 #include "config.h"
@@ -279,6 +282,44 @@ static void handlePreview() {
   web.send(200, "text/plain", "Vorschau aktiv fuer 60 s\n");
 }
 
+static void handleDiag() {
+  static const char* const REASONS[] = {"unbekannt", "Einschalten", "extern", "Software", "Absturz",
+                                        "Interrupt-Watchdog", "Task-Watchdog", "Watchdog", "Deep Sleep",
+                                        "Unterspannung", "SDIO"};
+  const esp_reset_reason_t reason = esp_reset_reason();
+  char buf[160];
+  String s;
+  snprintf(buf, sizeof(buf), "Firmware %s\nLaufzeit %lu s\nNeustartgrund: %s\n", FW_VERSION, millis() / 1000,
+           reason < sizeof(REASONS) / sizeof(*REASONS) ? REASONS[reason] : "anderer");
+  s += buf;
+  snprintf(buf, sizeof(buf), "Interner RAM frei %u, minimal %u, größter Block %u\nPSRAM frei %u\n",
+           heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+           heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+  s += buf;
+  // Startete eine neue Firmware nicht sauber, hat der Bootloader die vorherige wiederhergestellt
+  esp_app_desc_t desc;
+  const esp_partition_t* invalid = esp_ota_get_last_invalid_partition();
+  if (invalid && esp_ota_get_partition_description(invalid, &desc) == ESP_OK) {
+    snprintf(buf, sizeof(buf), "Zurückgerollt: Firmware in %s (gebaut %s %s) startete nicht sauber\n", invalid->label,
+             desc.date, desc.time);
+    s += buf;
+  }
+  esp_core_dump_summary_t dump;
+  if (esp_core_dump_image_check() == ESP_OK && esp_core_dump_get_summary(&dump) == ESP_OK) {
+    snprintf(buf, sizeof(buf), "Letzter Absturz: Task %s, PC 0x%08lx, Ursache %lu, Adresse 0x%08lx\nBacktrace:",
+             dump.exc_task, dump.exc_pc, dump.ex_info.exc_cause, dump.ex_info.exc_vaddr);
+    s += buf;
+    for (uint32_t i = 0; i < dump.exc_bt_info.depth; i++) {
+      snprintf(buf, sizeof(buf), " 0x%08lx", dump.exc_bt_info.bt[i]);
+      s += buf;
+    }
+    s += dump.exc_bt_info.corrupted ? " (unvollständig)\n" : "\n";
+  } else {
+    s += "Kein Absturz gespeichert\n";
+  }
+  web.send(200, "text/plain; charset=utf-8", s);
+}
+
 static void startWebServer() {
   web.on("/screenshot.bmp", []() { display::sendScreenshot(web); });
   web.on("/preview", handlePreview);
@@ -288,6 +329,8 @@ static void startWebServer() {
     if (web.hasArg("install")) updater::installNow();
     web.send(200, "text/plain; charset=utf-8", updater::status());
   });
+  // Laufzeit, Neustartgrund, Speicher und der zuletzt gespeicherte Absturz (Coredump im Flash)
+  web.on("/diag", handleDiag);
   // Lasttest gegen Bildstörungen: löst eine WLAN-Suche aus (wie das Einstellungsportal)
   web.on("/wifiscan", []() {
     const uint32_t start = millis();
