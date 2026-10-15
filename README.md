@@ -104,3 +104,11 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 Zeiten und Standardwerte stehen in [src/config.h](src/config.h), Pins und Display-Timings in
 [src/board.h](src/board.h). Für ein OTA-Passwort in `platformio.ini` unter `build_flags`
 `-DOTA_PASSWORD=\"…\"` ergänzen.
+
+## Lizenz
+
+MIT – siehe [LICENSE](LICENSE). Mitgelieferte Fremdinhalte:
+
+- [Montserrat](https://github.com/JulietaUla/Montserrat) – SIL Open Font License 1.1 ([tools/fonts/OFL-Montserrat.txt](tools/fonts/OFL-Montserrat.txt))
+- [Shopicons](https://github.com/H2D2-Design/h2d2-shopicons) und [Material Symbols](https://github.com/google/material-design-icons) – Apache-2.0 ([tools/icons/LICENSE-shopicons](tools/icons/LICENSE-shopicons))
+- Die Icons entsprechen denen der [EVCC](https://github.com/evcc-io/evcc)-Weboberfläche; dieses Projekt ist nicht offiziell mit EVCC verbunden.
