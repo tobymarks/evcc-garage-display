@@ -57,7 +57,7 @@ EVCC ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
 
 ## Flashen
 
-Am einfachsten im Browser (Chrome/Edge): **[tobymarks.github.io/esp32-evcc-switch](https://tobymarks.github.io/esp32-evcc-switch/)** –
+Am einfachsten im Browser (Chrome/Edge): **[tobymarks.github.io/evcc-garage-display](https://tobymarks.github.io/evcc-garage-display/)** –
 die Seite wird bei jedem Push auf `main` von GitHub Actions mit frisch gebauter Firmware neu erstellt (`site/`, `.github/workflows/pages.yml`).
 
 Mit PlatformIO, erstes Mal per USB-C:
