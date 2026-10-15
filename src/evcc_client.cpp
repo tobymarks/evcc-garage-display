@@ -48,11 +48,11 @@ static int httpRequest(const String& url, bool post, String* body) {
 static ChargeMode deriveMode(const char* mode, const char* alwaysCharge, bool& off) {
   off = false;
   if (!strcmp(mode, "now")) return ChargeMode::Fast;
-  if (!strcmp(mode, "minpv")) return ChargeMode::Smart;  // EVCC vor 0.316
-  if (!strcmp(mode, "pv")) return ChargeMode::PV;        // EVCC vor 0.316
+  if (!strcmp(mode, "minpv")) return ChargeMode::Slow;  // EVCC vor 0.316
+  if (!strcmp(mode, "pv")) return ChargeMode::Smart;    // EVCC vor 0.316
   if (!strcmp(mode, "smart")) {
-    return (!strcmp(alwaysCharge, "on") || !strcmp(alwaysCharge, "once")) ? ChargeMode::Smart
-                                                                          : ChargeMode::PV;
+    return (!strcmp(alwaysCharge, "on") || !strcmp(alwaysCharge, "once")) ? ChargeMode::Slow
+                                                                           : ChargeMode::Smart;
   }
   off = !strcmp(mode, "off");
   return ChargeMode::None;
@@ -106,9 +106,9 @@ static bool setMode(ChargeMode mode) {
   switch (mode) {
     case ChargeMode::Fast:
       return post("/mode/now");
-    case ChargeMode::PV:
-    case ChargeMode::Smart: {
-      const bool always = mode == ChargeMode::Smart;
+    case ChargeMode::Smart:
+    case ChargeMode::Slow: {
+      const bool always = mode == ChargeMode::Slow;
       // EVCC ≥ 0.316: "immer laden" + smart
       if (post(always ? "/alwayscharge/on" : "/alwayscharge/off")) return post("/mode/smart");
       // Ältere Versionen kennen alwayscharge nicht, dafür pv/minpv

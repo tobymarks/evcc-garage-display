@@ -26,11 +26,12 @@ static const Theme LIGHT = {
     lv_color_hex(0x078A2C), lv_color_hex(0x28293E), lv_color_hex(0xC26A00), lv_color_hex(0xD9380A),
     lv_color_hex(0xDCDCE4),
 };
+// Dunkles Navy wie EVCC ab 0.317
 static const Theme DARK = {
-    lv_color_hex(0x05060F), lv_color_hex(0x1C1D2E), lv_color_hex(0xFFFFFF), lv_color_hex(0x9A9BA8),
-    lv_color_hex(0xFFFFFF), lv_color_hex(0x05060F), lv_color_hex(0x33344A), lv_color_hex(0x0FDE41),
+    lv_color_hex(0x010322), lv_color_hex(0x151630), lv_color_hex(0xFFFFFF), lv_color_hex(0xB5B6C3),
+    lv_color_hex(0xFFFFFF), lv_color_hex(0x010322), lv_color_hex(0x2A2C4C), lv_color_hex(0x0FDE41),
     lv_color_hex(0x0FDE41), lv_color_hex(0x93949E), lv_color_hex(0xFF9000), lv_color_hex(0xFC440F),
-    lv_color_hex(0x1C1D2E),
+    lv_color_hex(0x33354F),
 };
 
 static const Theme* theme = &LIGHT;
@@ -60,6 +61,7 @@ static lv_obj_t* lblClock;
 static lv_obj_t* contPower;
 static lv_obj_t* lblPower;
 static lv_obj_t* lblUnit;
+static lv_obj_t* lblBolt;
 static lv_obj_t* contIdle;
 static lv_obj_t* lblIdleIcon;
 static lv_obj_t* lblIdleText;
@@ -73,15 +75,17 @@ static lv_obj_t* tiles;
 static lv_obj_t* tile[3];
 static lv_obj_t* tileLabel[3];
 static lv_obj_t* tileValue[3];
-static const char* TILE_TEXT[3] = {"Geladen", "Dauer", "Ø Sonne"};
+// Beschriftungen wie in EVCC: klein, grau, in Großbuchstaben
+static const char* TILE_TEXT[3] = {"GELADEN", "DAUER", "Ø SONNE"};
 static lv_obj_t* segBg;
 static lv_obj_t* seg[3];
 static lv_obj_t* segLbl[3];
 static lv_obj_t* segSub[3];
-static const ChargeMode SEG_MODES[3] = {ChargeMode::PV, ChargeMode::Smart, ChargeMode::Fast};
-// Nur Text wie in EVCC, dazu eine Zeile, die sagt, was der Modus tut
-static const char* SEG_TEXT[3] = {"PV", "Smart", "Schnell"};
-static const char* SEG_SUB[3] = {"nur Sonne", "Sonne + Netz", "volle Leistung"};
+static const ChargeMode SEG_MODES[3] = {ChargeMode::Smart, ChargeMode::Slow, ChargeMode::Fast};
+// Nur Text wie in EVCC, dazu eine Zeile, die sagt, was der Modus tut.
+// "Smart" heißt wie in EVCC; "Langsam" ist Smart mit "Immer laden".
+static const char* SEG_TEXT[3] = {"Smart", "Langsam", "Schnell"};
+static const char* SEG_SUB[3] = {"nur Sonne", "lädt immer", "volle Leistung"};
 
 // Hinweisbildschirm
 static lv_obj_t* scrMsg;
@@ -161,6 +165,10 @@ static void buildMain() {
   lblUnit = makeLabel(contPower, &font_32);
   lv_label_set_text(lblUnit, "kW");
   lv_obj_set_style_pad_bottom(lblUnit, font_big.base_line - font_32.base_line, 0);
+  // Grüner Blitz wie in EVCC, solange geladen wird; unsichtbar statt ausgeblendet, damit die Zahl nicht springt
+  lblBolt = makeLabel(contPower, &font_icon_big);
+  lv_label_set_text(lblBolt, ICON_BOLT);
+  lv_obj_set_style_pad_bottom(lblBolt, font_big.base_line - font_icon_big.base_line, 0);
 
   // Anzeige ohne Fahrzeug / ohne Daten
   contIdle = makeBox(mid);
@@ -211,7 +219,7 @@ static void buildMain() {
     tileLabel[i] = makeLabel(tile[i], &font_18);
     lv_label_set_text(tileLabel[i], TILE_TEXT[i]);
     lv_obj_set_pos(tileLabel[i], 0, 7);
-    tileValue[i] = makeLabel(tile[i], &font_26);
+    tileValue[i] = makeLabel(tile[i], &font_24);
     lv_obj_set_pos(tileValue[i], 0, 29);
   }
 
@@ -282,6 +290,7 @@ static void applyTheme() {
   lv_obj_set_style_text_color(lblTitle, t.text, 0);
   lv_obj_set_style_text_color(lblClock, t.muted, 0);
   lv_obj_set_style_text_color(lblUnit, t.muted, 0);
+  lv_obj_set_style_text_color(lblBolt, t.solar, 0);
   lv_obj_set_style_text_color(lblIdleIcon, t.muted, 0);
   lv_obj_set_style_text_color(lblIdleText, t.text, 0);
   lv_obj_set_style_text_color(lblGrid, t.muted, 0);
@@ -356,7 +365,7 @@ static void renderStatus(const UiView& v, char* buf, size_t len, lv_color_t& col
     formatCountdown(tmp, sizeof(tmp), s.pvRemaining);
     color = t.solarText;
     snprintf(buf, len, "Genug Sonne – Start in %s", tmp);
-  } else if (s.mode == ChargeMode::PV) {
+  } else if (s.mode == ChargeMode::Smart) {
     snprintf(buf, len, "Wartet auf Sonnenüberschuss");
   } else if (s.planActive || s.smartCostActive) {
     snprintf(buf, len, "Wartet auf günstigen Zeitpunkt");
@@ -387,12 +396,13 @@ void ui::render(const UiView& v) {
     formatDecimal(buf, sizeof(buf), s.chargePower / 1000.0f);
     lv_label_set_text(lblPower, buf);
     lv_obj_set_style_text_color(lblPower, live && s.charging ? t.text : t.muted, 0);
+    lv_obj_set_style_text_opa(lblBolt, live && s.charging ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
   } else if (!s.valid) {
     const bool starting = millis() < STALE_AFTER_MS;
-    lv_label_set_text(lblIdleIcon, !v.wifiConnected ? ICON_WIFI_OFF : starting ? ICON_PLUG : ICON_ALERT);
+    lv_label_set_text(lblIdleIcon, !v.wifiConnected ? ICON_WIFI_OFF : ICON_CLOUD_OFF);
     lv_label_set_text(lblIdleText, !v.wifiConnected ? "Kein WLAN" : starting ? "Verbinde …" : "Keine Daten");
   } else {
-    lv_label_set_text(lblIdleIcon, ICON_CAR_OFF);
+    lv_label_set_text(lblIdleIcon, ICON_PLUG);
     lv_label_set_text(lblIdleText, "Kein Fahrzeug");
   }
 

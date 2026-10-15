@@ -1,7 +1,7 @@
 # EVCC-Garagendisplay (ESP32-4848S040C)
 
 Touch-Display neben dem Ladepunkt: zeigt die aktuelle Ladeleistung aus [EVCC](https://evcc.io)
-und schaltet zwischen **PV**, **Smart** und **Schnell** um.
+und schaltet zwischen **Smart**, **Langsam** und **Schnell** um.
 Hardware: Guition ESP32-4848S040C – ESP32-S3, 4" IPS 480×480 (ST7701S), kapazitiver Touch (GT911),
 Strom per USB-C.
 
@@ -12,13 +12,14 @@ Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-
 | Bereich | Inhalt |
 | --- | --- |
 | Kopfzeile | Name des Ladepunkts, Uhrzeit, Warnsymbol bei WLAN-/EVCC-Problemen |
-| Mitte | Ladeleistung in kW – oder „Kein Fahrzeug", wenn nichts eingesteckt ist |
+| Mitte | Ladeleistung in kW mit grünem Blitz beim Laden – oder „Kein Fahrzeug", wenn nichts eingesteckt ist |
 | Statuszeile | z. B. „Lädt · 3-phasig", „Wartet auf Sonnenüberschuss", „Genug Sonne – Start in 0:45" |
 | Balken | Sonnen- und Netzanteil der aktuellen Ladeleistung |
 | Kacheln | Geladene Energie, Dauer und durchschnittlicher Sonnenanteil der Sitzung |
-| Unten | Modustasten PV · Smart · Schnell, jeweils mit kurzer Beschreibung |
+| Unten | Modustasten Smart · Langsam · Schnell, jeweils mit kurzer Beschreibung |
 
-**Design:** hell, dunkel oder automatisch nach Sonnenstand (Farben angelehnt an EVCC). Das Display
+**Design:** angelehnt an die EVCC-Weboberfläche (ab 0.317): gleiche Farben, Schrift (Montserrat) und Icons –
+hell, dunkel oder automatisch nach Sonnenstand. Das Display
 läuft immer mit voller Helligkeit – in der Garage ist Licht, wenn jemand davorsteht.
 
 **Bildschirm aus:** Wird nicht geladen und nichts bedient, geht das Display nach 2 Minuten aus
@@ -31,8 +32,8 @@ EVCC ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
 
 | Taste | EVCC | Verhalten |
 | --- | --- | --- |
-| PV | `smart` + „Immer laden" aus | lädt nur mit Sonnenüberschuss |
-| Smart | `smart` + „Immer laden" an | lädt immer mindestens mit Mindestleistung, mehr bei Sonne; berücksichtigt günstige Tarife und Ladepläne |
+| Smart | `smart` + „Immer laden" aus | lädt nur mit Sonnenüberschuss (bzw. günstigem Tarif oder Ladeplan) – z. B. wenn ein Auto länger steht |
+| Langsam | `smart` + „Immer laden" an (∞) | lädt sofort und ohne Pause mit Mindestleistung, mehr bei Sonne |
 | Schnell | `now` | volle Leistung |
 
 „Aus" gibt es am Display bewusst nicht. Steht der Ladepunkt in EVCC auf Aus, zeigt das Display
@@ -47,7 +48,8 @@ EVCC ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
   - `CONFIG_SPIRAM_XIP_FROM_PSRAM` und `CONFIG_LCD_RGB_ISR_IRAM_SAFE` – die Ausgabe läuft auch bei Flash-Zugriffen weiter
   - `CONFIG_LCD_RGB_RESTART_IN_VSYNC` – falls doch etwas verrutscht, fängt sich das Bild im nächsten Frame
   - Diese Einstellungen stehen unter `custom_sdkconfig` in `platformio.ini`; das Framework wird deshalb beim ersten Build neu kompiliert (einige Minuten)
-- Schriften: Inter (UI-Texte), Montserrat (große Leistungszahl), Tabler-Icons – erzeugt mit `tools/gen_fonts.sh`
+- Schriften: Montserrat (SIL OFL) und die Icons der EVCC-Oberfläche – [Shopicons](https://github.com/H2D2-Design/h2d2-shopicons)
+  und Material Symbols (beide Apache-2.0), SVGs in `tools/icons`. Erzeugt mit `tools/gen_fonts.sh` (braucht fontforge)
 - Daten: alle 3 s `GET /api/state?jq=…` – der jq-Filter liefert nur die benötigten Felder (~300 Byte statt ~70 KB)
 - Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}` und `POST /api/loadpoints/<n>/mode/{smart|now}`
 - Netzwerk läuft in einem eigenen Task auf Kern 0, die Oberfläche bleibt dadurch flüssig

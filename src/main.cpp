@@ -256,7 +256,7 @@ static void handlePreview() {
   p.updatedMs = millis();
   strlcpy(p.title, state.valid ? state.title : "Garage", sizeof(p.title));
   p.connected = true;
-  p.mode = ChargeMode::Smart;
+  p.mode = ChargeMode::Slow;
   previewStale = false;
 
   const String name = web.arg("s");
@@ -271,7 +271,7 @@ static void handlePreview() {
     p.vehicleSoc = 64;
     previewStale = name == "stale";
   } else if (name == "solar") {
-    p.mode = ChargeMode::PV;
+    p.mode = ChargeMode::Smart;
     p.charging = true;
     p.chargePower = 4140;
     p.phasesActive = 1;
@@ -291,9 +291,9 @@ static void handlePreview() {
   } else if (name == "nocar") {
     p.connected = false;
   } else if (name == "waiting") {
-    p.mode = ChargeMode::PV;
+    p.mode = ChargeMode::Smart;
   } else if (name == "start") {
-    p.mode = ChargeMode::PV;
+    p.mode = ChargeMode::Smart;
     strlcpy(p.pvAction, "enable", sizeof(p.pvAction));
     p.pvRemaining = 45;
   } else if (name == "off") {

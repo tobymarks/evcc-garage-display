@@ -3,10 +3,10 @@
 #include <Arduino.h>
 
 // Die drei Modi am Display. EVCC ab 0.316 kennt intern nur off/smart/now:
-//   PV     = smart + "immer laden" aus  → nur Sonnenüberschuss
-//   Smart  = smart + "immer laden" an   → mindestens Mindestleistung, mehr bei Sonne
+//   Smart  = smart + "immer laden" aus  → nur Sonnenüberschuss (heißt in EVCC genauso)
+//   Slow   = smart + "immer laden" an   → mindestens Mindestleistung, mehr bei Sonne
 //   Fast   = now                        → volle Leistung
-enum class ChargeMode : uint8_t { None, PV, Smart, Fast };
+enum class ChargeMode : uint8_t { None, Smart, Slow, Fast };
 
 struct EvccState {
   bool valid = false;
