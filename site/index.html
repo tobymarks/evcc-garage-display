@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EVCC-Garagendisplay – Touch-Display für die Wallbox</title>
+    <meta
+      name="description"
+      content="Open-Source-Firmware für das Guition ESP32-4848S040C: zeigt die Ladeleistung aus EVCC und schaltet zwischen Smart, Langsam und Schnell um. Direkt im Browser installieren."
+    />
+    <meta name="theme-color" content="#010322" />
+    <meta property="og:title" content="EVCC-Garagendisplay" />
+    <meta property="og:description" content="Touch-Display neben der Wallbox – Ladeleistung, Sonnenanteil und Lademodus aus EVCC." />
+    <meta property="og:image" content="img/charging-dark.png" />
+    <link rel="icon" href="img/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  </head>
+  <body>
+    <header class="hero">
+      <nav class="nav wrap">
+        <a class="brand" href="#">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M20 4h12l-6 16h10L18 44l4-18H12z" /></svg>
+          Garagendisplay
+        </a>
+        <div class="nav-links">
+          <a href="#modi">Modi</a>
+          <a href="#ansichten">Ansichten</a>
+          <a href="#installieren">Installieren</a>
+          <a class="gh" href="https://github.com/tobymarks/esp32-evcc-switch">GitHub</a>
+        </div>
+      </nav>
+
+      <div class="hero-grid wrap">
+        <div class="hero-copy">
+          <p class="eyebrow">Open Source · für <a href="https://evcc.io">EVCC</a> ab 0.316</p>
+          <h1>Sonne tanken,<br /><span>direkt an der Wallbox.</span></h1>
+          <p class="lead">
+            Ein 4″-Touch-Display neben dem Ladepunkt: zeigt, wie schnell das Auto lädt und wie viel davon von
+            der Sonne kommt – und schaltet mit einem Tipp zwischen <strong>Smart</strong>,
+            <strong>Langsam</strong> und <strong>Schnell</strong> um. Ohne Handy, ohne App.
+          </p>
+          <div class="cta">
+            <a class="btn primary" href="#installieren">Im Browser installieren</a>
+            <a class="btn ghost" href="https://github.com/tobymarks/esp32-evcc-switch">Quellcode ansehen</a>
+          </div>
+          <ul class="facts">
+            <li><b>480 × 480</b> IPS-Touch</li>
+            <li><b>ESP32-S3</b> mit WLAN</li>
+            <li><b>USB-C</b> Strom</li>
+          </ul>
+        </div>
+
+        <figure class="device-stage">
+          <div class="glow" aria-hidden="true"></div>
+          <div class="device" id="hero-device">
+            <img id="hero-screen" src="img/charging-dark.png" width="480" height="480" alt="Display beim Laden: 7,4 kW, 62 % Sonne" />
+          </div>
+          <figcaption id="hero-caption">Lädt mit 62 % Sonne</figcaption>
+        </figure>
+      </div>
+    </header>
+
+    <main>
+      <section class="wrap features">
+        <article>
+          <div class="ico">
+            <svg viewBox="0 0 48 48"><path d="M24 34a10 10 0 1 0 0-20 10 10 0 0 0 0 20zm0-16a6 6 0 1 1 0 12 6 6 0 0 1 0-12zM22 4h4v6h-4zm0 34h4v6h-4zM4 22h6v4H4zm34 0h6v4h-6zM9.5 12.3l2.8-2.8 4.2 4.2-2.8 2.8zm22 22 2.8-2.8 4.2 4.2-2.8 2.8zM9.5 35.7l4.2-4.2 2.8 2.8-4.2 4.2zm22-22 4.2-4.2 2.8 2.8-4.2 4.2z" /></svg>
+          </div>
+          <h3>Sonnenanteil auf einen Blick</h3>
+          <p>Ein Balken zeigt live, wie viel der Ladeleistung gerade vom Dach kommt – dazu Energie, Dauer und Ø Sonne der Ladung.</p>
+        </article>
+        <article>
+          <div class="ico">
+            <svg viewBox="0 0 48 48"><path d="M20 4h12l-6 16h10L18 44l4-18H12z" /></svg>
+          </div>
+          <h3>Aus drei Metern lesbar</h3>
+          <p>Große Zahlen, Kontrast ≥ 4,5 : 1, Design wie die EVCC-Oberfläche – hell, dunkel oder automatisch nach Sonnenstand.</p>
+        </article>
+        <article>
+          <div class="ico">
+            <svg viewBox="0 0 48 48"><path d="M24 6a18 18 0 1 0 0 36 18 18 0 0 0 0-36zm0 4a14 14 0 1 1 0 28 14 14 0 0 1 0-28zm-2 6v10.8l8.6 5.2 2-3.4-6.6-4V16z" /></svg>
+          </div>
+          <h3>Läuft einfach</h3>
+          <p>Kein Flackern bei WLAN-Last, Updates übers WLAN, Neustart nach Stromausfall. Bildschirm geht aus, wenn niemand lädt.</p>
+        </article>
+      </section>
+
+      <section class="wrap modes" id="modi">
+        <div class="section-head">
+          <p class="eyebrow">Drei Tasten</p>
+          <h2>Einstecken, tippen, fertig.</h2>
+          <p class="sub">Jede Taste sagt, was sie tut. Im Hintergrund steuert das Display die EVCC-Modi.</p>
+        </div>
+        <div class="mode-cards">
+          <article class="mode">
+            <div class="pill"><span>Smart</span><small>nur Sonne</small></div>
+            <p>Lädt nur mit Sonnenüberschuss – oder zum günstigen Tarif bzw. nach Ladeplan. Ideal, wenn das Auto länger steht.</p>
+            <code>smart · Immer laden aus</code>
+          </article>
+          <article class="mode active">
+            <div class="pill"><span>Langsam</span><small>lädt immer</small></div>
+            <p>Lädt sofort und ohne Pause mit Mindestleistung, scheint die Sonne, entsprechend mehr. Der Alltagsmodus.</p>
+            <code>smart · Immer laden an ∞</code>
+          </article>
+          <article class="mode">
+            <div class="pill"><span>Schnell</span><small>volle Leistung</small></div>
+            <p>Volle Leistung, egal woher der Strom kommt – für den Moment, in dem es schnell gehen muss.</p>
+            <code>now</code>
+          </article>
+        </div>
+      </section>
+
+      <section class="gallery-section" id="ansichten">
+        <div class="wrap">
+          <div class="section-head row">
+            <div>
+              <p class="eyebrow">Ansichten</p>
+              <h2>Jeder Zustand, klar erkennbar.</h2>
+            </div>
+            <div class="theme-switch" role="group" aria-label="Design">
+              <button type="button" data-theme="light" aria-pressed="false">Hell</button>
+              <button type="button" data-theme="dark" aria-pressed="true">Dunkel</button>
+            </div>
+          </div>
+          <div class="gallery">
+            <figure><img data-shot="charging" alt="Lädt mit 7,4 kW, 62 % Sonne" /><figcaption><b>Lädt</b>Leistung, Phasen, Akkustand und Sonnenanteil</figcaption></figure>
+            <figure><img data-shot="solar" alt="Lädt mit 4,1 kW, 100 % Sonne" /><figcaption><b>Nur Sonne</b>100 % vom Dach, Modus Smart</figcaption></figure>
+            <figure><img data-shot="fast" alt="Lädt mit 11 kW im Modus Schnell" /><figcaption><b>Schnell</b>Volle Leistung aus dem Netz</figcaption></figure>
+            <figure><img data-shot="start" alt="Genug Sonne – Start in 0:45" /><figcaption><b>Gleich geht's los</b>Countdown, bis genug Sonne da ist</figcaption></figure>
+            <figure><img data-shot="nocar" alt="Kein Fahrzeug" /><figcaption><b>Kein Fahrzeug</b>Modus schon für die nächste Ladung wählen</figcaption></figure>
+            <figure><img data-shot="stale" alt="EVCC nicht erreichbar" /><figcaption><b>Ehrlich bei Störungen</b>Zeigt, wenn die Daten nicht aktuell sind</figcaption></figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap install" id="installieren">
+        <div class="section-head">
+          <p class="eyebrow">Installieren</p>
+          <h2>In zwei Minuten auf dem Display.</h2>
+          <p class="sub">Direkt aus dem Browser – ohne Entwicklungsumgebung. Funktioniert in Chrome und Edge am Computer.</p>
+        </div>
+
+        <div class="install-grid">
+          <ol class="steps">
+            <li>
+              <h3>Display per USB-C anschließen</h3>
+              <p>Guition <b>ESP32-4848S040C</b> (ESP32-S3, 4″, 480 × 480) mit einem Datenkabel an den Computer stecken.</p>
+            </li>
+            <li>
+              <h3>Firmware installieren</h3>
+              <p>Auf „Installieren“ klicken, den seriellen Port wählen (meist „USB Serial“ / CH340) und bestätigen.</p>
+            </li>
+            <li>
+              <h3>Mit dem WLAN verbinden</h3>
+              <p>Mit dem Handy ins WLAN <b>EVCC-Garage</b> wechseln. Dort Heimnetz, EVCC-Adresse und Ladepunkt eintragen – fertig.</p>
+            </li>
+          </ol>
+
+          <div class="installer">
+            <div class="installer-screen"><img src="img/nocar-light.png" width="480" height="480" alt="" /></div>
+            <esp-web-install-button manifest="firmware/manifest.json">
+              <button slot="activate" class="btn primary big">Installieren</button>
+              <span slot="unsupported" class="note">Dein Browser kann nicht auf USB zugreifen. Bitte Chrome oder Edge am Computer verwenden.</span>
+              <span slot="not-allowed" class="note">Der Installer braucht eine sichere Verbindung (https).</span>
+            </esp-web-install-button>
+            <p class="version" id="fw-version">Aktuelle Firmware aus <code>main</code></p>
+          </div>
+        </div>
+
+        <details class="more">
+          <summary>Einstellungen später ändern</summary>
+          <p>„Garage“ oben links <b>3 Sekunden gedrückt halten</b> – das Einrichtungs-WLAN startet erneut. Dort lassen sich EVCC-Adresse, Ladepunkt, Standort (für Hell/Dunkel nach Sonnenstand), Drehung, Design und die Zeit bis zum Ausschalten des Bildschirms anpassen. Updates kommen danach übers WLAN.</p>
+        </details>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <p>
+          MIT-Lizenz · <a href="https://github.com/tobymarks/esp32-evcc-switch">github.com/tobymarks/esp32-evcc-switch</a>
+        </p>
+        <p class="small">
+          Kein offizielles EVCC-Projekt. Schrift Montserrat (OFL), Icons Shopicons und Material Symbols (Apache-2.0) – wie in der
+          <a href="https://evcc.io">EVCC</a>-Oberfläche.
+        </p>
+      </div>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>

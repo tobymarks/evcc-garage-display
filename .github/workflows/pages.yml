@@ -1,0 +1,60 @@
+name: Website und Installer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Das Framework wird wegen custom_sdkconfig neu gebaut – Cache spart beim nächsten Mal einige Minuten
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: pio-${{ hashFiles('platformio.ini', 'sdkconfig.defaults') }}
+
+      - name: PlatformIO installieren
+        run: pip install platformio
+
+      - name: Firmware bauen
+        run: pio run -e panel
+
+      - name: Website zusammenstellen
+        run: |
+          python scripts/assemble_web_installer.py \
+            --build-dir .pio/build/panel \
+            --site-dir site \
+            --version "$(date -u +%Y-%m-%d)-${GITHUB_SHA::7}"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
