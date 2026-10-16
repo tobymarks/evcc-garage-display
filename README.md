@@ -12,7 +12,7 @@ Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-
 | Bereich | Inhalt |
 | --- | --- |
 | Kopfzeile | Name des Ladepunkts, Uhrzeit, Warnsymbol bei WLAN-/evcc-Problemen |
-| Mitte | Ladeleistung in kW mit grünem Blitz beim Laden. Ohne Fahrzeug der aktuelle Sonnenüberschuss (PV minus Hausverbrauch) mit Kacheln für Sonne, Haus und Akku – und ob der Überschuss für Smart reicht. Nachts nur „Kein Fahrzeug“ |
+| Mitte | Ladeleistung in kW mit grünem Blitz beim Laden. Ohne Fahrzeug der aktuelle Sonnenüberschuss (PV minus Hausverbrauch) mit Kacheln für Sonne, Haus und Akku – und ob der Überschuss für Smart reicht. Ohne PV-Anlage nur „Kein Fahrzeug“ |
 | Statuszeile | z. B. „Lädt · 3-phasig", „Wartet auf Sonnenüberschuss", „Genug Sonne – Start in 0:45" |
 | Balken | Sonnen- und Netzanteil der aktuellen Ladeleistung |
 | Kacheln | Geladene Energie, Dauer und durchschnittlicher Sonnenanteil der Sitzung |

@@ -79,10 +79,6 @@ static lv_obj_t* tileValue[3];
 // Beschriftungen wie in evcc: klein, grau, in Großbuchstaben
 static const char* TILE_TEXT[3] = {"GELADEN", "DAUER", "Ø SONNE"};
 static const char* HOUSE_TILE_TEXT[3] = {"SONNE", "HAUS", "AKKU"};
-// Ab dieser PV-Leistung zeigt das Display ohne Fahrzeug den Sonnenüberschuss (darunter, z. B. nachts,
-// nur "Kein Fahrzeug"); zwei Schwellen, damit es in der Dämmerung nicht hin- und herspringt
-static constexpr float SUN_ON_W = 150;
-static constexpr float SUN_OFF_W = 50;
 static lv_obj_t* segBg;
 static lv_obj_t* seg[3];
 static lv_obj_t* segLbl[3];
@@ -362,12 +358,8 @@ static void renderSegments(ChargeMode shown, bool pending) {
 
 static float surplus(const EvccState& s) { return LV_MAX(0.0f, s.pvPower - s.homePower); }
 
-// Ohne Fahrzeug den Sonnenüberschuss zeigen, solange die PV-Anlage nennenswert liefert
-static bool showHouse(const EvccState& s) {
-  static bool sunUp = false;
-  sunUp = s.pvPower >= (sunUp ? SUN_OFF_W : SUN_ON_W);
-  return s.valid && !s.connected && sunUp;
-}
+// Ohne Fahrzeug Sonnenüberschuss, Haus und Akku zeigen, sofern evcc eine PV-Anlage kennt (auch nachts)
+static bool showHouse(const EvccState& s) { return s.valid && !s.connected && s.pvPower >= 0; }
 
 static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_color_t& color) {
   const EvccState& s = v.state;
@@ -459,7 +451,7 @@ void ui::render(const UiView& v) {
     const bool enough = surplus(s) >= LV_MAX(s.minChargePower, 1.0f);
     lv_obj_set_style_text_color(lblPower, live && enough ? t.text : t.muted, 0);
     setBigIcon(ICON_SUN);
-    lv_obj_set_style_text_opa(lblBolt, live ? LV_OPA_COVER : LV_OPA_40, 0);
+    lv_obj_set_style_text_opa(lblBolt, live && enough ? LV_OPA_COVER : LV_OPA_40, 0);
   } else if (!s.valid) {
     const bool starting = millis() < STALE_AFTER_MS;
     lv_label_set_text(lblIdleIcon, !v.wifiConnected ? ICON_WIFI_OFF : ICON_CLOUD_OFF);
