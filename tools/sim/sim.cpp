@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "icons.h"
 #include "preview.h"
 #include "ui.h"
 
@@ -61,7 +62,13 @@ int main(int argc, char** argv) {
   for (int i = 2; i < argc; i++) {
     UiView v;
     bool stale;
-    if (!preview::scene(argv[i], v.state, stale)) {
+    // "settings": Hinweis beim Öffnen der Einstellungen (Text wie in main.cpp)
+    const bool settings = !strcmp(argv[i], "settings");
+    if (settings)
+      ui::showMessage(ICON_SETTINGS, "Einstellungen",
+                      "Mit dem WLAN \"evcc-Garage\" verbinden. Die Seite öffnet sich automatisch, "
+                      "sonst 192.168.4.1 aufrufen. Antippen zum Abbrechen.");
+    else if (!preview::scene(argv[i], v.state, stale)) {
       fprintf(stderr, "Unbekannter Zustand: %s\n", argv[i]);
       return 1;
     }
@@ -71,8 +78,10 @@ int main(int argc, char** argv) {
     strcpy(v.lastUpdate, "14:29");
     for (bool dark : {false, true}) {
       ui::setNight(dark);
-      ui::render(v);
-      ui::render(v);  // zweimal: Schwellen mit Gedächtnis (Sonne an/aus) sind dann eingeschwungen
+      if (!settings) {
+        ui::showMain();
+        ui::render(v);
+      }
       now += 1000;
       lv_obj_invalidate(lv_screen_active());
       lv_refr_now(nullptr);

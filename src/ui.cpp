@@ -3,6 +3,7 @@
 #include <lvgl.h>
 
 #include "config.h"
+#include "fw_version.h"
 #include "icons.h"
 
 LV_FONT_DECLARE(font_16);
@@ -94,6 +95,7 @@ static lv_obj_t* scrMsg;
 static lv_obj_t* lblMsgIcon;
 static lv_obj_t* lblMsgTitle;
 static lv_obj_t* lblMsgText;
+static lv_obj_t* lblMsgVersion;
 
 static lv_obj_t* makeLabel(lv_obj_t* parent, const lv_font_t* font) {
   lv_obj_t* l = lv_label_create(parent);
@@ -307,6 +309,11 @@ static void buildMessage() {
   lv_obj_set_style_text_align(lblMsgText, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_line_space(lblMsgText, 6, 0);
   lv_obj_set_style_pad_top(lblMsgText, 12, 0);
+
+  // Klein am unteren Rand, damit man ohne Browser sieht, ob ein Update angekommen ist
+  lblMsgVersion = makeLabel(scrMsg, &font_16);
+  lv_label_set_text(lblMsgVersion, "Firmware " FW_VERSION);
+  lv_obj_align(lblMsgVersion, LV_ALIGN_BOTTOM_MID, 0, -20);
 }
 
 static void applyTheme() {
@@ -333,6 +340,7 @@ static void applyTheme() {
   lv_obj_set_style_text_color(lblMsgIcon, t.muted, 0);
   lv_obj_set_style_text_color(lblMsgTitle, t.text, 0);
   lv_obj_set_style_text_color(lblMsgText, t.muted, 0);
+  lv_obj_set_style_text_color(lblMsgVersion, t.muted, 0);
 }
 
 static void setVisible(lv_obj_t* o, bool visible) {
