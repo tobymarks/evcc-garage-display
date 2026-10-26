@@ -33,7 +33,12 @@ jobs:
           key: pio-${{ hashFiles('platformio.ini') }}
 
       - name: PlatformIO installieren
-        run: pip install platformio
+        # pioarduino 6.2.0.post1 (26.10.2026) hält sich selbst für zu alt für die Plattform (">=6.2.0").
+        # Die Plattform installiert den Kern nur nach, wenn keine passende Version vorhanden ist → 6.2.0 vorab festhalten.
+        run: |
+          pip install platformio
+          [ -x ~/.platformio/penv/bin/python ] || python -m venv ~/.platformio/penv
+          ~/.platformio/penv/bin/pip install "pioarduino==6.2.0"
 
       - name: Firmware bauen
         run: pio run -e panel
