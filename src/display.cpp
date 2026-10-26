@@ -192,22 +192,14 @@ static bool readTouch(uint16_t& x, uint16_t& y) {
 
 // ---------- Drehung ----------
 
-// Logische Koordinate (wie LVGL sie sieht) → physischer Panel-Pixel
+// Logische Koordinate (wie LVGL sie sieht) → physischer Panel-Pixel,
+// passend zu lv_display_rotate_area(). Die Touch-Koordinaten dreht LVGL selbst.
 static void logicalToPhysical(int x, int y, int& px, int& py) {
   switch (rotation) {
-    case 1: px = LCD_WIDTH - 1 - y; py = x; break;
+    case 1: px = y; py = LCD_HEIGHT - 1 - x; break;
     case 2: px = LCD_WIDTH - 1 - x; py = LCD_HEIGHT - 1 - y; break;
-    case 3: px = y; py = LCD_HEIGHT - 1 - x; break;
+    case 3: px = LCD_WIDTH - 1 - y; py = x; break;
     default: px = x; py = y; break;
-  }
-}
-
-static void physicalToLogical(int px, int py, int& x, int& y) {
-  switch (rotation) {
-    case 1: x = py; y = LCD_WIDTH - 1 - px; break;
-    case 2: x = LCD_WIDTH - 1 - px; y = LCD_HEIGHT - 1 - py; break;
-    case 3: x = LCD_HEIGHT - 1 - py; y = px; break;
-    default: x = px; y = py; break;
   }
 }
 
@@ -251,10 +243,9 @@ static void touchCb(lv_indev_t*, lv_indev_data_t* data) {
 
   data->state = touched ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
   if (touched) {
-    int x, y;
-    physicalToLogical(px, py, x, y);
-    data->point.x = x;
-    data->point.y = y;
+    // Rohkoordinaten des Panels; LVGL rechnet sie passend zur Drehung um
+    data->point.x = px;
+    data->point.y = py;
   }
 }
 
