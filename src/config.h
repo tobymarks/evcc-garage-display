@@ -4,6 +4,7 @@
 #define DEFAULT_EVCC_HOST "192.168.178.209"
 #define DEFAULT_EVCC_PORT 7070
 #define DEFAULT_LOADPOINT 1        // 1 = erster Ladepunkt in evcc ("Garage")
+#define MAX_LOADPOINTS 6           // mehr Ladepunkte lassen sich nicht durchwischen
 #define DEFAULT_LATITUDE 51.0f     // für Tag/Nacht-Umschaltung (Sonnenstand)
 #define DEFAULT_LONGITUDE 10.0f
 #define DEFAULT_ROTATION 0         // 0–3, jeweils 90° im Uhrzeigersinn
@@ -36,3 +37,4 @@
 #define NIGHT_SUN_ELEVATION -3.0                 // Sonne tiefer als -3° → dunkles Design (bei Einstellung automatisch)
 #define PREVIEW_DURATION_MS 60000                // Dauer einer Vorschau über /preview
 #define SETTINGS_LONG_PRESS_MS 3000              // Titel lange drücken → Einstellungen
+#define AUTO_SWITCH_AFTER_TOUCH_MS 60000         // so lange nach der letzten Berührung nicht von selbst zu einem anderen Ladepunkt springen

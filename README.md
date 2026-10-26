@@ -18,6 +18,12 @@ Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-
 | Kacheln | Geladene Energie, Dauer und durchschnittlicher Sonnenanteil der Sitzung |
 | Unten | Modustasten Smart · Langsam · Schnell, jeweils mit kurzer Beschreibung |
 
+**Mehrere Ladepunkte:** In den Einstellungen mehrere Nummern mit Komma eintragen (z. B. `1,2,3`, höchstens 6).
+Dann wechselt man durch Wischen nach links und rechts, Punkte unter den Modustasten zeigen, welcher Ladepunkt
+gerade zu sehen ist. Wird an einem anderen Ladepunkt ein Auto angesteckt oder beginnt/endet dort das Laden,
+springt das Display dorthin – außer jemand hat es in der letzten Minute bedient. Alle Ladepunkte kommen mit
+einer einzigen Abfrage.
+
 **Design:** angelehnt an die evcc-Weboberfläche (ab 0.317): gleiche Farben, Schrift (Montserrat) und Icons –
 hell, dunkel oder automatisch nach Sonnenstand. Das Display
 läuft immer mit voller Helligkeit – in der Garage ist Licht, wenn jemand davorsteht.
@@ -94,7 +100,7 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
 | Feld | Standard |
 | --- | --- |
 | evcc-Adresse / Port | `192.168.178.209` / `7070` |
-| Ladepunkt-Nr. | `1` (Garage) |
+| Ladepunkt-Nr. | `1` (Garage); mehrere mit Komma, z. B. `1,2,3` – dann wischen zum Wechseln |
 | Breiten-/Längengrad | Mitte Deutschlands – für die automatische Tag/Nacht-Umschaltung |
 | Drehung | `0` (je 90° im Uhrzeigersinn: 1, 2, 3) |
 | Design | `0` automatisch, `1` hell, `2` dunkel |

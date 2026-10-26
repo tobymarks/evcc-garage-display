@@ -43,6 +43,7 @@ static bool hasLastView = false;
 static ui::ModeCallback modeCb;
 static ui::Callback settingsCb;
 static ui::Callback messageTapCb;
+static ui::SwipeCallback swipeCb;
 
 // Raster für 480x480
 static constexpr int MARGIN = 24;
@@ -53,10 +54,16 @@ static constexpr int CONTENT_W = 480 - 2 * MARGIN;
 static constexpr int BAR_H = 14;
 static constexpr int TILE_GAP = 12;
 static constexpr int TILE_H = 64;
+static constexpr int DOT = 10;
+static constexpr int DOTS_SHIFT = 12;  // so weit rückt der Modusumschalter für die Punkte nach oben
+static constexpr int SLIDE_PX = 48;  // Weg der Inhalte beim Wechsel des Ladepunkts
 
 // Hauptbildschirm
 static lv_obj_t* scrMain;
 static lv_obj_t* lblTitle;
+static lv_obj_t* mid;
+static lv_obj_t* dots;
+static lv_obj_t* dot[MAX_LOADPOINTS];
 static lv_obj_t* lblIcons;
 static lv_obj_t* lblClock;
 static lv_obj_t* contPower;
@@ -134,6 +141,56 @@ static void onHeaderLongPress(lv_event_t*) {
   if (settingsCb) settingsCb();
 }
 
+static void setTranslateX(void* o, int32_t v) {
+  lv_obj_set_style_translate_x((lv_obj_t*)o, v, 0);
+}
+
+static void setOpa(void* o, int32_t v) { lv_obj_set_style_opa((lv_obj_t*)o, v, 0); }
+
+// Neuer Ladepunkt: Titel und Mitte gleiten aus der Wischrichtung herein
+static void slideIn(int dir) {
+  for (lv_obj_t* o : {lblTitle, mid}) {
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, o);
+    lv_anim_set_duration(&a, 220);
+    lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+    lv_anim_set_exec_cb(&a, setTranslateX);
+    lv_anim_set_values(&a, dir * SLIDE_PX, 0);
+    lv_anim_start(&a);
+    lv_anim_set_exec_cb(&a, setOpa);
+    lv_anim_set_values(&a, LV_OPA_0, LV_OPA_COVER);
+    lv_anim_start(&a);
+  }
+}
+
+// Am ersten bzw. letzten Ladepunkt kurz anstoßen, damit man sieht, dass es nicht weitergeht
+static void bounce(int dir) {
+  lv_anim_t a;
+  lv_anim_init(&a);
+  lv_anim_set_var(&a, mid);
+  lv_anim_set_exec_cb(&a, setTranslateX);
+  lv_anim_set_duration(&a, 120);
+  lv_anim_set_playback_duration(&a, 160);
+  lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+  lv_anim_set_values(&a, 0, -dir * 20);
+  lv_anim_start(&a);
+}
+
+static void onGesture(lv_event_t*) {
+  if (!hasLastView || lastView.pageCount < 2) return;
+  lv_indev_t* indev = lv_indev_active();
+  const lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+  if (dir != LV_DIR_LEFT && dir != LV_DIR_RIGHT) return;
+  lv_indev_wait_release(indev);  // kein Klick auf eine Modustaste, wenn das Wischen dort begann
+  const int delta = dir == LV_DIR_LEFT ? 1 : -1;
+  const int next = lastView.page + delta;
+  if (next < 0 || next >= lastView.pageCount)
+    bounce(delta);
+  else if (swipeCb)
+    swipeCb(delta);
+}
+
 // Icon neben der großen Zahl: Blitz beim Laden, Sonne beim Überschuss ohne Fahrzeug.
 // Die Glyphen haben breite Ränder: näher an "kW" rücken und optisch auf die Grundlinie stellen.
 static void setBigIcon(const char* icon) {
@@ -163,7 +220,9 @@ static void buildMain() {
 
   // Mittelteil: Inhalt vertikal zentriert zwischen Kopfzeile und Modusumschalter,
   // ausgeblendete Elemente nehmen keinen Platz ein
-  lv_obj_t* mid = makeBox(scrMain);
+  lv_obj_add_event_cb(scrMain, onGesture, LV_EVENT_GESTURE, nullptr);
+
+  mid = makeBox(scrMain);
   lv_obj_set_pos(mid, 0, HEADER_H);
   lv_obj_set_size(mid, 480, SEG_Y - HEADER_H);
   lv_obj_set_flex_flow(mid, LV_FLEX_FLOW_COLUMN);
@@ -282,6 +341,19 @@ static void buildMain() {
   const int inner = CONTENT_W - 2 * 6 - 2 * 6 - 2;  // Innenabstand, Lücken, Rahmen
   const int extra = (inner - sum) / 3;
   for (int i = 0; i < 3; i++) lv_obj_set_width(seg[i], textW[i] + extra);
+
+  // Punkte unter dem Modusumschalter, nur bei mehreren Ladepunkten
+  dots = makeBox(scrMain);
+  lv_obj_set_size(dots, LV_SIZE_CONTENT, DOT);
+  lv_obj_align(dots, LV_ALIGN_BOTTOM_MID, 0, -(MARGIN + DOTS_SHIFT - DOT) / 2);
+  lv_obj_set_flex_flow(dots, LV_FLEX_FLOW_ROW);
+  lv_obj_set_style_pad_column(dots, 12, 0);
+  for (int i = 0; i < MAX_LOADPOINTS; i++) {
+    dot[i] = makeBox(dots);
+    lv_obj_set_size(dot[i], DOT, DOT);
+    lv_obj_set_style_radius(dot[i], LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(dot[i], LV_OPA_COVER, 0);
+  }
 }
 
 static void onMessageClicked(lv_event_t*) {
@@ -387,6 +459,9 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
       snprintf(buf, len, "evcc nicht erreichbar · Stand %s", v.lastUpdate);
     else
       snprintf(buf, len, millis() > STALE_AFTER_MS ? "evcc nicht erreichbar" : "Verbinde mit evcc …");
+  } else if (s.missing) {
+    color = t.warn;
+    snprintf(buf, len, "Diese Nummer gibt es in evcc nicht");
   } else if (v.pendingMode != ChargeMode::None) {
     snprintf(buf, len, "Modus wird gesetzt …");
   } else if (!s.connected && house && s.minChargePower > 0) {
@@ -427,7 +502,22 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
   }
 }
 
+static void renderDots(const UiView& v) {
+  const Theme& t = *theme;
+  const bool multi = v.pageCount > 1;
+  setVisible(dots, multi);
+  const int segY = SEG_Y - (multi ? DOTS_SHIFT : 0);
+  lv_obj_set_y(segBg, segY);
+  lv_obj_set_height(mid, segY - HEADER_H);
+  for (int i = 0; i < MAX_LOADPOINTS; i++) {
+    setVisible(dot[i], i < v.pageCount);
+    lv_obj_set_style_bg_color(dot[i], i == v.page ? t.text : t.muted, 0);
+    lv_obj_set_style_bg_opa(dot[i], i == v.page ? LV_OPA_COVER : LV_OPA_50, 0);
+  }
+}
+
 void ui::render(const UiView& v) {
+  if (hasLastView && v.page != lastView.page) slideIn(v.page > lastView.page ? 1 : -1);
   lastView = v;
   hasLastView = true;
   const EvccState& s = v.state;
@@ -435,7 +525,8 @@ void ui::render(const UiView& v) {
   const bool live = s.valid && !v.stale;
   char buf[64];
 
-  lv_label_set_text(lblTitle, s.valid ? s.title : "evcc");
+  renderDots(v);
+  lv_label_set_text(lblTitle, s.valid || s.missing ? s.title : "evcc");
   lv_label_set_text(lblClock, v.clock);
   lv_label_set_text(lblIcons, !v.wifiConnected ? ICON_WIFI_OFF : v.stale ? ICON_ALERT : "");
   lv_obj_set_style_text_color(lblIcons, t.error, 0);
@@ -460,6 +551,9 @@ void ui::render(const UiView& v) {
     lv_obj_set_style_text_color(lblPower, live && enough ? t.text : t.muted, 0);
     setBigIcon(ICON_SUN);
     lv_obj_set_style_text_opa(lblBolt, live && enough ? LV_OPA_COVER : LV_OPA_40, 0);
+  } else if (s.missing) {
+    lv_label_set_text(lblIdleIcon, ICON_ALERT);
+    lv_label_set_text(lblIdleText, "Nicht gefunden");
   } else if (!s.valid) {
     const bool starting = millis() < STALE_AFTER_MS;
     lv_label_set_text(lblIdleIcon, !v.wifiConnected ? ICON_WIFI_OFF : ICON_CLOUD_OFF);
@@ -535,9 +629,10 @@ void ui::setNight(bool value) {
   if (hasLastView) render(lastView);
 }
 
-void ui::begin(ModeCallback onMode, Callback onSettingsRequested) {
+void ui::begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback onSwipe) {
   modeCb = onMode;
   settingsCb = onSettingsRequested;
+  swipeCb = onSwipe;
   buildMain();
   buildMessage();
   applyTheme();

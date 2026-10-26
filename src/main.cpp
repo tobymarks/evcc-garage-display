@@ -40,9 +40,10 @@ static bool timeStarted = false;
 static bool webStarted = false;
 static uint32_t restartAt = 0;
 
-static EvccState state;
-static ChargeMode pendingMode = ChargeMode::None;
-static uint32_t pendingSince = 0;
+static EvccState states[MAX_LOADPOINTS];
+static uint8_t current = 0;  // angezeigter Ladepunkt (Position in den Einstellungen)
+static ChargeMode pendingMode[MAX_LOADPOINTS];
+static uint32_t pendingSince[MAX_LOADPOINTS];
 static const char* flashMsg = nullptr;
 static uint32_t flashUntil = 0;
 static bool dirty = true;
@@ -63,7 +64,7 @@ static void saveParams() {
   s.evccHost = pHost->getValue();
   s.evccHost.trim();
   s.evccPort = constrain(atoi(pPort->getValue()), 1, 65535);
-  s.loadpoint = constrain(atoi(pLoadpoint->getValue()), 1, 9);
+  settings::parseLoadpoints(pLoadpoint->getValue(), s);
   s.latitude = atof(pLat->getValue());
   s.longitude = atof(pLon->getValue());
   s.rotation = constrain(atoi(pRotate->getValue()), 0, 3);
@@ -76,9 +77,9 @@ static void saveParams() {
 
 static void setupPortal() {
   const Settings& s = settings::get();
-  static char port[6], lp[3], lat[12], lon[12], theme[2], rot[2], timeout[4], autoUpdate[2];
+  static char port[6], lp[24], lat[12], lon[12], theme[2], rot[2], timeout[4], autoUpdate[2];
   snprintf(port, sizeof(port), "%u", s.evccPort);
-  snprintf(lp, sizeof(lp), "%u", s.loadpoint);
+  strlcpy(lp, settings::loadpointsText(s).c_str(), sizeof(lp));
   snprintf(lat, sizeof(lat), "%.4f", s.latitude);
   snprintf(lon, sizeof(lon), "%.4f", s.longitude);
   snprintf(theme, sizeof(theme), "%u", s.theme);
@@ -88,7 +89,8 @@ static void setupPortal() {
 
   pHost = new WiFiManagerParameter("host", "evcc-Adresse", s.evccHost.c_str(), 40);
   pPort = new WiFiManagerParameter("port", "evcc-Port", port, 5);
-  pLoadpoint = new WiFiManagerParameter("lp", "Ladepunkt-Nr. (1 = erster in evcc)", lp, 2);
+  pLoadpoint = new WiFiManagerParameter(
+      "lp", "Ladepunkt-Nr. (1 = erster in evcc). Mehrere mit Komma, z. B. 1,2,3 – dann wischen zum Wechseln", lp, 17);
   pLat = new WiFiManagerParameter("lat", "Breitengrad (für Tag/Nacht)", lat, 11);
   pLon = new WiFiManagerParameter("lon", "Längengrad (für Tag/Nacht)", lon, 11);
   pRotate = new WiFiManagerParameter("rot", "Drehung: 0–3 (je 90° im Uhrzeigersinn)", rot, 1);
@@ -131,13 +133,38 @@ static void closeSettings() {
 
 static void onModeSelected(ChargeMode mode) {
   lastActivity = millis();
-  const ChargeMode current = pendingMode != ChargeMode::None ? pendingMode : state.mode;
-  if (mode == current) return;
-  pendingMode = mode;
-  pendingSince = millis();
+  const ChargeMode shown = pendingMode[current] != ChargeMode::None ? pendingMode[current] : states[current].mode;
+  if (mode == shown) return;
+  pendingMode[current] = mode;
+  pendingSince[current] = millis();
   flashMsg = nullptr;
-  evcc::requestMode(mode);
+  evcc::requestMode(current, mode);
   dirty = true;
+}
+
+static void showLoadpoint(uint8_t index) {
+  if (index == current || index >= evcc::count()) return;
+  current = index;
+  flashMsg = nullptr;  // Fehlermeldungen gehören zum vorher gezeigten Ladepunkt
+  dirty = true;
+}
+
+// Wischen nach links → nächster Ladepunkt
+static void onSwipe(int delta) {
+  lastActivity = millis();
+  showLoadpoint(current + delta);
+}
+
+static bool anyCharging() {
+  for (uint8_t i = 0; i < evcc::count(); i++)
+    if (states[i].valid && states[i].charging) return true;
+  return false;
+}
+
+static bool anyPending() {
+  for (uint8_t i = 0; i < evcc::count(); i++)
+    if (pendingMode[i] != ChargeMode::None) return true;
+  return false;
 }
 
 static void flash(const char* msg) {
@@ -162,42 +189,57 @@ static bool darkTheme() {
 }
 
 static void updateState() {
-  static bool lastConnected = false, lastCharging = false, lastWifi = false, lastStale = true;
+  static bool lastConnected[MAX_LOADPOINTS], lastCharging[MAX_LOADPOINTS];
+  static bool lastWifi = false, lastStale = true;
   static char lastClock[6] = "";
 
-  if (evcc::latest(state)) dirty = true;
+  if (evcc::latest(states)) dirty = true;
 
-  switch (evcc::takeCommandResult()) {
-    case CommandResult::Failed:
-      pendingMode = ChargeMode::None;
-      flash("Modus konnte nicht gesetzt werden");
-      break;
-    default:
-      break;
-  }
-  if (pendingMode != ChargeMode::None) {
-    if (state.valid && state.updatedMs > pendingSince && state.mode == pendingMode) {
-      pendingMode = ChargeMode::None;
+  const uint32_t touched = display::lastTouchMs();
+  const bool inUse = touched && millis() - touched < AUTO_SWITCH_AFTER_TOUCH_MS;
+  int jumpTo = -1;  // Ladepunkt, an dem sich gerade etwas getan hat
+  for (uint8_t i = 0; i < evcc::count(); i++) {
+    const EvccState& st = states[i];
+    // Fehler nur melden, wenn der Ladepunkt gerade zu sehen ist
+    const char* error = nullptr;
+    if (evcc::takeCommandResult(i) == CommandResult::Failed) {
+      pendingMode[i] = ChargeMode::None;
+      error = "Modus konnte nicht gesetzt werden";
+    }
+    if (pendingMode[i] != ChargeMode::None) {
+      if (st.valid && st.updatedMs > pendingSince[i] && st.mode == pendingMode[i]) {
+        pendingMode[i] = ChargeMode::None;
+        dirty = true;
+      } else if (millis() - pendingSince[i] > MODE_CONFIRM_TIMEOUT_MS) {
+        pendingMode[i] = ChargeMode::None;
+        error = "evcc hat den Modus nicht übernommen";
+      }
+    }
+    if (error) {
+      if (i == current) flash(error);
       dirty = true;
-    } else if (millis() - pendingSince > MODE_CONFIRM_TIMEOUT_MS) {
-      pendingMode = ChargeMode::None;
-      flash("evcc hat den Modus nicht übernommen");
+    }
+
+    // Bildschirm wecken, wenn ein Auto angesteckt wird oder das Laden beginnt/endet
+    if (st.connected != lastConnected[i] || st.charging != lastCharging[i]) {
+      // Diesen Ladepunkt zeigen – außer beim Abstecken; ein ladender hat Vorrang
+      const bool interesting = (st.connected && !lastConnected[i]) || st.charging != lastCharging[i];
+      if (interesting && (jumpTo < 0 || (st.charging && !states[jumpTo].charging))) jumpTo = i;
+      lastConnected[i] = st.connected;
+      lastCharging[i] = st.charging;
+      lastActivity = millis();
     }
   }
+  // Nicht wegspringen, solange jemand das Display bedient
+  if (jumpTo >= 0 && !inUse) showLoadpoint(jumpTo);
   if (flashMsg && (int32_t)(millis() - flashUntil) > 0) {
     flashMsg = nullptr;
     dirty = true;
   }
 
-  // Bildschirm wecken, wenn ein Auto angesteckt wird oder das Laden beginnt/endet
-  if (state.connected != lastConnected || state.charging != lastCharging) {
-    lastConnected = state.connected;
-    lastCharging = state.charging;
-    lastActivity = millis();
-  }
-
+  const EvccState& state = states[current];
   const bool wifi = WiFi.status() == WL_CONNECTED;
-  const bool stale = !state.valid || millis() - state.updatedMs > STALE_AFTER_MS;
+  const bool stale = state.updatedMs == 0 || millis() - state.updatedMs > STALE_AFTER_MS;
   if (wifi != lastWifi || stale != lastStale) {
     lastWifi = wifi;
     lastStale = stale;
@@ -229,7 +271,9 @@ static void updateState() {
     v.state = preview ? previewState : state;
     v.wifiConnected = preview || wifi;
     v.stale = preview ? previewStale : stale;
-    v.pendingMode = pendingMode;
+    v.pendingMode = pendingMode[current];
+    v.page = current;
+    v.pageCount = evcc::count();
     v.flash = flashMsg;
     strlcpy(v.clock, clock, sizeof(v.clock));
     if (state.valid && timeValid()) {
@@ -246,7 +290,7 @@ static void updateBacklight() {
   if (display::takeWakeRequest()) lastActivity = millis();
   if (display::lastTouchMs() > lastActivity) lastActivity = display::lastTouchMs();
 
-  const bool keepOn = portalActive || (state.valid && state.charging) ||
+  const bool keepOn = portalActive || anyCharging() ||
                       settings::get().screenTimeoutMin == 0 ||
                       millis() - lastActivity < settings::get().screenTimeoutMin * 60000UL;
   display::setSleeping(!keepOn);
@@ -272,7 +316,7 @@ static void handlePreview() {
     return;
   }
   p.updatedMs = millis();
-  if (state.valid) strlcpy(p.title, state.title, sizeof(p.title));
+  if (states[current].valid) strlcpy(p.title, states[current].title, sizeof(p.title));
 
   previewState = p;
   previewDark = web.hasArg("dark") ? web.arg("dark").toInt() != 0 : -1;
@@ -374,7 +418,7 @@ void setup() {
   brightness = BRIGHTNESS;
   lastActivity = millis();
 
-  ui::begin(onModeSelected, openSettings);
+  ui::begin(onModeSelected, openSettings, onSwipe);
   ui::onMessageTap(closeSettings);
   ui::showMessage(ICON_SETTINGS, "Verbinde …", "WLAN-Verbindung wird aufgebaut");
   lv_refr_now(nullptr);
@@ -398,8 +442,8 @@ void setup() {
 
 // Automatische Updates nur, wenn das Display gerade niemand braucht
 static void handleUpdates() {
-  const bool idle = !portalActive && !previewActive() && pendingMode == ChargeMode::None &&
-                    !(state.valid && state.charging) && millis() - lastActivity >= UPDATE_IDLE_MS;
+  const bool idle = !portalActive && !previewActive() && !anyPending() && !anyCharging() &&
+                    millis() - lastActivity >= UPDATE_IDLE_MS;
   switch (updater::loop(idle)) {
     case updater::Event::Installing: {
       static char text[80];

@@ -10,6 +10,7 @@ enum class ChargeMode : uint8_t { None, Smart, Slow, Fast };
 
 struct EvccState {
   bool valid = false;
+  bool missing = false;     // evcc kennt die eingestellte Ladepunkt-Nummer nicht
   uint32_t updatedMs = 0;
 
   char title[32] = "";
@@ -40,10 +41,12 @@ struct EvccState {
 
 enum class CommandResult : uint8_t { None, Ok, Failed };
 
+// Ladepunkte werden über ihre Position in den Einstellungen angesprochen (0 … count()-1)
 namespace evcc {
 void begin();
-// Kopiert den neuesten Zustand; true, wenn er sich seit dem letzten Aufruf geändert hat.
-bool latest(EvccState& out);
-void requestMode(ChargeMode mode);
-CommandResult takeCommandResult();
+uint8_t count();
+// Kopiert den neuesten Zustand aller Ladepunkte; true, wenn er sich seit dem letzten Aufruf geändert hat.
+bool latest(EvccState* out);
+void requestMode(uint8_t index, ChargeMode mode);
+CommandResult takeCommandResult(uint8_t index);
 }  // namespace evcc

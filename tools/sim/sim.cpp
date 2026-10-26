@@ -58,10 +58,19 @@ int main(int argc, char** argv) {
   lv_display_set_buffers(d, buf, nullptr, sizeof(buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
   lv_display_set_flush_cb(d, flush);
 
-  ui::begin([](ChargeMode) {}, []() {});
+  ui::begin([](ChargeMode) {}, []() {}, [](int) {});
   for (int i = 2; i < argc; i++) {
     UiView v;
     bool stale;
+    // "charging:2/3" – zweiter von drei Ladepunkten (Punkte unten)
+    if (char* sep = strchr(argv[i], ':')) {
+      int page = 1, count = 1;
+      sscanf(sep + 1, "%d/%d", &page, &count);
+      v.page = page - 1;
+      v.pageCount = count;
+      *sep = 0;
+    }
+    const std::string file = std::string(argv[i]) + (v.pageCount > 1 ? "-lp" + std::to_string(v.page + 1) : "");
     // "settings": Hinweis beim Öffnen der Einstellungen (Text wie in main.cpp)
     const bool settings = !strcmp(argv[i], "settings");
     if (settings)
@@ -83,9 +92,10 @@ int main(int argc, char** argv) {
         ui::render(v);
       }
       now += 1000;
+      lv_timer_handler();  // Animationen (Wechsel des Ladepunkts) zu Ende laufen lassen
       lv_obj_invalidate(lv_screen_active());
       lv_refr_now(nullptr);
-      writeBmp(std::string(argv[1]) + "/" + argv[i] + (dark ? "-dark" : "-light") + ".bmp");
+      writeBmp(std::string(argv[1]) + "/" + file + (dark ? "-dark" : "-light") + ".bmp");
     }
   }
   return 0;
