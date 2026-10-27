@@ -11,3 +11,4 @@
 #define ICON_ALWAYS "\xEE\x80\x86"  // ∞ – "Immer laden" in evcc
 #define ICON_WIFI_OFF "\xEE\x80\x87"
 #define ICON_CLOUD_OFF "\xEE\x80\x88"
+#define ICON_BATTERY "\xEE\x80\x89"  // Hausakku

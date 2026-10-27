@@ -18,6 +18,8 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
   strncpy(p.title, "Garage", sizeof(p.title) - 1);
   p.connected = true;
   p.mode = ChargeMode::Slow;
+  strncpy(p.vehicleTitle, "ID.4", sizeof(p.vehicleTitle) - 1);
+  p.vehicleSoc = 41;
   stale = false;
   house(p, 6200, 900);
 

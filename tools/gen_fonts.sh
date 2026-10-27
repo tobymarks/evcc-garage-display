@@ -13,7 +13,7 @@ CONV="npx -y lv_font_conv@1.5.3"
 # ASCII + deutsche Umlaute, °, ·, Ø, –, …
 TEXT_RANGE="0x20-0x7E,0xB0,0xB7,0xC4,0xD6,0xD8,0xDC,0xDF,0xE4,0xF6,0xFC,0x2013,0x2026"
 # Alle Icons der evcc-icons.ttf, siehe tools/build_icon_font.py und src/icons.h
-ICON_RANGE="0xE000-0xE008"
+ICON_RANGE="0xE000-0xE009"
 
 fontforge -quiet -lang=py -script tools/build_icon_font.py
 

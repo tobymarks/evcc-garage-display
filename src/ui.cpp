@@ -65,6 +65,7 @@ static lv_obj_t* mid;
 static lv_obj_t* dots;
 static lv_obj_t* dot[MAX_LOADPOINTS];
 static lv_obj_t* lblIcons;
+static lv_obj_t* lblBattery;
 static lv_obj_t* lblClock;
 static lv_obj_t* contPower;
 static lv_obj_t* lblPower;
@@ -73,7 +74,7 @@ static lv_obj_t* lblBolt;
 static lv_obj_t* contIdle;
 static lv_obj_t* lblIdleIcon;
 static lv_obj_t* lblIdleText;
-static lv_obj_t* lblNoCar;
+static lv_obj_t* lblVehicle;
 static lv_obj_t* lblStatus;
 static lv_obj_t* barBlock;
 static lv_obj_t* barBg;
@@ -217,6 +218,8 @@ static void buildMain() {
   lv_obj_align(lblClock, LV_ALIGN_TOP_RIGHT, -MARGIN - 4, 0);
   lv_obj_set_style_pad_top(lblClock, (HEADER_H - font_26.line_height) / 2 + 4, 0);
   lblIcons = makeLabel(scrMain, &font_26);
+  // Ladestand des Hausakkus – gehört zum Haus, bleibt beim Wischen stehen
+  lblBattery = makeLabel(scrMain, &font_26);
 
   // Mittelteil: Inhalt vertikal zentriert zwischen Kopfzeile und Modusumschalter,
   // ausgeblendete Elemente nehmen keinen Platz ein
@@ -228,10 +231,12 @@ static void buildMain() {
   lv_obj_set_flex_flow(mid, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(mid, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-  // Ohne Fahrzeug, aber mit Sonne: kleine Zeile über dem Überschuss
-  lblNoCar = makeLabel(mid, &font_22);
-  lv_label_set_text(lblNoCar, ICON_PLUG " Kein Fahrzeug");
-  lv_obj_set_style_pad_bottom(lblNoCar, 10, 0);
+  // Kleine Zeile über der großen Zahl: Fahrzeug mit Ladestand bzw. "Kein Fahrzeug" über dem Überschuss
+  lblVehicle = makeLabel(mid, &font_22);
+  lv_obj_set_width(lblVehicle, CONTENT_W);
+  lv_label_set_long_mode(lblVehicle, LV_LABEL_LONG_DOT);
+  lv_obj_set_style_text_align(lblVehicle, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_pad_bottom(lblVehicle, 4, 0);
 
   // Ladeleistung – Zahl und Einheit auf gemeinsamer Grundlinie
   contPower = makeBox(mid);
@@ -266,7 +271,7 @@ static void buildMain() {
   // Aktueller Sonnen-/Netzanteil der Ladeleistung
   barBlock = makeBox(mid);
   lv_obj_set_size(barBlock, CONTENT_W, LV_SIZE_CONTENT);
-  lv_obj_set_style_pad_top(barBlock, 18, 0);
+  lv_obj_set_style_pad_top(barBlock, 12, 0);
   barBg = makeBox(barBlock);
   lv_obj_set_size(barBg, CONTENT_W, BAR_H);
   lv_obj_set_style_radius(barBg, BAR_H / 2, 0);
@@ -283,7 +288,7 @@ static void buildMain() {
   // Kacheln mit den Werten der Ladesitzung bzw. ohne Fahrzeug Sonne, Haus und Akku
   tiles = makeBox(mid);
   lv_obj_set_size(tiles, CONTENT_W, LV_SIZE_CONTENT);
-  lv_obj_set_style_pad_top(tiles, 14, 0);
+  lv_obj_set_style_pad_top(tiles, 10, 0);
   lv_obj_set_style_pad_column(tiles, TILE_GAP, 0);
   lv_obj_set_flex_flow(tiles, LV_FLEX_FLOW_ROW);
   for (int i = 0; i < 3; i++) {
@@ -400,7 +405,8 @@ static void applyTheme() {
   lv_obj_set_style_text_color(lblBolt, t.solar, 0);
   lv_obj_set_style_text_color(lblIdleIcon, t.muted, 0);
   lv_obj_set_style_text_color(lblIdleText, t.text, 0);
-  lv_obj_set_style_text_color(lblNoCar, t.muted, 0);
+  lv_obj_set_style_text_color(lblVehicle, t.muted, 0);
+  lv_obj_set_style_text_color(lblBattery, t.muted, 0);
   lv_obj_set_style_text_color(lblGrid, t.muted, 0);
   lv_obj_set_style_bg_color(barFill, t.solar, 0);
   for (int i = 0; i < 3; i++) {
@@ -483,7 +489,6 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
   } else if (s.charging) {
     int n = snprintf(buf, len, "Lädt");
     if (s.phasesActive > 0) n += snprintf(buf + n, len - n, " · %d-phasig", s.phasesActive);
-    if (s.vehicleSoc > 0) n += snprintf(buf + n, len - n, " · Akku %d %%", (int)lroundf(s.vehicleSoc));
     if (!strcmp(s.pvAction, "disable") && s.pvRemaining > 0) {
       formatCountdown(tmp, sizeof(tmp), s.pvRemaining);
       snprintf(buf + n, len - n, " · stoppt in %s", tmp);
@@ -530,14 +535,34 @@ void ui::render(const UiView& v) {
   lv_label_set_text(lblClock, v.clock);
   lv_label_set_text(lblIcons, !v.wifiConnected ? ICON_WIFI_OFF : v.stale ? ICON_ALERT : "");
   lv_obj_set_style_text_color(lblIcons, t.error, 0);
-  lv_obj_align_to(lblIcons, lblClock, LV_ALIGN_OUT_LEFT_MID, -10, 0);
 
   // Hauptwert: Ladeleistung, ohne Fahrzeug der Sonnenüberschuss
   const bool showPower = s.valid && s.connected;
   const bool house = showHouse(s);
+
+  // Hausakku oben neben der Uhr; ohne Fahrzeug steht er schon in der Kachel
+  const bool battery = s.valid && s.batterySoc >= 0 && !house;
+  setVisible(lblBattery, battery);
+  if (battery) {
+    snprintf(buf, sizeof(buf), ICON_BATTERY " %d %%", (int)lroundf(s.batterySoc));
+    lv_label_set_text(lblBattery, buf);
+    lv_obj_align_to(lblBattery, lblClock, LV_ALIGN_OUT_LEFT_BOTTOM, -20, 0);
+  }
+  lv_obj_align_to(lblIcons, battery ? lblBattery : lblClock, LV_ALIGN_OUT_LEFT_BOTTOM, -10, 0);
+
+  // Fahrzeug mit Ladestand, solange es angesteckt ist
+  const bool vehicle = showPower && (s.vehicleSoc > 0 || s.vehicleTitle[0]);
+  if (house) {
+    lv_label_set_text(lblVehicle, ICON_PLUG " Kein Fahrzeug");
+  } else if (vehicle) {
+    int n = snprintf(buf, sizeof(buf), ICON_CAR " %s", s.vehicleTitle);
+    if (s.vehicleSoc > 0)
+      snprintf(buf + n, sizeof(buf) - n, "%s%d %%", s.vehicleTitle[0] ? " · " : "", (int)lroundf(s.vehicleSoc));
+    lv_label_set_text(lblVehicle, buf);
+  }
+  setVisible(lblVehicle, house || vehicle);
   setVisible(contPower, showPower || house);
   setVisible(contIdle, !showPower && !house);
-  setVisible(lblNoCar, house);
   if (showPower) {
     formatDecimal(buf, sizeof(buf), s.chargePower / 1000.0f);
     lv_label_set_text(lblPower, buf);

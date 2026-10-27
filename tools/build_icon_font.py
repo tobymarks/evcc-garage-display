@@ -19,6 +19,7 @@ GLYPHS = {
     0xE006: "always-charge.svg",
     0xE007: "wifi-off.svg",
     0xE008: "cloud-offline.svg",
+    0xE009: "battery.svg",  # eigene Zeichnung
 }
 
 EM = 1000
