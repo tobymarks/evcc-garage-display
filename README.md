@@ -109,8 +109,10 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
 
 ## Später ändern
 
-- **Einstellungen:** „Garage" oben links **3 Sekunden gedrückt halten** → das Portal `evcc-Garage` startet
-  erneut. Antippen des Hinweises bricht ab.
+- **Einstellungen im Heimnetz:** im Browser `http://evcc-garage.local:8080` aufrufen (leitet auf `/settings`).
+  Speichern startet das Display neu, das WLAN bleibt unverändert.
+- **Einstellungen am Display** (auch für ein anderes WLAN): „Garage" oben links **3 Sekunden gedrückt halten** →
+  das Portal `evcc-Garage` startet erneut. Antippen des Hinweises bricht ab.
 - Nach einem Stromausfall wartet das Display auf den Router und startet nach 5 Minuten ohne WLAN selbst neu.
 
 ## Diagnose
@@ -119,6 +121,7 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 
 | Pfad | Zweck |
 | --- | --- |
+| `/settings` | Einstellungen ändern (wie im Portal, ohne WLAN) |
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
 | `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)); `/preview` ohne Parameter beendet |
 | `/update` | Firmware-Version und Stand der automatischen Updates; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |

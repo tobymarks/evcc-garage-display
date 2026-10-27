@@ -9,6 +9,7 @@
 #include <esp_core_dump.h>
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
+#include <functional>
 #include <lvgl.h>
 
 #include "config.h"
@@ -59,20 +60,31 @@ static uint32_t previewUntil = 0;
 
 // ---------- WLAN-Einrichtung / Einstellungen ----------
 
-static void saveParams() {
+// Übernimmt die Werte aus dem Portal oder von /settings (gleiche Feldnamen) und startet neu
+static void applySettings(std::function<String(const char*)> value) {
   Settings& s = settings::get();
-  s.evccHost = pHost->getValue();
+  s.evccHost = value("host");
   s.evccHost.trim();
-  s.evccPort = constrain(atoi(pPort->getValue()), 1, 65535);
-  settings::parseLoadpoints(pLoadpoint->getValue(), s);
-  s.latitude = atof(pLat->getValue());
-  s.longitude = atof(pLon->getValue());
-  s.rotation = constrain(atoi(pRotate->getValue()), 0, 3);
-  s.theme = constrain(atoi(pTheme->getValue()), 0, 2);
-  s.screenTimeoutMin = constrain(atoi(pTimeout->getValue()), 0, 240);
-  s.autoUpdate = atoi(pAutoUpdate->getValue()) != 0;
+  s.evccPort = constrain(value("port").toInt(), 1, 65535);
+  settings::parseLoadpoints(value("lp").c_str(), s);
+  s.latitude = value("lat").toFloat();
+  s.longitude = value("lon").toFloat();
+  s.rotation = constrain(value("rot").toInt(), 0, 3);
+  s.theme = constrain(value("theme").toInt(), 0, 2);
+  s.screenTimeoutMin = constrain(value("timeout").toInt(), 0, 240);
+  s.autoUpdate = value("autoupd").toInt() != 0;
   settings::save();
   restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
+}
+
+static void saveParams() {
+  applySettings([](const char* key) {
+    for (int i = 0; i < wm.getParametersCount(); i++) {
+      WiFiManagerParameter* p = wm.getParameters()[i];
+      if (p->getID() && !strcmp(p->getID(), key)) return String(p->getValue());
+    }
+    return String();
+  });
 }
 
 static void setupPortal() {
@@ -364,7 +376,91 @@ static void handleDiag() {
   web.send(200, "text/plain; charset=utf-8", s);
 }
 
+// Einstellungen im Heimnetz ändern, ohne das Portal am Display zu öffnen (WLAN-Daten bleiben unberührt)
+static String htmlEscape(const String& in) {
+  String out;
+  for (char c : in) {
+    if (c == '&') out += "&amp;";
+    else if (c == '<') out += "&lt;";
+    else if (c == '>') out += "&gt;";
+    else if (c == '"') out += "&quot;";
+    else out += c;
+  }
+  return out;
+}
+
+static String option(int value, int selected, const char* label) {
+  return String("<option value=\"") + value + "\"" + (value == selected ? " selected" : "") + ">" + label +
+         "</option>";
+}
+
+static const char SETTINGS_HEAD[] PROGMEM = R"(<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>evcc-Garage</title><style>
+:root{color-scheme:light dark;--a:#0fdd8d}
+body{font:16px/1.4 system-ui,sans-serif;max-width:30rem;margin:0 auto;padding:1.5rem 1rem}
+h1{font-size:1.4rem;margin:0 0 1.5rem}label{display:block;font-weight:600;margin:1.1rem 0 .3rem}
+small{display:block;font-weight:400;opacity:.65}input,select{box-sizing:border-box;width:100%;font:inherit;
+padding:.6rem;border:1px solid #8888;border-radius:.5rem;background:Field;color:FieldText}
+.row{display:flex;gap:.75rem}.row>div{flex:1;min-width:0}button{margin-top:1.8rem;width:100%;font:inherit;font-weight:600;
+padding:.8rem;border:0;border-radius:.5rem;background:var(--a);color:#000}footer{margin-top:2rem;opacity:.5;font-size:.85rem}
+</style></head><body><h1>evcc-Garage</h1>)";
+
+static void handleSettings() {
+  if (web.method() == HTTP_POST) {
+    // Nur vollständige Formulare übernehmen, sonst stünden leere Felder als 0 in den Einstellungen
+    for (const char* key : {"host", "port", "lp", "lat", "lon", "rot", "theme", "timeout", "autoupd"}) {
+      if (web.arg(key).isEmpty()) {
+        web.send(400, "text/plain; charset=utf-8", String("Feld fehlt: ") + key + "\n");
+        return;
+      }
+    }
+    applySettings([](const char* key) { return web.arg(key); });
+    web.sendHeader("Refresh", "15; url=/settings");
+    web.send(200, "text/html; charset=utf-8",
+             String(FPSTR(SETTINGS_HEAD)) +
+                 "<p>Gespeichert. Das Display startet neu, die Seite lädt in einigen Sekunden wieder.</p></body></html>");
+    return;
+  }
+
+  const Settings& s = settings::get();
+  String h = FPSTR(SETTINGS_HEAD);
+  h.reserve(4096);
+  h += "<form method=\"post\">";
+  h += "<div class=\"row\"><div><label>evcc-Adresse</label><input name=\"host\" required value=\"" +
+       htmlEscape(s.evccHost) + "\"></div>";
+  h += "<div style=\"flex:.45\"><label>Port</label><input name=\"port\" type=\"number\" min=\"1\" max=\"65535\" value=\"" +
+       String(s.evccPort) + "\"></div></div>";
+  h += "<label>Ladepunkte<small>Nummer wie in evcc (1 = erster). Mehrere mit Komma, z. B. 1,2,3 – dann wischen "
+       "zum Wechseln.</small></label><input name=\"lp\" inputmode=\"numeric\" pattern=\"[0-9 ,]*\" value=\"" +
+       settings::loadpointsText(s) + "\">";
+  h += "<label>Design</label><select name=\"theme\">" + option(0, s.theme, "Automatisch nach Sonnenstand") +
+       option(1, s.theme, "Immer hell") + option(2, s.theme, "Immer dunkel") + "</select>";
+  char lat[12], lon[12];
+  snprintf(lat, sizeof(lat), "%.4f", s.latitude);
+  snprintf(lon, sizeof(lon), "%.4f", s.longitude);
+  h += "<label>Standort<small>Breiten- und Längengrad, für die automatische Tag/Nacht-Umschaltung.</small></label><div class=\"row\">"
+       "<div><input name=\"lat\" type=\"number\" step=\"any\" min=\"-90\" max=\"90\" aria-label=\"Breitengrad\" "
+       "placeholder=\"Breitengrad\" value=\"" + String(lat) + "\"></div>"
+       "<div><input name=\"lon\" type=\"number\" step=\"any\" min=\"-180\" max=\"180\" aria-label=\"Längengrad\" "
+       "placeholder=\"Längengrad\" value=\"" + String(lon) + "\"></div></div>";
+  h += "<label>Bildschirm aus nach<small>Minuten ohne Ladung und Bedienung, 0 = immer an.</small></label>"
+       "<input name=\"timeout\" type=\"number\" min=\"0\" max=\"240\" value=\"" + String(s.screenTimeoutMin) + "\">";
+  h += "<label>Drehung</label><select name=\"rot\">" + option(0, s.rotation, "0°") +
+       option(1, s.rotation, "90° im Uhrzeigersinn") + option(2, s.rotation, "180°") +
+       option(3, s.rotation, "270° im Uhrzeigersinn") + "</select>";
+  h += "<label>Automatische Updates</label><select name=\"autoupd\">" + option(1, s.autoUpdate, "An") +
+       option(0, s.autoUpdate, "Aus") + "</select>";
+  h += "<button>Speichern und neu starten</button></form><footer>Firmware " FW_VERSION
+       " · WLAN ändern: Titel am Display 3 s gedrückt halten</footer></body></html>";
+  web.send(200, "text/html; charset=utf-8", h);
+}
+
 static void startWebServer() {
+  web.on("/", []() {
+    web.sendHeader("Location", "/settings");
+    web.send(302);
+  });
+  web.on("/settings", handleSettings);
   web.on("/screenshot.bmp", []() { display::sendScreenshot(web); });
   web.on("/preview", handlePreview);
   // Update-Status; ?check=1 prüft sofort, ?install=1 installiert eine gefundene neue Version sofort
