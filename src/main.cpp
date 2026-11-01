@@ -402,7 +402,8 @@ h1{font-size:1.4rem;margin:0 0 1.5rem}label{display:block;font-weight:600;margin
 small{display:block;font-weight:400;opacity:.65}input,select{box-sizing:border-box;width:100%;font:inherit;
 padding:.6rem;border:1px solid #8888;border-radius:.5rem;background:Field;color:FieldText}
 .row{display:flex;gap:.75rem}.row>div{flex:1;min-width:0}button{margin-top:1.8rem;width:100%;font:inherit;font-weight:600;
-padding:.8rem;border:0;border-radius:.5rem;background:var(--a);color:#000}footer{margin-top:2rem;opacity:.5;font-size:.85rem}
+padding:.8rem;border:0;border-radius:.5rem;background:var(--a);color:#000}footer{margin-top:2rem;opacity:.65;font-size:.85rem}
+footer a{color:inherit}
 </style></head><body><h1>evcc-Garage</h1>)";
 
 static void handleSettings() {
@@ -451,7 +452,8 @@ static void handleSettings() {
   h += "<label>Automatische Updates</label><select name=\"autoupd\">" + option(1, s.autoUpdate, "An") +
        option(0, s.autoUpdate, "Aus") + "</select>";
   h += "<button>Speichern und neu starten</button></form><footer>Firmware " FW_VERSION
-       " · WLAN ändern: Titel am Display 3 s gedrückt halten</footer></body></html>";
+       " · WLAN ändern: Titel am Display 3 s gedrückt halten<br><a href=\"" PROJECT_URL "\">Projektseite und Anleitung</a>"
+       " · <a href=\"" REPO_URL "\">GitHub</a></footer></body></html>";
   web.send(200, "text/html; charset=utf-8", h);
 }
 

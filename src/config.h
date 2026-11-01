@@ -24,8 +24,12 @@
 #define STALE_AFTER_MS 15000       // danach gilt evcc als nicht erreichbar
 #define MODE_CONFIRM_TIMEOUT_MS 10000
 
+// Projektseite (Anleitung, Browser-Installer) und Quellcode – verlinkt unter /settings
+#define PROJECT_URL "https://tobymarks.github.io/evcc-garage-display/"
+#define REPO_URL "https://github.com/tobymarks/evcc-garage-display"
+
 // Automatische Updates (siehe src/updater.cpp): update.json wird bei jedem Push auf main neu gebaut
-#define UPDATE_BASE_URL "https://tobymarks.github.io/evcc-garage-display/firmware/"
+#define UPDATE_BASE_URL PROJECT_URL "firmware/"
 #define UPDATE_FIRST_CHECK_MS (2 * 60000UL)     // erste Prüfung nach dem Start
 #define UPDATE_CHECK_INTERVAL_MS (6 * 3600000UL)
 #define UPDATE_IDLE_MS (10 * 60000UL)           // installiert erst, wenn so lange niemand bedient und nicht geladen wird

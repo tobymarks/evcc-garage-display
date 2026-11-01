@@ -726,6 +726,10 @@ esp-web-install-button {
   border: 1px solid #e4e4ec;
 }
 
+.more + .more {
+  margin-top: 12px;
+}
+
 .more summary {
   cursor: pointer;
   font-weight: 600;

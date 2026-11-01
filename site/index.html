@@ -163,12 +163,12 @@
           <ol class="steps">
             <li>
               <h3>Display per USB-C anschließen</h3>
-              <p>Guition <b>ESP32-4848S040C</b> (ESP32-S3, 4″, 480 × 480) mit einem Datenkabel an den Computer stecken.</p>
+              <p>Guition <b>ESP32-4848S040C</b> (ESP32-S3, 4″, 480 × 480) mit einem Datenkabel an den Computer stecken – am zuverlässigsten mit USB-A auf USB-C.</p>
               <a class="buy" href="https://de.aliexpress.com/item/1005012911942193.html" rel="noopener">Noch kein Display? So eins habe ich bei AliExpress bestellt →</a>
             </li>
             <li>
               <h3>Firmware installieren</h3>
-              <p>Auf „Installieren“ klicken, den seriellen Port wählen (meist „USB Serial“ / CH340) und bestätigen.</p>
+              <p>Auf „Installieren“ klicken und den seriellen Port wählen (meist „USB Serial“, unter Windows „USB-SERIAL CH340“). Bei „Erase device“ den Haken setzen – das löscht nur die Demo-Software, die ab Werk drauf ist.</p>
             </li>
             <li>
               <h3>Mit dem WLAN verbinden</h3>
@@ -187,6 +187,12 @@
           </div>
         </div>
 
+        <details class="more">
+          <summary>Klappt die Installation nicht?</summary>
+          <p><b>Kein passender Port in der Liste:</b> Ein anderes Kabel probieren. Reine Ladekabel übertragen keine Daten, und mit USB-C auf USB-C klappt es nicht an jedem Rechner. Unter Windows heißt der Port „USB-SERIAL CH340 (COM…)“ – fehlt er, ist der CH340-Treiber nicht installiert.</p>
+          <p><b>„Failed to initialize“ und der Tipp mit der BOOT-Taste:</b> Eine Taste braucht dieses Display nicht, es wechselt von selbst in den Installationsmodus. Meist ist der falsche Port gewählt oder ein anderes Programm belegt ihn, etwa ein serieller Monitor. Kabel kurz abziehen und noch einmal versuchen.</p>
+          <p><b>Erneut installieren:</b> Ohne Haken bei „Erase device“ bleiben WLAN und Einstellungen erhalten.</p>
+        </details>
         <details class="more">
           <summary>Einstellungen später ändern</summary>
           <p>Im Heimnetz im Browser <b>evcc-garage.local:8080</b> aufrufen. Alternativ „Garage“ oben links <b>3 Sekunden gedrückt halten</b> – dann startet das Einrichtungs-WLAN erneut, dort lässt sich auch das WLAN wechseln. Anpassen lassen sich evcc-Adresse, Ladepunkt (auch mehrere – dann wischt man zwischen ihnen), Standort (für Hell/Dunkel nach Sonnenstand), Drehung, Design, die Zeit bis zum Ausschalten des Bildschirms und automatische Updates anpassen. Neue Versionen holt sich das Display selbst – wenn gerade nicht geladen wird.</p>
