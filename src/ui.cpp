@@ -17,7 +17,7 @@ LV_FONT_DECLARE(font_icon_big);
 
 // Farben angelehnt an die evcc-Weboberfläche
 struct Theme {
-  lv_color_t bg, box, text, muted, activeBg, activeFg, pressed, solar, solarText, grid, warn, error, border;
+  lv_color_t bg, box, text, muted, activeBg, activeFg, pressed, solar, solarText, grid, warn, error, border, battery, feedIn;
 };
 
 static const Theme LIGHT = {
@@ -26,13 +26,15 @@ static const Theme LIGHT = {
     lv_color_hex(0x28293E), lv_color_hex(0xFFFFFF), lv_color_hex(0xE4E4EC), lv_color_hex(0x0FDE41),
     lv_color_hex(0x078A2C), lv_color_hex(0x28293E), lv_color_hex(0xC26A00), lv_color_hex(0xD9380A),
     lv_color_hex(0xDCDCE4),
+    // Akku und Einspeisung wie im Energiefluss von evcc (Einspeisung auf Hell im dunkleren Gelb)
+    lv_color_hex(0x0BA631), lv_color_hex(0xF6BB0F),
 };
 // Dunkles Navy wie evcc ab 0.317
 static const Theme DARK = {
     lv_color_hex(0x010322), lv_color_hex(0x151630), lv_color_hex(0xFFFFFF), lv_color_hex(0xB5B6C3),
     lv_color_hex(0xFFFFFF), lv_color_hex(0x010322), lv_color_hex(0x2A2C4C), lv_color_hex(0x0FDE41),
     lv_color_hex(0x0FDE41), lv_color_hex(0x93949E), lv_color_hex(0xFF9000), lv_color_hex(0xFC440F),
-    lv_color_hex(0x33354F),
+    lv_color_hex(0x33354F), lv_color_hex(0x0BA631), lv_color_hex(0xFAF000),
 };
 
 static const Theme* theme = &LIGHT;
@@ -408,7 +410,6 @@ static void applyTheme() {
   lv_obj_set_style_text_color(lblVehicle, t.muted, 0);
   lv_obj_set_style_text_color(lblBattery, t.muted, 0);
   lv_obj_set_style_text_color(lblGrid, t.muted, 0);
-  lv_obj_set_style_bg_color(barFill, t.solar, 0);
   for (int i = 0; i < 3; i++) {
     lv_obj_set_style_bg_color(tile[i], t.box, 0);
     lv_obj_set_style_text_color(tileLabel[i], t.muted, 0);
@@ -442,7 +443,12 @@ static void renderSegments(ChargeMode shown, bool pending) {
   }
 }
 
-static float surplus(const EvccState& s) { return LV_MAX(0.0f, s.pvPower - s.homePower); }
+// Was gerade in den Akku und ins Netz geht – ohne das, was andere Ladepunkte schon nutzen.
+// Ohne Netzleistung: PV minus Hausverbrauch
+static float surplus(const EvccState& s) {
+  const float battery = s.batterySoc >= 0 ? s.batteryPower : 0;
+  return LV_MAX(0.0f, s.hasGrid ? -(s.gridPower + battery) : s.pvPower - s.homePower);
+}
 
 // Ohne Fahrzeug Sonnenüberschuss, Haus und Akku zeigen, sofern evcc eine PV-Anlage kennt (auch nachts)
 static bool showHouse(const EvccState& s) { return s.valid && !s.connected && s.pvPower >= 0; }
@@ -593,13 +599,37 @@ void ui::render(const UiView& v) {
   lv_label_set_text(lblStatus, buf);
   lv_obj_set_style_text_color(lblStatus, statusColor, 0);
 
-  // Balken: aktueller Sonnenanteil der Ladeleistung
+  // Balken: beim Laden der aktuelle Sonnenanteil der Ladeleistung. Ohne Fahrzeug, wohin der Überschuss
+  // geht (Akku grün, Einspeisung gelb) bzw. woher das Haus Strom bezieht (Akku, Netzbezug grau)
   const bool showBar = showPower && s.charging && s.greenShare >= 0;
-  setVisible(barBlock, showBar);
-  if (showBar) {
+  const bool flowBar = house && s.batterySoc >= 0 && s.hasGrid;
+  setVisible(barBlock, showBar || flowBar);
+  char num[16];
+  if (flowBar) {
+    const float battery = fabsf(s.batteryPower), grid = fabsf(s.gridPower);
+    const int pct = battery + grid >= 50 ? constrain((int)lroundf(battery / (battery + grid) * 100.0f), 0, 100) : 0;
+    lv_obj_set_width(barFill, CONTENT_W * pct / 100);
+    setVisible(barFill, pct > 0);
+    lv_obj_set_style_bg_color(barFill, t.battery, 0);
+    lv_obj_set_style_bg_color(barBg, !live ? t.muted : s.gridPower < -50 ? t.feedIn : t.grid, 0);
+    lv_obj_set_style_bg_opa(barBg, live ? LV_OPA_COVER : LV_OPA_40, 0);
+    if (battery < 50) {
+      snprintf(buf, sizeof(buf), ICON_BATTERY " Akku %s", s.batterySoc >= 99.5f ? "voll" : "pausiert");
+    } else {
+      formatDecimal(num, sizeof(num), battery / 1000.0f);
+      snprintf(buf, sizeof(buf), ICON_BATTERY " Akku %s %s kW", s.batteryPower < 0 ? "lädt" : "entlädt", num);
+    }
+    lv_label_set_text(lblSolar, buf);
+    lv_obj_set_style_text_color(lblSolar, live && s.batteryPower <= -50 ? t.solarText : t.muted, 0);
+    formatDecimal(num, sizeof(num), grid / 1000.0f);
+    snprintf(buf, sizeof(buf), "%s %s kW", s.gridPower > 0 ? "Netzbezug" : "Einspeisung", num);
+    lv_label_set_text(lblGrid, buf);
+    lv_obj_align(lblGrid, LV_ALIGN_TOP_RIGHT, 0, BAR_H + 8);
+  } else if (showBar) {
     const int pct = constrain((int)lroundf(s.greenShare * 100.0f), 0, 100);
     lv_obj_set_width(barFill, CONTENT_W * pct / 100);
     setVisible(barFill, pct > 0);
+    lv_obj_set_style_bg_color(barFill, t.solar, 0);
     lv_obj_set_style_bg_color(barBg, live ? t.grid : t.muted, 0);
     lv_obj_set_style_bg_opa(barBg, live ? LV_OPA_COVER : LV_OPA_40, 0);
     snprintf(buf, sizeof(buf), ICON_SUN " Jetzt %d %% Sonne", pct);
@@ -613,7 +643,6 @@ void ui::render(const UiView& v) {
   // Kacheln: Werte der laufenden bzw. letzten Sitzung, ohne Fahrzeug Sonne, Haus und Akku
   const bool showTiles = showPower && (s.charging || s.chargedEnergy > 0);
   setVisible(tiles, showTiles || house);
-  char num[16];
   if (house) {
     const bool battery = s.batterySoc >= 0;
     for (int i = 0; i < 3; i++) lv_label_set_text(tileLabel[i], HOUSE_TILE_TEXT[i]);

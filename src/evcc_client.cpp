@@ -83,6 +83,9 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   if (root["pv"].is<float>()) s.pvPower = root["pv"];
   s.homePower = root["home"] | 0.0f;
   if (root["bat"].is<float>()) s.batterySoc = root["bat"];
+  s.batteryPower = root["batp"] | 0.0f;
+  s.hasGrid = root["grid"].is<float>();
+  s.gridPower = root["grid"] | 0.0f;
   // Phasen, mit denen Smart startet: fest eingestellt oder bei Umschaltung (0 = automatisch) einphasig
   const int phasesConfigured = lp["phasesConfigured"] | 0;
   const int phases = phasesConfigured == 1 || phasesConfigured == 3 ? phasesConfigured
@@ -181,14 +184,17 @@ void evcc::begin() {
     if (i) lps += ',';
     lps += s.loadpoints[i] - 1;
   }
-  // Ältere evcc-Versionen liefern den Akku-Ladestand als batterySoc, neuere unter battery.soc
+  // Ältere evcc-Versionen liefern Akku und Netz als batterySoc, batteryPower und gridPower,
+  // neuere unter battery.soc, battery.power und grid.power
   char jq[768];
   snprintf(jq, sizeof(jq),
            "{lps:[.loadpoints[%s]|if . then {title,mode,alwaysCharge,chargePower,charging,connected,chargedEnergy,"
            "chargeDuration,phasesActive,sessionSolarPercentage,vehicleTitle,vehicleSoc,pvAction,pvRemaining,"
            "planActive,smartCostActive,minCurrent:(.effectiveMinCurrent // .minCurrent),phasesConfigured,"
            "chargerPhases1p3p} else null end],green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
-           "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc)}",
+           "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc),"
+           "batp:((try (if (.battery.devices|length)>0 then .battery.power else null end) catch null) // .batteryPower),"
+           "grid:((try .grid.power catch null) // .gridPower)}",
            lps.c_str());
   stateUrl = server + "/api/state?jq=" + urlEncode(jq);
 

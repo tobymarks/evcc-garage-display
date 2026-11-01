@@ -12,9 +12,9 @@ Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-
 | Bereich | Inhalt |
 | --- | --- |
 | Kopfzeile | Name des Ladepunkts, Uhrzeit, Ladestand des Hausakkus (sofern vorhanden), Warnsymbol bei WLAN-/evcc-Problemen |
-| Mitte | Angestecktes Fahrzeug mit Ladestand, darunter die Ladeleistung in kW mit grünem Blitz beim Laden. Ohne Fahrzeug der aktuelle Sonnenüberschuss (PV minus Hausverbrauch) mit Kacheln für Sonne, Haus und Akku – und ob der Überschuss für Smart reicht. Ohne PV-Anlage nur „Kein Fahrzeug“ |
+| Mitte | Angestecktes Fahrzeug mit Ladestand, darunter die Ladeleistung in kW mit grünem Blitz beim Laden. Ohne Fahrzeug der aktuelle Sonnenüberschuss (was gerade in den Akku und ins Netz geht) mit Kacheln für Sonne, Haus und Akku – und ob der Überschuss für Smart reicht. Ohne PV-Anlage nur „Kein Fahrzeug“ |
 | Statuszeile | z. B. „Lädt · 3-phasig", „Wartet auf Sonnenüberschuss", „Genug Sonne – Start in 0:45" |
-| Balken | Sonnen- und Netzanteil der aktuellen Ladeleistung |
+| Balken | Sonnen- und Netzanteil der aktuellen Ladeleistung. Ohne Fahrzeug (mit Hausakku): wohin der Überschuss geht – grün in den Akku, gelb ins Netz; abends Entladen des Akkus und Netzbezug (grau) |
 | Kacheln | Geladene Energie, Dauer und durchschnittlicher Sonnenanteil der Sitzung |
 | Unten | Modustasten Smart · Langsam · Schnell, jeweils mit kurzer Beschreibung |
 
@@ -57,7 +57,7 @@ evcc ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
 - Schriften: Montserrat (SIL OFL) und die Icons der evcc-Oberfläche – [Shopicons](https://github.com/H2D2-Design/h2d2-shopicons)
   und Material Symbols (beide Apache-2.0), SVGs in `tools/icons` (das Akku-Symbol ist selbst gezeichnet). Erzeugt mit `tools/gen_fonts.sh` (braucht fontforge)
 - Daten: alle 3 s `GET /api/state?jq=…` – der jq-Filter liefert nur die benötigten Felder (~400 Byte statt ~70 KB),
-  darunter `pvPower`, `homePower` und den Ladestand des Hausakkus
+  darunter `pvPower`, `homePower`, Ladestand und Leistung des Hausakkus und die Netzleistung
 - Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}` und `POST /api/loadpoints/<n>/mode/{smart|now}`
 - Netzwerk läuft in einem eigenen Task auf Kern 0, die Oberfläche bleibt dadurch flüssig
 - Eine Taste zeigt den neuen Modus erst voll an, wenn evcc ihn bestätigt hat (vorher halbtransparent)
@@ -125,7 +125,7 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | --- | --- |
 | `/settings` | Einstellungen ändern (wie im Portal, ohne WLAN) |
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
-| `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)); `/preview` ohne Parameter beendet |
+| `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)); `/preview` ohne Parameter beendet |
 | `/update` | Firmware-Version und Stand der automatischen Updates; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
 | `/diag` | Laufzeit, Neustartgrund, freier Speicher, zurückgerollte Updates und der letzte gespeicherte Absturz |
 | `/wifiscan` | löst eine WLAN-Suche aus (Lasttest für die Bildausgabe) |

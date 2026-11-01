@@ -2,12 +2,16 @@
 
 #include <string.h>
 
-const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|night|waiting|start|off|stale";
+const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|waiting|start|off|stale";
 
-// Typisches Haus am Mittag: PV 6,2 kW, Haus 0,9 kW, Akku 78 %; Smart braucht einphasig 1,4 kW
-static void house(EvccState& p, float pv, float home) {
+// Typisches Haus am Mittag: PV 6,2 kW, Haus 0,9 kW, Akku 78 % lädt mit 5 kW, 0,3 kW gehen ins Netz;
+// Smart braucht einphasig 1,4 kW
+static void house(EvccState& p, float pv, float home, float battery, float grid) {
   p.pvPower = pv;
   p.homePower = home;
+  p.batteryPower = battery;
+  p.gridPower = grid;
+  p.hasGrid = true;
   p.batterySoc = 78;
   p.minChargePower = 6 * 230;
 }
@@ -21,7 +25,7 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
   strncpy(p.vehicleTitle, "ID.4", sizeof(p.vehicleTitle) - 1);
   p.vehicleSoc = 41;
   stale = false;
-  house(p, 6200, 900);
+  house(p, 6200, 900, -5000, -300);
 
   if (!strcmp(name, "charging") || !strcmp(name, "stale")) {
     p.charging = true;
@@ -56,10 +60,14 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
   } else if (!strcmp(name, "nocarlow")) {
     p.connected = false;
     p.mode = ChargeMode::Smart;
-    house(p, 1900, 1100);
+    house(p, 1900, 1100, -800, 0);
+  } else if (!strcmp(name, "nocarfull")) {
+    p.connected = false;
+    house(p, 6200, 900, 0, -5300);
+    p.batterySoc = 100;
   } else if (!strcmp(name, "night")) {
     p.connected = false;
-    house(p, 0, 450);
+    house(p, 0, 450, 350, 100);
   } else if (!strcmp(name, "waiting")) {
     p.mode = ChargeMode::Smart;
   } else if (!strcmp(name, "start")) {
