@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|waiting|start|off|stale";
+const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|waiting|limit|start|off|stale";
 
 // Typisches Haus am Mittag: PV 6,2 kW, Haus 0,9 kW, Akku 78 % lädt mit 5 kW, 0,3 kW gehen ins Netz;
 // Smart braucht einphasig 1,4 kW
@@ -70,6 +70,10 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
     house(p, 0, 450, 350, 100);
   } else if (!strcmp(name, "waiting")) {
     p.mode = ChargeMode::Smart;
+  } else if (!strcmp(name, "limit")) {
+    p.mode = ChargeMode::Smart;
+    p.vehicleSoc = 80;
+    p.limitSoc = 80;
   } else if (!strcmp(name, "start")) {
     p.mode = ChargeMode::Smart;
     strncpy(p.pvAction, "enable", sizeof(p.pvAction) - 1);

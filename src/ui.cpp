@@ -453,11 +453,29 @@ static float surplus(const EvccState& s) {
 // Ohne Fahrzeug Sonnenüberschuss, Haus und Akku zeigen, sofern evcc eine PV-Anlage kennt (auch nachts)
 static bool showHouse(const EvccState& s) { return s.valid && !s.connected && s.pvPower >= 0; }
 
+// Fahrzeug hat sein Ziel erreicht und lädt deshalb nicht weiter – egal wie viel Sonne da ist.
+// Maßgeblich ist das niedrigere der beiden Limits (Ladepunkt in evcc, Fahrzeug selbst).
+static bool limitReached(const EvccState& s, char* buf, size_t len) {
+  if (s.vehicleSoc <= 0) return false;
+  const bool lp = s.limitSoc > 0 && s.limitSoc < 100 && s.vehicleSoc >= s.limitSoc;
+  const bool car = s.vehicleLimitSoc > 0 && s.vehicleLimitSoc < 100 && s.vehicleSoc >= s.vehicleLimitSoc;
+  if (s.vehicleSoc >= 99.5f) {
+    snprintf(buf, len, "Voll geladen");
+  } else if (lp) {
+    snprintf(buf, len, "Ladelimit erreicht");
+  } else if (car) {
+    snprintf(buf, len, "Limit im Fahrzeug erreicht");
+  } else {
+    return false;
+  }
+  return true;
+}
+
 static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_color_t& color) {
   const EvccState& s = v.state;
   const Theme& t = *theme;
   color = t.muted;
-  char tmp[16];
+  char tmp[40];
 
   if (v.flash) {
     color = t.error;
@@ -500,6 +518,9 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
       snprintf(buf + n, len - n, " · stoppt in %s", tmp);
       color = t.warn;
     }
+  } else if (limitReached(s, tmp, sizeof(tmp))) {
+    color = t.solarText;
+    snprintf(buf, len, "%s", tmp);
   } else if (!strcmp(s.pvAction, "enable") && s.pvRemaining > 0) {
     formatCountdown(tmp, sizeof(tmp), s.pvRemaining);
     color = t.solarText;

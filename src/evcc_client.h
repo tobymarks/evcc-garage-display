@@ -26,6 +26,8 @@ struct EvccState {
   float sessionSolarPct = 0;  // 0..100
   float greenShare = -1;      // 0..1, aktueller Sonnenanteil der Ladeleistung
   float vehicleSoc = 0;       // %
+  float limitSoc = 0;         // %, Ladelimit des Ladepunkts (0 = keins)
+  float vehicleLimitSoc = 0;  // %, im Fahrzeug eingestelltes Limit (0 = unbekannt)
   char vehicleTitle[32] = "";
   char pvAction[12] = "";
   uint32_t pvRemaining = 0;   // s

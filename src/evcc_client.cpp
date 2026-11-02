@@ -75,6 +75,8 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   s.sessionSolarPct = lp["sessionSolarPercentage"] | 0.0f;
   s.greenShare = root["green"] | -1.0f;
   s.vehicleSoc = lp["vehicleSoc"] | 0.0f;
+  s.limitSoc = lp["limitSoc"] | 0.0f;
+  s.vehicleLimitSoc = lp["vehicleLimitSoc"] | 0.0f;
   strlcpy(s.vehicleTitle, lp["vehicleTitle"] | "", sizeof(s.vehicleTitle));
   strlcpy(s.pvAction, lp["pvAction"] | "", sizeof(s.pvAction));
   s.pvRemaining = (uint32_t)(lp["pvRemaining"] | 0.0f);
@@ -189,7 +191,8 @@ void evcc::begin() {
   char jq[768];
   snprintf(jq, sizeof(jq),
            "{lps:[.loadpoints[%s]|if . then {title,mode,alwaysCharge,chargePower,charging,connected,chargedEnergy,"
-           "chargeDuration,phasesActive,sessionSolarPercentage,vehicleTitle,vehicleSoc,pvAction,pvRemaining,"
+           "chargeDuration,phasesActive,sessionSolarPercentage,vehicleTitle,vehicleSoc,"
+           "limitSoc:(.effectiveLimitSoc // .limitSoc),vehicleLimitSoc,pvAction,pvRemaining,"
            "planActive,smartCostActive,minCurrent:(.effectiveMinCurrent // .minCurrent),phasesConfigured,"
            "chargerPhases1p3p} else null end],green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
            "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc),"
