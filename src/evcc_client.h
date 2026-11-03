@@ -33,6 +33,8 @@ struct EvccState {
   uint32_t pvRemaining = 0;   // s
   bool planActive = false;
   bool smartCostActive = false;
+  bool hasBoost = false;      // evcc kennt Battery Boost
+  bool batteryBoost = false;  // Hausakku hilft im Modus Smart beim Laden
 
   // Hausdaten – damit man ohne Fahrzeug sieht, ob sich Anstecken gerade lohnt
   float pvPower = -1;         // W, -1 = keine PV-Anlage bekannt
@@ -54,4 +56,6 @@ uint8_t count();
 bool latest(EvccState* out);
 void requestMode(uint8_t index, ChargeMode mode);
 CommandResult takeCommandResult(uint8_t index);
+void requestBoost(uint8_t index, bool on);
+CommandResult takeBoostResult(uint8_t index);
 }  // namespace evcc

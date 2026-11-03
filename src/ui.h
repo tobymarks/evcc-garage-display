@@ -12,6 +12,8 @@ struct UiView {
   char lastUpdate[6] = "";              // Uhrzeit der letzten evcc-Daten
   uint8_t page = 0;                     // angezeigter Ladepunkt
   uint8_t pageCount = 1;                // > 1: Punkte unten, wischen zum Wechseln
+  bool boostButton = false;             // Akku-Anzeige schaltet Battery Boost (Einstellung)
+  int8_t pendingBoost = -1;             // angefragter Boost (0/1), bis evcc ihn bestätigt
 };
 
 namespace ui {
@@ -19,7 +21,7 @@ using ModeCallback = void (*)(ChargeMode);
 using Callback = void (*)();
 using SwipeCallback = void (*)(int delta);  // +1 = nächster, -1 = vorheriger Ladepunkt
 
-void begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback onSwipe);
+void begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback onSwipe, Callback onBoost);
 void setNight(bool night);
 void render(const UiView& view);
 

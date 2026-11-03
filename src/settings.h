@@ -15,6 +15,7 @@ struct Settings {
   uint8_t theme;      // 0 = automatisch, 1 = hell, 2 = dunkel
   uint8_t screenTimeoutMin;  // 0 = Bildschirm immer an
   bool autoUpdate;           // neue Firmware selbst installieren
+  bool boostButton;          // Akku-Anzeige oben schaltet im Modus Smart Battery Boost
 };
 
 namespace settings {

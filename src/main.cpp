@@ -45,6 +45,9 @@ static EvccState states[MAX_LOADPOINTS];
 static uint8_t current = 0;  // angezeigter Ladepunkt (Position in den Einstellungen)
 static ChargeMode pendingMode[MAX_LOADPOINTS];
 static uint32_t pendingSince[MAX_LOADPOINTS];
+static bool boostPending[MAX_LOADPOINTS];  // Battery Boost angefragt, evcc hat ihn noch nicht bestätigt
+static bool boostTarget[MAX_LOADPOINTS];
+static uint32_t boostSince[MAX_LOADPOINTS];
 static const char* flashMsg = nullptr;
 static uint32_t flashUntil = 0;
 static bool dirty = true;
@@ -57,6 +60,7 @@ static EvccState previewState;
 static bool previewStale = false;
 static int previewDark = -1;  // -1 = Einstellung verwenden
 static uint32_t previewUntil = 0;
+static bool previewBoost = false;  // Boost-Knopf in der Vorschau zeigen, auch wenn er ausgeschaltet ist
 
 // ---------- WLAN-Einrichtung / Einstellungen ----------
 
@@ -73,6 +77,9 @@ static void applySettings(std::function<String(const char*)> value) {
   s.theme = constrain(value("theme").toInt(), 0, 2);
   s.screenTimeoutMin = constrain(value("timeout").toInt(), 0, 240);
   s.autoUpdate = value("autoupd").toInt() != 0;
+  // Fehlt im WLAN-Portal – dort bleibt die bisherige Einstellung
+  const String boost = value("boost");
+  if (!boost.isEmpty()) s.boostButton = boost.toInt() != 0;
   settings::save();
   restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
 }
@@ -154,6 +161,18 @@ static void onModeSelected(ChargeMode mode) {
   dirty = true;
 }
 
+// Antippen der Akku-Anzeige: Battery Boost umschalten
+static void onBoostTapped() {
+  lastActivity = millis();
+  const bool shown = boostPending[current] ? boostTarget[current] : states[current].batteryBoost;
+  boostPending[current] = true;
+  boostTarget[current] = !shown;
+  boostSince[current] = millis();
+  flashMsg = nullptr;
+  evcc::requestBoost(current, !shown);
+  dirty = true;
+}
+
 static void showLoadpoint(uint8_t index) {
   if (index == current || index >= evcc::count()) return;
   current = index;
@@ -227,6 +246,19 @@ static void updateState() {
         error = "evcc hat den Modus nicht übernommen";
       }
     }
+    if (evcc::takeBoostResult(i) == CommandResult::Failed) {
+      boostPending[i] = false;
+      error = "Boost konnte nicht geschaltet werden";
+    }
+    if (boostPending[i]) {
+      if (st.valid && st.updatedMs > boostSince[i] && st.batteryBoost == boostTarget[i]) {
+        boostPending[i] = false;
+        dirty = true;
+      } else if (millis() - boostSince[i] > MODE_CONFIRM_TIMEOUT_MS) {
+        boostPending[i] = false;
+        error = "evcc hat den Boost nicht übernommen";
+      }
+    }
     if (error) {
       if (i == current) flash(error);
       dirty = true;
@@ -284,6 +316,8 @@ static void updateState() {
     v.wifiConnected = preview || wifi;
     v.stale = preview ? previewStale : stale;
     v.pendingMode = pendingMode[current];
+    v.boostButton = settings::get().boostButton || (preview && previewBoost);
+    v.pendingBoost = boostPending[current] ? boostTarget[current] : -1;
     v.page = current;
     v.pageCount = evcc::count();
     v.flash = flashMsg;
@@ -331,6 +365,7 @@ static void handlePreview() {
   if (states[current].valid) strlcpy(p.title, states[current].title, sizeof(p.title));
 
   previewState = p;
+  previewBoost = !strncmp(web.arg("s").c_str(), "boost", 5);
   previewDark = web.hasArg("dark") ? web.arg("dark").toInt() != 0 : -1;
   previewUntil = millis() + PREVIEW_DURATION_MS;
   lastActivity = millis();
@@ -449,6 +484,9 @@ static void handleSettings() {
   h += "<label>Drehung</label><select name=\"rot\">" + option(0, s.rotation, "0°") +
        option(1, s.rotation, "90° im Uhrzeigersinn") + option(2, s.rotation, "180°") +
        option(3, s.rotation, "270° im Uhrzeigersinn") + "</select>";
+  h += "<label>Battery Boost<small>Im Modus Smart die Akku-Anzeige oben antippen, um wie in evcc den Hausakku "
+       "zum Laden dazuzuschalten.</small></label><select name=\"boost\">" + option(0, s.boostButton, "Aus") +
+       option(1, s.boostButton, "An") + "</select>";
   h += "<label>Automatische Updates</label><select name=\"autoupd\">" + option(1, s.autoUpdate, "An") +
        option(0, s.autoUpdate, "Aus") + "</select>";
   h += "<button>Speichern und neu starten</button></form><footer>Firmware " FW_VERSION
@@ -516,7 +554,7 @@ void setup() {
   brightness = BRIGHTNESS;
   lastActivity = millis();
 
-  ui::begin(onModeSelected, openSettings, onSwipe);
+  ui::begin(onModeSelected, openSettings, onSwipe, onBoostTapped);
   ui::onMessageTap(closeSettings);
   ui::showMessage(ICON_SETTINGS, "Verbinde …", "WLAN-Verbindung wird aufgebaut");
   lv_refr_now(nullptr);

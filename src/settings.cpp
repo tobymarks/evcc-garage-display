@@ -20,6 +20,7 @@ void settings::load() {
   s.theme = prefs.getUChar("theme", DEFAULT_THEME);
   s.screenTimeoutMin = prefs.getUChar("timeout", DEFAULT_SCREEN_TIMEOUT_MIN);
   s.autoUpdate = prefs.getBool("autoupd", DEFAULT_AUTO_UPDATE);
+  s.boostButton = prefs.getBool("boost", false);
   prefs.end();
 
   if (s.rotation > 3) s.rotation = DEFAULT_ROTATION;
@@ -37,6 +38,7 @@ void settings::save() {
   prefs.putUChar("theme", s.theme);
   prefs.putUChar("timeout", s.screenTimeoutMin);
   prefs.putBool("autoupd", s.autoUpdate);
+  prefs.putBool("boost", s.boostButton);
   prefs.end();
 }
 

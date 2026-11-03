@@ -46,6 +46,7 @@ static ui::ModeCallback modeCb;
 static ui::Callback settingsCb;
 static ui::Callback messageTapCb;
 static ui::SwipeCallback swipeCb;
+static ui::Callback boostCb;
 
 // Raster für 480x480
 static constexpr int MARGIN = 24;
@@ -58,6 +59,8 @@ static constexpr int TILE_GAP = 12;
 static constexpr int TILE_H = 64;
 static constexpr int DOT = 10;
 static constexpr int DOTS_SHIFT = 12;  // so weit rückt der Modusumschalter für die Punkte nach oben
+static constexpr int BOOST_PAD_H = 12;  // Innenabstand der Akku-Anzeige als Boost-Knopf
+static constexpr int BOOST_PAD_V = 4;
 static constexpr int SLIDE_PX = 48;  // Weg der Inhalte beim Wechsel des Ladepunkts
 
 // Hauptbildschirm
@@ -67,6 +70,7 @@ static lv_obj_t* mid;
 static lv_obj_t* dots;
 static lv_obj_t* dot[MAX_LOADPOINTS];
 static lv_obj_t* lblIcons;
+static lv_obj_t* btnBattery;  // Hülle um die Akku-Anzeige; mit Battery Boost ein Knopf
 static lv_obj_t* lblBattery;
 static lv_obj_t* lblClock;
 static lv_obj_t* contPower;
@@ -204,6 +208,10 @@ static void setBigIcon(const char* icon) {
   lv_obj_set_style_pad_bottom(lblBolt, font_big.base_line - font_icon_big.base_line + (sun ? lh / 12 : lh / 9), 0);
 }
 
+static void onBatteryClicked(lv_event_t*) {
+  if (boostCb) boostCb();
+}
+
 static void buildMain() {
   scrMain = lv_obj_create(nullptr);
   lv_obj_remove_flag(scrMain, LV_OBJ_FLAG_SCROLLABLE);
@@ -220,8 +228,14 @@ static void buildMain() {
   lv_obj_align(lblClock, LV_ALIGN_TOP_RIGHT, -MARGIN - 4, 0);
   lv_obj_set_style_pad_top(lblClock, (HEADER_H - font_26.line_height) / 2 + 4, 0);
   lblIcons = makeLabel(scrMain, &font_26);
-  // Ladestand des Hausakkus – gehört zum Haus, bleibt beim Wischen stehen
-  lblBattery = makeLabel(scrMain, &font_26);
+  // Ladestand des Hausakkus – gehört zum Haus, bleibt beim Wischen stehen.
+  // Mit Battery Boost (Einstellung) wird daraus im Modus Smart ein Knopf.
+  btnBattery = makeBox(scrMain);
+  lv_obj_set_size(btnBattery, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_style_radius(btnBattery, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_ext_click_area(btnBattery, 16);
+  lv_obj_add_event_cb(btnBattery, onBatteryClicked, LV_EVENT_CLICKED, nullptr);
+  lblBattery = makeLabel(btnBattery, &font_26);
 
   // Mittelteil: Inhalt vertikal zentriert zwischen Kopfzeile und Modusumschalter,
   // ausgeblendete Elemente nehmen keinen Platz ein
@@ -450,6 +464,44 @@ static float surplus(const EvccState& s) {
   return LV_MAX(0.0f, s.hasGrid ? -(s.gridPower + battery) : s.pvPower - s.homePower);
 }
 
+// Battery Boost lässt sich schalten: eingeschaltet, Auto angesteckt, Modus Smart (oder Boost läuft noch)
+static bool boostable(const UiView& v) {
+  const EvccState& s = v.state;
+  return v.boostButton && s.hasBoost && s.valid && s.connected && s.batterySoc >= 0 &&
+         (s.mode == ChargeMode::Smart || s.batteryBoost || v.pendingBoost == 1);
+}
+
+static bool boostShown(const UiView& v) { return v.pendingBoost >= 0 ? v.pendingBoost : v.state.batteryBoost; }
+
+// Akku-Anzeige oben neben der Uhr; als Boost-Knopf mit Rahmen, bei aktivem Boost grün gefüllt
+static void renderBattery(const UiView& v, bool live) {
+  const Theme& t = *theme;
+  const bool button = boostable(v);
+  const bool on = button && boostShown(v);
+  const bool pending = v.pendingBoost >= 0;
+  char buf[32];
+  snprintf(buf, sizeof(buf), ICON_BATTERY " %d %%", (int)lroundf(v.state.batterySoc));
+  lv_label_set_text(lblBattery, buf);
+
+  if (button)
+    lv_obj_add_flag(btnBattery, LV_OBJ_FLAG_CLICKABLE);
+  else
+    lv_obj_remove_flag(btnBattery, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_style_pad_hor(btnBattery, button ? BOOST_PAD_H : 0, 0);
+  lv_obj_set_style_pad_ver(btnBattery, button ? BOOST_PAD_V : 0, 0);
+  lv_obj_set_style_border_width(btnBattery, button && !on ? 2 : 0, 0);
+  lv_obj_set_style_border_color(btnBattery, t.muted, 0);
+  lv_obj_set_style_border_opa(btnBattery, pending ? LV_OPA_50 : LV_OPA_COVER, 0);
+  lv_obj_set_style_bg_color(btnBattery, t.battery, 0);
+  lv_obj_set_style_bg_opa(btnBattery, on ? (pending || !live ? LV_OPA_50 : LV_OPA_COVER) : LV_OPA_TRANSP, 0);
+  lv_obj_set_style_bg_color(btnBattery, on ? t.battery : t.pressed, LV_STATE_PRESSED);
+  lv_obj_set_style_bg_opa(btnBattery, LV_OPA_COVER, LV_STATE_PRESSED);
+  lv_obj_set_style_text_color(lblBattery, on ? lv_color_white() : button ? t.text : t.muted, 0);
+  // Text bleibt auf derselben Höhe wie die Uhr; der Rahmen wächst nach außen
+  lv_obj_align_to(btnBattery, lblClock, LV_ALIGN_OUT_LEFT_BOTTOM, button ? -20 + BOOST_PAD_H / 2 : -20,
+                  button ? BOOST_PAD_V : 0);
+}
+
 // Ohne Fahrzeug Sonnenüberschuss, Haus und Akku zeigen, sofern evcc eine PV-Anlage kennt (auch nachts)
 static bool showHouse(const EvccState& s) { return s.valid && !s.connected && s.pvPower >= 0; }
 
@@ -494,6 +546,8 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
     snprintf(buf, len, "Diese Nummer gibt es in evcc nicht");
   } else if (v.pendingMode != ChargeMode::None) {
     snprintf(buf, len, "Modus wird gesetzt …");
+  } else if (v.pendingBoost >= 0) {
+    snprintf(buf, len, v.pendingBoost ? "Boost wird eingeschaltet …" : "Boost wird ausgeschaltet …");
   } else if (!s.connected && house && s.minChargePower > 0) {
     // Hilft bei der Entscheidung: reicht die Sonne gerade für Smart?
     if (surplus(s) >= s.minChargePower) {
@@ -513,6 +567,7 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
   } else if (s.charging) {
     int n = snprintf(buf, len, "Lädt");
     if (s.phasesActive > 0) n += snprintf(buf + n, len - n, " · %d-phasig", s.phasesActive);
+    if (s.batteryBoost) n += snprintf(buf + n, len - n, " · Akku hilft mit");
     if (!strcmp(s.pvAction, "disable") && s.pvRemaining > 0) {
       formatCountdown(tmp, sizeof(tmp), s.pvRemaining);
       snprintf(buf + n, len - n, " · stoppt in %s", tmp);
@@ -569,13 +624,9 @@ void ui::render(const UiView& v) {
 
   // Hausakku oben neben der Uhr; ohne Fahrzeug steht er schon in der Kachel
   const bool battery = s.valid && s.batterySoc >= 0 && !house;
-  setVisible(lblBattery, battery);
-  if (battery) {
-    snprintf(buf, sizeof(buf), ICON_BATTERY " %d %%", (int)lroundf(s.batterySoc));
-    lv_label_set_text(lblBattery, buf);
-    lv_obj_align_to(lblBattery, lblClock, LV_ALIGN_OUT_LEFT_BOTTOM, -20, 0);
-  }
-  lv_obj_align_to(lblIcons, battery ? lblBattery : lblClock, LV_ALIGN_OUT_LEFT_BOTTOM, -10, 0);
+  setVisible(btnBattery, battery);
+  if (battery) renderBattery(v, live);
+  lv_obj_align_to(lblIcons, battery ? btnBattery : lblClock, LV_ALIGN_OUT_LEFT_BOTTOM, -10, battery && boostable(v) ? -BOOST_PAD_V : 0);
 
   // Fahrzeug mit Ladestand, solange es angesteckt ist
   const bool vehicle = showPower && (s.vehicleSoc > 0 || s.vehicleTitle[0]);
@@ -704,8 +755,9 @@ void ui::setNight(bool value) {
   if (hasLastView) render(lastView);
 }
 
-void ui::begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback onSwipe) {
+void ui::begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback onSwipe, Callback onBoost) {
   modeCb = onMode;
+  boostCb = onBoost;
   settingsCb = onSettingsRequested;
   swipeCb = onSwipe;
   buildMain();

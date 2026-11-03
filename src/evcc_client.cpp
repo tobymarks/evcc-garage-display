@@ -16,6 +16,8 @@ static uint32_t readVersion = 0;
 // Je Ladepunkt nur der zuletzt gewählte Modus; None = nichts zu tun
 static ChargeMode wanted[MAX_LOADPOINTS];
 static volatile CommandResult commandResult[MAX_LOADPOINTS];
+static int8_t wantedBoost[MAX_LOADPOINTS];  // -1 = nichts zu tun, sonst 0/1 (in begin() gesetzt)
+static volatile CommandResult boostResult[MAX_LOADPOINTS];
 
 static String baseUrl[MAX_LOADPOINTS];
 static String stateUrl;
@@ -82,6 +84,8 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   s.pvRemaining = (uint32_t)(lp["pvRemaining"] | 0.0f);
   s.planActive = lp["planActive"] | false;
   s.smartCostActive = lp["smartCostActive"] | false;
+  s.hasBoost = lp["batteryBoost"].is<bool>();
+  s.batteryBoost = lp["batteryBoost"] | false;
   if (root["pv"].is<float>()) s.pvPower = root["pv"];
   s.homePower = root["home"] | 0.0f;
   if (root["bat"].is<float>()) s.batterySoc = root["bat"];
@@ -149,6 +153,8 @@ static bool setMode(uint8_t index, ChargeMode mode) {
   }
 }
 
+static bool setBoost(uint8_t index, bool on) { return post(index, on ? "/batteryboost/1" : "/batteryboost/0"); }
+
 static void task(void*) {
   uint32_t lastPoll = 0;
   for (;;) {
@@ -165,6 +171,16 @@ static void task(void*) {
         commandResult[i] = CommandResult::Failed;
       }
     }
+    for (uint8_t i = 0; i < lpCount; i++) {
+      xSemaphoreTake(lock, portMAX_DELAY);
+      const int8_t boost = wantedBoost[i];
+      wantedBoost[i] = -1;
+      xSemaphoreGive(lock);
+      if (boost < 0) continue;
+      const bool ok = WiFi.status() == WL_CONNECTED && setBoost(i, boost);
+      boostResult[i] = ok ? CommandResult::Ok : CommandResult::Failed;
+      if (ok) lastPoll = 0;
+    }
     if (WiFi.status() == WL_CONNECTED && (lastPoll == 0 || millis() - lastPoll >= POLL_INTERVAL_MS)) {
       lastPoll = millis() | 1;
       poll();
@@ -177,6 +193,7 @@ void evcc::begin() {
   const Settings& s = settings::get();
   const String server = "http://" + s.evccHost + ":" + String(s.evccPort);
   lpCount = s.loadpointCount;
+  for (int8_t& b : wantedBoost) b = -1;
 
   // Ein Abruf für alle Ladepunkte; fehlt einer in evcc, steht an seiner Stelle null
   String lps;
@@ -193,7 +210,7 @@ void evcc::begin() {
            "{lps:[.loadpoints[%s]|if . then {title,mode,alwaysCharge,chargePower,charging,connected,chargedEnergy,"
            "chargeDuration,phasesActive,sessionSolarPercentage,vehicleTitle,vehicleSoc,"
            "limitSoc:(.effectiveLimitSoc // .limitSoc),vehicleLimitSoc,pvAction,pvRemaining,"
-           "planActive,smartCostActive,minCurrent:(.effectiveMinCurrent // .minCurrent),phasesConfigured,"
+           "planActive,smartCostActive,batteryBoost,minCurrent:(.effectiveMinCurrent // .minCurrent),phasesConfigured,"
            "chargerPhases1p3p} else null end],green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
            "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc),"
            "batp:((try (if (.battery.devices|length)>0 then .battery.power else null end) catch null) // .batteryPower),"
@@ -227,5 +244,18 @@ void evcc::requestMode(uint8_t index, ChargeMode mode) {
 CommandResult evcc::takeCommandResult(uint8_t index) {
   const CommandResult r = commandResult[index];
   commandResult[index] = CommandResult::None;
+  return r;
+}
+
+void evcc::requestBoost(uint8_t index, bool on) {
+  if (index >= lpCount) return;
+  xSemaphoreTake(lock, portMAX_DELAY);
+  wantedBoost[index] = on;
+  xSemaphoreGive(lock);
+}
+
+CommandResult evcc::takeBoostResult(uint8_t index) {
+  const CommandResult r = boostResult[index];
+  boostResult[index] = CommandResult::None;
   return r;
 }

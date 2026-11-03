@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|waiting|limit|start|off|stale";
+const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|waiting|limit|boostready|boost|start|off|stale";
 
 // Typisches Haus am Mittag: PV 6,2 kW, Haus 0,9 kW, Akku 78 % lädt mit 5 kW, 0,3 kW gehen ins Netz;
 // Smart braucht einphasig 1,4 kW
@@ -24,6 +24,7 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
   p.mode = ChargeMode::Slow;
   strncpy(p.vehicleTitle, "ID.4", sizeof(p.vehicleTitle) - 1);
   p.vehicleSoc = 41;
+  p.hasBoost = true;
   stale = false;
   house(p, 6200, 900, -5000, -300);
 
@@ -74,6 +75,20 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
     p.mode = ChargeMode::Smart;
     p.vehicleSoc = 80;
     p.limitSoc = 80;
+  } else if (!strcmp(name, "boostready")) {
+    p.mode = ChargeMode::Smart;
+  } else if (!strcmp(name, "boost")) {
+    p.mode = ChargeMode::Smart;
+    p.batteryBoost = true;
+    p.charging = true;
+    p.chargePower = 7360;
+    p.phasesActive = 3;
+    p.greenShare = 0.88f;  // evcc zählt den Hausakku zum eigenen Strom
+    p.chargedEnergy = 3100;
+    p.chargeDuration = 1260;
+    p.sessionSolarPct = 84;
+    house(p, 2600, 900, 4800, 0);
+    p.batterySoc = 64;
   } else if (!strcmp(name, "start")) {
     p.mode = ChargeMode::Smart;
     strncpy(p.pvAction, "enable", sizeof(p.pvAction) - 1);
