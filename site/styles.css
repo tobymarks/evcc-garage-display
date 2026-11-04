@@ -744,6 +744,28 @@ esp-web-install-button {
   color: var(--ink);
 }
 
+.coffee {
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  background: var(--navy);
+  color: var(--muted-dark);
+  border-radius: 24px;
+  padding: 22px 26px;
+}
+
+.coffee p {
+  margin: 0;
+  max-width: 46em;
+}
+
+.coffee b {
+  color: var(--white);
+}
+
 /* ---------- Footer ---------- */
 
 .footer {
