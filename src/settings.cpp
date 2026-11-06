@@ -21,10 +21,12 @@ void settings::load() {
   s.screenTimeoutMin = prefs.getUChar("timeout", DEFAULT_SCREEN_TIMEOUT_MIN);
   s.autoUpdate = prefs.getBool("autoupd", DEFAULT_AUTO_UPDATE);
   s.boostButton = prefs.getBool("boost", false);
+  s.brightnessPct = prefs.getUChar("bright", DEFAULT_BRIGHTNESS_PCT);
   prefs.end();
 
   if (s.rotation > 3) s.rotation = DEFAULT_ROTATION;
   if (s.theme > 2) s.theme = DEFAULT_THEME;
+  s.brightnessPct = constrain(s.brightnessPct, MIN_BRIGHTNESS_PCT, 100);
 }
 
 void settings::save() {
@@ -39,10 +41,13 @@ void settings::save() {
   prefs.putUChar("timeout", s.screenTimeoutMin);
   prefs.putBool("autoupd", s.autoUpdate);
   prefs.putBool("boost", s.boostButton);
+  prefs.putUChar("bright", s.brightnessPct);
   prefs.end();
 }
 
 Settings& settings::get() { return s; }
+
+uint8_t settings::backlight() { return (uint16_t)s.brightnessPct * 255 / 100; }
 
 void settings::parseLoadpoints(const char* text, Settings& out) {
   out.loadpointCount = 0;

@@ -36,7 +36,8 @@
 #define UPDATE_CONFIRM_MS 60000                 // läuft die neue Firmware so lange, gilt sie als gut (sonst zurück zur alten)
 
 // Display
-#define BRIGHTNESS 255                    // die Garage ist hell, wenn jemand drin ist → nicht dimmen
+#define DEFAULT_BRIGHTNESS_PCT 100        // fest eingestellt, keine Nachtdimmung (die Garage ist hell, wenn jemand drin ist)
+#define MIN_BRIGHTNESS_PCT 10
 #define DEFAULT_SCREEN_TIMEOUT_MIN 2              // aus, wenn nicht geladen und nicht bedient wird; 0 = immer an
 #define NIGHT_SUN_ELEVATION -3.0                 // Sonne tiefer als -3° → dunkles Design (bei Einstellung automatisch)
 #define PREVIEW_DURATION_MS 60000                // Dauer einer Vorschau über /preview

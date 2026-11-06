@@ -80,6 +80,8 @@ static void applySettings(std::function<String(const char*)> value) {
   // Fehlt im WLAN-Portal – dort bleibt die bisherige Einstellung
   const String boost = value("boost");
   if (!boost.isEmpty()) s.boostButton = boost.toInt() != 0;
+  const String bright = value("bright");
+  if (!bright.isEmpty()) s.brightnessPct = constrain(bright.toInt(), MIN_BRIGHTNESS_PCT, 100);
   settings::save();
   restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
 }
@@ -341,7 +343,7 @@ static void updateBacklight() {
                       millis() - lastActivity < settings::get().screenTimeoutMin * 60000UL;
   display::setSleeping(!keepOn);
 
-  const int target = keepOn ? BRIGHTNESS : 0;
+  const int target = keepOn ? settings::backlight() : 0;
   if (brightness != target) {
     // weich überblenden
     brightness += constrain(target - brightness, -12, 12);
@@ -481,6 +483,10 @@ static void handleSettings() {
        "placeholder=\"Längengrad\" value=\"" + String(lon) + "\"></div></div>";
   h += "<label>Bildschirm aus nach<small>Minuten ohne Ladung und Bedienung, 0 = immer an.</small></label>"
        "<input name=\"timeout\" type=\"number\" min=\"0\" max=\"240\" value=\"" + String(s.screenTimeoutMin) + "\">";
+  h += "<label>Helligkeit</label><select name=\"bright\">";
+  for (int pct = 100; pct >= MIN_BRIGHTNESS_PCT; pct -= 10)
+    h += option(pct, s.brightnessPct, (String(pct) + " %").c_str());
+  h += "</select>";
   h += "<label>Drehung</label><select name=\"rot\">" + option(0, s.rotation, "0°") +
        option(1, s.rotation, "90° im Uhrzeigersinn") + option(2, s.rotation, "180°") +
        option(3, s.rotation, "270° im Uhrzeigersinn") + "</select>";
@@ -535,7 +541,7 @@ static void startNetworkServices() {
     ArduinoOTA.setPassword(OTA_PASSWORD);
 #endif
     ArduinoOTA.onStart([]() {
-      display::setBrightness(BRIGHTNESS);
+      display::setBrightness(settings::backlight());
       ui::showMessage(ICON_SETTINGS, "Update", "Neue Firmware wird installiert …");
       lv_refr_now(nullptr);
     });
@@ -551,14 +557,14 @@ void setup() {
 
   settings::load();
   display::begin(settings::get().rotation);
-  brightness = BRIGHTNESS;
+  brightness = settings::backlight();
   lastActivity = millis();
 
   ui::begin(onModeSelected, openSettings, onSwipe, onBoostTapped);
   ui::onMessageTap(closeSettings);
   ui::showMessage(ICON_SETTINGS, "Verbinde …", "WLAN-Verbindung wird aufgebaut");
   lv_refr_now(nullptr);
-  display::setBrightness(BRIGHTNESS);  // erst einschalten, wenn ein Bild im Speicher steht
+  display::setBrightness(settings::backlight());  // erst einschalten, wenn ein Bild im Speicher steht
 
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);

@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|waiting|limit|boostready|boost|start|off|stale";
+const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|waiting|limit|boostready|boost|start|off|stale|heating|heatingdone";
 
 // Typisches Haus am Mittag: PV 6,2 kW, Haus 0,9 kW, Akku 78 % lädt mit 5 kW, 0,3 kW gehen ins Netz;
 // Smart braucht einphasig 1,4 kW
@@ -93,6 +93,25 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
     p.mode = ChargeMode::Smart;
     strncpy(p.pvAction, "enable", sizeof(p.pvAction) - 1);
     p.pvRemaining = 45;
+  } else if (!strcmp(name, "heating") || !strcmp(name, "heatingdone")) {
+    // Wärmepumpe für Warmwasser: evcc meldet die Temperatur als Ladestand
+    strncpy(p.title, "Wärmepumpe", sizeof(p.title) - 1);
+    p.vehicleTitle[0] = 0;
+    p.heating = true;
+    p.mode = ChargeMode::Smart;
+    p.vehicleSoc = 43.3f;
+    p.limitSoc = 55;
+    p.chargedEnergy = 1800;
+    p.chargeDuration = 2700;
+    p.sessionSolarPct = 91;
+    if (!strcmp(name, "heating")) {
+      p.charging = true;
+      p.chargePower = 2100;
+      p.phasesActive = 1;
+      p.greenShare = 1.0f;
+    } else {
+      p.vehicleSoc = 55.2f;
+    }
   } else if (!strcmp(name, "off")) {
     p.mode = ChargeMode::None;
     p.modeOff = true;

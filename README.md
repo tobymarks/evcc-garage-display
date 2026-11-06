@@ -25,8 +25,12 @@ springt das Display dorthin – außer jemand hat es in der letzten Minute bedie
 einer einzigen Abfrage.
 
 **Design:** angelehnt an die evcc-Weboberfläche (ab 0.317): gleiche Farben, Schrift (Montserrat) und Icons –
-hell, dunkel oder automatisch nach Sonnenstand. Das Display
-läuft immer mit voller Helligkeit – in der Garage ist Licht, wenn jemand davorsteht.
+hell, dunkel oder automatisch nach Sonnenstand. Die Helligkeit ist fest (ab Werk 100 %, unter
+`/settings` in 10-%-Schritten einstellbar) – es gibt keine Nachtdimmung, in der Garage ist Licht, wenn jemand
+davorsteht.
+
+**Wärmepumpe und Heizstab:** Bei Heizgeräten in evcc zeigt das Display statt Ladestand die Temperatur
+(z. B. „43,3 °C“) und „Zieltemperatur erreicht“ statt „Ladelimit erreicht“.
 
 **Bildschirm aus:** Wird nicht geladen und nichts bedient, geht das Display nach 2 Minuten aus
 (einstellbar, 0 = immer an). Antippen weckt es, ohne eine Taste auszulösen. Beim Einstecken des Autos

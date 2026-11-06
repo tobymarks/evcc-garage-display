@@ -93,6 +93,7 @@ static lv_obj_t* tileLabel[3];
 static lv_obj_t* tileValue[3];
 // Beschriftungen wie in evcc: klein, grau, in Großbuchstaben
 static const char* TILE_TEXT[3] = {"GELADEN", "DAUER", "Ø SONNE"};
+static const char* HEATING_TILE_TEXT[3] = {"ENERGIE", "DAUER", "Ø SONNE"};
 static const char* HOUSE_TILE_TEXT[3] = {"SONNE", "HAUS", "AKKU"};
 static lv_obj_t* segBg;
 static lv_obj_t* seg[3];
@@ -509,6 +510,12 @@ static bool showHouse(const EvccState& s) { return s.valid && !s.connected && s.
 // Maßgeblich ist das niedrigere der beiden Limits (Ladepunkt in evcc, Fahrzeug selbst).
 static bool limitReached(const EvccState& s, char* buf, size_t len) {
   if (s.vehicleSoc <= 0) return false;
+  // Heizgeräte melden Ist- und Zieltemperatur
+  if (s.heating) {
+    if (s.limitSoc <= 0 || s.vehicleSoc < s.limitSoc) return false;
+    snprintf(buf, len, "Zieltemperatur erreicht");
+    return true;
+  }
   const bool lp = s.limitSoc > 0 && s.limitSoc < 100 && s.vehicleSoc >= s.limitSoc;
   const bool car = s.vehicleLimitSoc > 0 && s.vehicleLimitSoc < 100 && s.vehicleSoc >= s.vehicleLimitSoc;
   if (s.vehicleSoc >= 99.5f) {
@@ -565,7 +572,7 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
     color = t.warn;
     snprintf(buf, len, "Ladepunkt ist aus – Modus wählen");
   } else if (s.charging) {
-    int n = snprintf(buf, len, "Lädt");
+    int n = snprintf(buf, len, s.heating ? "Heizt" : "Lädt");
     if (s.phasesActive > 0) n += snprintf(buf + n, len - n, " · %d-phasig", s.phasesActive);
     if (s.batteryBoost) n += snprintf(buf + n, len - n, " · Akku hilft mit");
     if (!strcmp(s.pvAction, "disable") && s.pvRemaining > 0) {
@@ -585,7 +592,7 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
   } else if (s.planActive || s.smartCostActive) {
     snprintf(buf, len, "Wartet auf günstigen Zeitpunkt");
   } else {
-    snprintf(buf, len, "Verbunden · lädt gerade nicht");
+    snprintf(buf, len, s.heating ? "Heizt gerade nicht" : "Verbunden · lädt gerade nicht");
   }
 }
 
@@ -632,6 +639,16 @@ void ui::render(const UiView& v) {
   const bool vehicle = showPower && (s.vehicleSoc > 0 || s.vehicleTitle[0]);
   if (house) {
     lv_label_set_text(lblVehicle, ICON_PLUG " Kein Fahrzeug");
+  } else if (vehicle && s.heating) {
+    // Wärmepumpe oder Heizstab: Temperatur mit einer Nachkommastelle wie in evcc, ohne Auto-Symbol
+    char temp[16];
+    formatDecimal(temp, sizeof(temp), s.vehicleSoc);
+    if (s.vehicleSoc > 0)
+      snprintf(buf, sizeof(buf), "%s%s%s °C", s.vehicleTitle[0] ? s.vehicleTitle : "Temperatur",
+               s.vehicleTitle[0] ? " · " : " ", temp);
+    else
+      snprintf(buf, sizeof(buf), "%s", s.vehicleTitle);
+    lv_label_set_text(lblVehicle, buf);
   } else if (vehicle) {
     int n = snprintf(buf, sizeof(buf), ICON_CAR " %s", s.vehicleTitle);
     if (s.vehicleSoc > 0)
@@ -704,7 +721,13 @@ void ui::render(const UiView& v) {
     lv_obj_set_style_bg_color(barFill, t.solar, 0);
     lv_obj_set_style_bg_color(barBg, live ? t.grid : t.muted, 0);
     lv_obj_set_style_bg_opa(barBg, live ? LV_OPA_COVER : LV_OPA_40, 0);
-    snprintf(buf, sizeof(buf), ICON_SUN " Jetzt %d %% Sonne", pct);
+    // Mit PV-Leistung, damit man auch beim Laden sieht, was gerade vom Dach kommt
+    if (s.pvPower >= 0) {
+      formatDecimal(num, sizeof(num), s.pvPower / 1000.0f);
+      snprintf(buf, sizeof(buf), ICON_SUN " %s kW Sonne · %d %%", num, pct);
+    } else {
+      snprintf(buf, sizeof(buf), ICON_SUN " Jetzt %d %% Sonne", pct);
+    }
     lv_label_set_text(lblSolar, buf);
     lv_obj_set_style_text_color(lblSolar, live ? t.solarText : t.muted, 0);
     snprintf(buf, sizeof(buf), "%d %% Netz", 100 - pct);
@@ -731,7 +754,7 @@ void ui::render(const UiView& v) {
     }
     for (int i = 0; i < 3; i++) lv_obj_set_style_text_color(tileValue[i], live ? t.text : t.muted, 0);
   } else if (showTiles) {
-    for (int i = 0; i < 3; i++) lv_label_set_text(tileLabel[i], TILE_TEXT[i]);
+    for (int i = 0; i < 3; i++) lv_label_set_text(tileLabel[i], (s.heating ? HEATING_TILE_TEXT : TILE_TEXT)[i]);
     setVisible(tile[2], true);
     formatDecimal(num, sizeof(num), s.chargedEnergy / 1000.0f);
     snprintf(buf, sizeof(buf), "%s kWh", num);
@@ -743,6 +766,7 @@ void ui::render(const UiView& v) {
     for (int i = 0; i < 3; i++) lv_obj_set_style_text_color(tileValue[i], live ? t.text : t.muted, 0);
   }
 
+  lv_label_set_text(segSub[1], s.heating ? "heizt immer" : SEG_SUB[1]);
   const bool pending = v.pendingMode != ChargeMode::None;
   renderSegments(pending ? v.pendingMode : s.mode, pending);
 }

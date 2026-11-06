@@ -20,13 +20,14 @@ struct EvccState {
   float chargePower = 0;    // W
   bool charging = false;
   bool connected = false;
+  bool heating = false;     // Heizgerät (z. B. Wärmepumpe): "Ladestand" ist eine Temperatur
   float chargedEnergy = 0;  // Wh (aktuelle Sitzung)
   uint32_t chargeDuration = 0;  // s
   int phasesActive = 0;
   float sessionSolarPct = 0;  // 0..100
   float greenShare = -1;      // 0..1, aktueller Sonnenanteil der Ladeleistung
-  float vehicleSoc = 0;       // %
-  float limitSoc = 0;         // %, Ladelimit des Ladepunkts (0 = keins)
+  float vehicleSoc = 0;       // %, bei Heizgeräten die Temperatur in °C
+  float limitSoc = 0;         // %, Ladelimit des Ladepunkts (0 = keins), bei Heizgeräten die Zieltemperatur
   float vehicleLimitSoc = 0;  // %, im Fahrzeug eingestelltes Limit (0 = unbekannt)
   char vehicleTitle[32] = "";
   char pvAction[12] = "";

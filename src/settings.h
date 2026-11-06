@@ -16,6 +16,7 @@ struct Settings {
   uint8_t screenTimeoutMin;  // 0 = Bildschirm immer an
   bool autoUpdate;           // neue Firmware selbst installieren
   bool boostButton;          // Akku-Anzeige oben schaltet im Modus Smart Battery Boost
+  uint8_t brightnessPct;     // Helligkeit 10–100 %
 };
 
 namespace settings {
@@ -26,4 +27,6 @@ void parseLoadpoints(const char* text, Settings& s);
 String loadpointsText(const Settings& s);
 void save();
 Settings& get();
+// Helligkeit als PWM-Wert 0–255
+uint8_t backlight();
 }  // namespace settings

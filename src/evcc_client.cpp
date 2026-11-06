@@ -71,6 +71,7 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   s.chargePower = lp["chargePower"] | 0.0f;
   s.charging = lp["charging"] | false;
   s.connected = lp["connected"] | false;
+  s.heating = lp["chargerFeatureHeating"] | false;
   s.chargedEnergy = lp["chargedEnergy"] | 0.0f;
   s.chargeDuration = (uint32_t)(lp["chargeDuration"] | 0.0f);
   s.phasesActive = lp["phasesActive"] | 0;
@@ -205,13 +206,13 @@ void evcc::begin() {
   }
   // Ältere evcc-Versionen liefern Akku und Netz als batterySoc, batteryPower und gridPower,
   // neuere unter battery.soc, battery.power und grid.power
-  char jq[768];
+  char jq[1024];
   snprintf(jq, sizeof(jq),
            "{lps:[.loadpoints[%s]|if . then {title,mode,alwaysCharge,chargePower,charging,connected,chargedEnergy,"
            "chargeDuration,phasesActive,sessionSolarPercentage,vehicleTitle,vehicleSoc,"
            "limitSoc:(.effectiveLimitSoc // .limitSoc),vehicleLimitSoc,pvAction,pvRemaining,"
            "planActive,smartCostActive,batteryBoost,minCurrent:(.effectiveMinCurrent // .minCurrent),phasesConfigured,"
-           "chargerPhases1p3p} else null end],green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
+           "chargerPhases1p3p,chargerFeatureHeating} else null end],green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
            "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc),"
            "batp:((try (if (.battery.devices|length)>0 then .battery.power else null end) catch null) // .batteryPower),"
            "grid:((try .grid.power catch null) // .gridPower)}",
