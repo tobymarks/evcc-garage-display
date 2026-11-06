@@ -37,7 +37,8 @@ jobs:
         # Die Plattform installiert den Kern nur nach, wenn keine passende Version vorhanden ist → 6.2.0 vorab festhalten.
         run: |
           pip install platformio
-          [ -x ~/.platformio/penv/bin/python ] || python -m venv ~/.platformio/penv
+          # Ein penv aus dem Cache kann auf eine Python-Version zeigen, die das Runner-Image nicht mehr hat
+          ~/.platformio/penv/bin/python -c "" 2>/dev/null || { rm -rf ~/.platformio/penv; python -m venv ~/.platformio/penv; }
           ~/.platformio/penv/bin/pip install "pioarduino==6.2.0"
 
       - name: Firmware bauen
