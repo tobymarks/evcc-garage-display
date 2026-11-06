@@ -1,6 +1,6 @@
 // Hero: wechselt durch echte Screenshots vom Gerät
 const heroShots = [
-  ["charging-dark", "Lädt mit 62 % Sonne"],
+  ["charging-dark", "Lädt mit 72 % Sonne"],
   ["solar-light", "Nur Sonne – 100 % vom Dach"],
   ["start-dark", "Genug Sonne – gleich geht's los"],
   ["fast-light", "Schnell: volle Leistung"],

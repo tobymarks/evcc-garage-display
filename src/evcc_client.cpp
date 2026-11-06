@@ -93,6 +93,8 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   s.batteryPower = root["batp"] | 0.0f;
   s.hasGrid = root["grid"].is<float>();
   s.gridPower = root["grid"] | 0.0f;
+  if (root["fc"][0].is<float>()) s.solarToday = root["fc"][0];
+  if (root["fc"][1].is<float>()) s.solarTomorrow = root["fc"][1];
   // Phasen, mit denen Smart startet: fest eingestellt oder bei Umschaltung (0 = automatisch) einphasig
   const int phasesConfigured = lp["phasesConfigured"] | 0;
   const int phases = phasesConfigured == 1 || phasesConfigured == 3 ? phasesConfigured
@@ -215,7 +217,8 @@ void evcc::begin() {
            "chargerPhases1p3p,chargerFeatureHeating} else null end],green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
            "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc),"
            "batp:((try (if (.battery.devices|length)>0 then .battery.power else null end) catch null) // .batteryPower),"
-           "grid:((try .grid.power catch null) // .gridPower)}",
+           "grid:((try .grid.power catch null) // .gridPower),"
+           "fc:(try [.forecast.solar.today.energy,.forecast.solar.tomorrow.energy] catch null)}",
            lps.c_str());
   stateUrl = server + "/api/state?jq=" + urlEncode(jq);
 

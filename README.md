@@ -12,9 +12,9 @@ Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-
 | Bereich | Inhalt |
 | --- | --- |
 | Kopfzeile | Name des Ladepunkts, Uhrzeit, Ladestand des Hausakkus (sofern vorhanden), Warnsymbol bei WLAN-/evcc-Problemen |
-| Mitte | Angestecktes Fahrzeug mit Ladestand, darunter die Ladeleistung in kW mit grünem Blitz beim Laden. Ohne Fahrzeug der aktuelle Sonnenüberschuss (was gerade in den Akku und ins Netz geht) mit Kacheln für Sonne, Haus und Akku – und ob der Überschuss für Smart reicht. Ohne PV-Anlage nur „Kein Fahrzeug“ |
+| Mitte | Angestecktes Fahrzeug mit Ladestand, darunter die Ladeleistung in kW mit grünem Blitz beim Laden. Ohne Fahrzeug der aktuelle Sonnenüberschuss (was gerade in den Akku und ins Netz geht) mit Kacheln für Haus, Akku und Solarprognose (Rest heute, abends für morgen) – und ob der Überschuss für Smart reicht. Ohne PV-Anlage nur „Kein Fahrzeug“ |
 | Statuszeile | z. B. „Lädt · 3-phasig", „Wartet auf Sonnenüberschuss", „Genug Sonne – Start in 0:45" |
-| Balken | Sonnen- und Netzanteil der aktuellen Ladeleistung. Ohne Fahrzeug (mit Hausakku): wohin der Überschuss geht – grün in den Akku, gelb ins Netz; abends Entladen des Akkus und Netzbezug (grau) |
+| Balken | Energiefluss wie in evcc, die Werte stehen im Balken: Netzbezug (grau), Sonne (grün), Hausakku entlädt (dunkelgrün), Einspeisung (gelb). Beim Laden steht der Sonnenanteil der Ladung in der Statuszeile. Ohne Netzleistung in evcc nur Sonnen- und Netzanteil der Ladeleistung |
 | Kacheln | Geladene Energie, Dauer und durchschnittlicher Sonnenanteil der Sitzung |
 | Unten | Modustasten Smart · Langsam · Schnell, jeweils mit kurzer Beschreibung |
 

@@ -45,6 +45,8 @@ struct EvccState {
   float gridPower = 0;        // W wie in evcc: + = Netzbezug, − = Einspeisung
   bool hasGrid = false;       // evcc kennt die Netzleistung
   float minChargePower = 0;   // W, ab diesem Überschuss startet Smart (Mindeststrom × Phasen × 230 V)
+  float solarToday = -1;      // Wh, Solarprognose für den Rest des Tages (-1 = keine Prognose)
+  float solarTomorrow = -1;   // Wh, Solarprognose für morgen
 };
 
 enum class CommandResult : uint8_t { None, Ok, Failed };

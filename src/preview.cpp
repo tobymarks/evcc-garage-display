@@ -2,10 +2,10 @@
 
 #include <string.h>
 
-const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|waiting|limit|boostready|boost|start|off|stale|heating|heatingdone";
+const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|evening|waiting|limit|boostready|boost|start|off|stale|heating|heatingdone";
 
 // Typisches Haus am Mittag: PV 6,2 kW, Haus 0,9 kW, Akku 78 % lädt mit 5 kW, 0,3 kW gehen ins Netz;
-// Smart braucht einphasig 1,4 kW
+// Smart braucht einphasig 1,4 kW. Beim Laden geht die Bilanz mit der Ladeleistung auf (Energiebalken).
 static void house(EvccState& p, float pv, float home, float battery, float grid) {
   p.pvPower = pv;
   p.homePower = home;
@@ -14,6 +14,8 @@ static void house(EvccState& p, float pv, float home, float battery, float grid)
   p.hasGrid = true;
   p.batterySoc = 78;
   p.minChargePower = 6 * 230;
+  p.solarToday = 14200;
+  p.solarTomorrow = 8200;
 }
 
 bool preview::scene(const char* name, EvccState& p, bool& stale) {
@@ -32,7 +34,8 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
     p.charging = true;
     p.chargePower = 7360;
     p.phasesActive = 3;
-    p.greenShare = 0.62f;
+    p.greenShare = 0.72f;
+    house(p, 6200, 900, 0, 2060);
     p.chargedEnergy = 12400;
     p.chargeDuration = 5820;
     p.sessionSolarPct = 48;
@@ -44,6 +47,7 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
     p.chargePower = 4140;
     p.phasesActive = 1;
     p.greenShare = 1.0f;
+    house(p, 6200, 900, -1160, 0);
     p.chargedEnergy = 2900;
     p.chargeDuration = 1680;
     p.sessionSolarPct = 97;
@@ -53,6 +57,7 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
     p.chargePower = 11040;
     p.phasesActive = 3;
     p.greenShare = 0.04f;
+    house(p, 1340, 900, 0, 10600);
     p.chargedEnergy = 7400;
     p.chargeDuration = 2460;
     p.sessionSolarPct = 6;
@@ -69,6 +74,13 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
   } else if (!strcmp(name, "night")) {
     p.connected = false;
     house(p, 0, 450, 350, 100);
+    p.solarToday = 0;
+  } else if (!strcmp(name, "evening")) {
+    // Kurz vor Sonnenuntergang: kleine Anteile von Netz, Sonne und Akku
+    p.connected = false;
+    p.mode = ChargeMode::Smart;
+    house(p, 400, 1200, 600, 200);
+    p.solarToday = 300;
   } else if (!strcmp(name, "waiting")) {
     p.mode = ChargeMode::Smart;
   } else if (!strcmp(name, "limit")) {
@@ -87,7 +99,7 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
     p.chargedEnergy = 3100;
     p.chargeDuration = 1260;
     p.sessionSolarPct = 84;
-    house(p, 2600, 900, 4800, 0);
+    house(p, 2600, 900, 4800, 860);
     p.batterySoc = 64;
   } else if (!strcmp(name, "start")) {
     p.mode = ChargeMode::Smart;
@@ -109,6 +121,7 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
       p.chargePower = 2100;
       p.phasesActive = 1;
       p.greenShare = 1.0f;
+      house(p, 3400, 900, -400, 0);
     } else {
       p.vehicleSoc = 55.2f;
     }
