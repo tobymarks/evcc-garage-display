@@ -375,6 +375,9 @@ static void handlePreview() {
   web.send(200, "text/plain", "Vorschau aktiv fuer 60 s\n");
 }
 
+static volatile uint32_t wifiDisconnects = 0;
+static volatile uint8_t lastDisconnectReason = 0;
+
 static void handleDiag() {
   static const char* const REASONS[] = {"unbekannt", "Einschalten", "extern", "Software", "Absturz",
                                         "Interrupt-Watchdog", "Task-Watchdog", "Watchdog", "Deep Sleep",
@@ -385,6 +388,14 @@ static void handleDiag() {
   snprintf(buf, sizeof(buf), "Firmware %s\nLaufzeit %lu s\nNeustartgrund: %s\n", FW_VERSION, millis() / 1000,
            reason < sizeof(REASONS) / sizeof(*REASONS) ? REASONS[reason] : "anderer");
   s += buf;
+  snprintf(buf, sizeof(buf), "WLAN %d dBm, Trennungen %lu", WiFi.RSSI(), (unsigned long)wifiDisconnects);
+  s += buf;
+  if (lastDisconnectReason) {
+    snprintf(buf, sizeof(buf), " (zuletzt Grund %u: %s)", lastDisconnectReason,
+             WiFi.STA.disconnectReasonName((wifi_err_reason_t)lastDisconnectReason));
+    s += buf;
+  }
+  s += "\n";
   snprintf(buf, sizeof(buf), "Interner RAM frei %u, minimal %u, größter Block %u\nPSRAM frei %u\n",
            heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
            heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
@@ -567,6 +578,7 @@ void setup() {
   display::setBrightness(settings::backlight());  // erst einschalten, wenn ein Bild im Speicher steht
 
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);  // kein Modem-Sleep am Netzteil: verhindert verpasste Schlüsselwechsel im WLAN
   WiFi.setAutoReconnect(true);
   setupPortal();
   if (wm.autoConnect(PORTAL_AP_NAME)) {
@@ -577,9 +589,48 @@ void setup() {
                     "Mit dem WLAN \"" PORTAL_AP_NAME "\" verbinden. Die Seite öffnet sich automatisch, "
                     "sonst 192.168.4.1 aufrufen.");
   }
+  WiFi.onEvent(
+      [](WiFiEvent_t, WiFiEventInfo_t info) {
+        wifiDisconnects = wifiDisconnects + 1;
+        lastDisconnectReason = info.wifi_sta_disconnected.reason;
+      },
+      ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
   evcc::begin();
   updater::begin();
+}
+
+// Stößt eine WLAN-Neuverbindung an, wenn AutoReconnect nach einer Trennung (z. B. Mesh-Steering,
+// abgelaufener DHCP-Lease oder kurzzeitig nicht bereiter Router) nicht gegriffen hat oder trotz
+// bestehender Funkverbindung dauerhaft keine Daten mehr von evcc kommen.
+static void maintainWifi() {
+  static uint32_t lastAttempt = 0;
+  static bool wasConnected = false;
+  const uint32_t now = millis();
+  if (portalActive) {
+    lastAttempt = now;
+    return;
+  }
+  const bool connected = WiFi.status() == WL_CONNECTED;
+  if (connected != wasConnected) {
+    wasConnected = connected;
+    lastAttempt = now;
+  }
+  if (!connected) {
+    if (now - lastAttempt >= WIFI_RECONNECT_MS) {
+      lastAttempt = now;
+      WiFi.disconnect();
+      WiFi.reconnect();
+    }
+    return;
+  }
+  if (states[0].updatedMs != 0 && now - states[0].updatedMs < STALE_AFTER_MS) {
+    lastAttempt = now;
+  } else if (now - lastAttempt >= WIFI_STALE_RECONNECT_MS) {
+    lastAttempt = now;
+    WiFi.disconnect();
+    WiFi.reconnect();
+  }
 }
 
 // Automatische Updates nur, wenn das Display gerade niemand braucht
@@ -607,6 +658,7 @@ static void handleUpdates() {
 void loop() {
   lv_timer_handler();
   wm.process();
+  maintainWifi();
 
   if (WiFi.status() == WL_CONNECTED) {
     startNetworkServices();

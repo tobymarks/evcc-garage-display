@@ -19,10 +19,12 @@
 #define NTP_SERVER_1 "fritz.box"
 #define NTP_SERVER_2 "pool.ntp.org"
 
-// evcc-Abfrage
+// evcc-Abfrage und WLAN
 #define POLL_INTERVAL_MS 3000
-#define STALE_AFTER_MS 15000       // danach gilt evcc als nicht erreichbar
+#define STALE_AFTER_MS 15000              // danach gilt evcc als nicht erreichbar
 #define MODE_CONFIRM_TIMEOUT_MS 10000
+#define WIFI_RECONNECT_MS 30000           // ohne WLAN regelmäßig neu verbinden (AutoReconnect deckt nicht alle Gründe ab)
+#define WIFI_STALE_RECONNECT_MS 120000    // WLAN auch neu verbinden, wenn trotz WL_CONNECTED 2 min keine Daten fließen
 
 // Projektseite (Anleitung, Browser-Installer) und Quellcode – verlinkt unter /settings
 #define PROJECT_URL "https://tobymarks.github.io/evcc-garage-display/"
