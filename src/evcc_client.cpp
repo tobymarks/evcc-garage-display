@@ -91,6 +91,7 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   s.homePower = root["home"] | 0.0f;
   if (root["bat"].is<float>()) s.batterySoc = root["bat"];
   s.batteryPower = root["batp"] | 0.0f;
+  s.prioritySoc = root["prio"] | 0.0f;
   s.hasGrid = root["grid"].is<float>();
   s.gridPower = root["grid"] | 0.0f;
   if (root["fc"][0].is<float>()) s.solarToday = root["fc"][0];
@@ -217,7 +218,7 @@ void evcc::begin() {
            "chargerPhases1p3p,chargerFeatureHeating} else null end],green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
            "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc),"
            "batp:((try (if (.battery.devices|length)>0 then .battery.power else null end) catch null) // .batteryPower),"
-           "grid:((try .grid.power catch null) // .gridPower),"
+           "grid:((try .grid.power catch null) // .gridPower),prio:.prioritySoc,"
            "fc:(try [.forecast.solar.today.energy,.forecast.solar.tomorrow.energy] catch null)}",
            lps.c_str());
   stateUrl = server + "/api/state?jq=" + urlEncode(jq);

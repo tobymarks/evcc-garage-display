@@ -42,6 +42,7 @@ struct EvccState {
   float homePower = 0;        // W, Verbrauch im Haus ohne Ladepunkte
   float batterySoc = -1;      // %, -1 = kein Hausakku
   float batteryPower = 0;     // W wie in evcc: + = Akku entlädt, − = Akku lädt
+  float prioritySoc = 0;      // %, bis hierhin geht die Sonne zuerst in den Hausakku (0 = Fahrzeug zuerst)
   float gridPower = 0;        // W wie in evcc: + = Netzbezug, − = Einspeisung
   bool hasGrid = false;       // evcc kennt die Netzleistung
   float minChargePower = 0;   // W, ab diesem Überschuss startet Smart (Mindeststrom × Phasen × 230 V)

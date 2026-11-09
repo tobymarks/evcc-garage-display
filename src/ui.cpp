@@ -457,10 +457,12 @@ static void renderSegments(ChargeMode shown, bool pending) {
   }
 }
 
-// Was gerade in den Akku und ins Netz geht – ohne das, was andere Ladepunkte schon nutzen.
+// Was ein Fahrzeug im Modus Smart bekäme: die Einspeisung und, sobald der Hausakku seinen
+// Vorrang (prioritySoc in evcc) erreicht hat, auch das, was gerade in den Akku geht.
 // Ohne Netzleistung: PV minus Hausverbrauch
 static float surplus(const EvccState& s) {
-  const float battery = s.batterySoc >= 0 ? s.batteryPower : 0;
+  const bool batteryYields = s.batterySoc >= 0 && s.batterySoc >= s.prioritySoc;
+  const float battery = batteryYields ? s.batteryPower : LV_MAX(0.0f, s.batteryPower);
   return LV_MAX(0.0f, s.hasGrid ? -(s.gridPower + battery) : s.pvPower - s.homePower);
 }
 
@@ -522,7 +524,7 @@ static bool renderFlow(const EvccState& s, bool live) {
   return true;
 }
 
-// Ohne Fahrzeug: Haus, Akku und Solarprognose. Die Sonne steht schon im Balken und kommt
+// Ohne Fahrzeug: Haus, Akku-Leistung und Solarprognose. Die Sonne steht schon im Balken und kommt
 // nur in eine Kachel, wenn Akku oder Prognose fehlen.
 static void renderHouseTiles(const EvccState& s, bool live) {
   const Theme& t = *theme;
@@ -544,9 +546,10 @@ static void renderHouseTiles(const EvccState& s, bool live) {
   }
   formatDecimal(num, sizeof(num), s.homePower / 1000.0f);
   add("HAUS", "%s kW");
-  if (battery) {
-    snprintf(num, sizeof(num), "%d", (int)lroundf(s.batterySoc));
-    add(s.batteryPower <= -50 ? "AKKU LÄDT" : "AKKU", "%s %%");
+  if (battery) {  // Ladestand steht oben neben der Uhr, hier die Leistung
+    const bool charging = s.batteryPower <= -50, discharging = s.batteryPower >= 50;
+    formatDecimal(num, sizeof(num), (charging || discharging ? fabsf(s.batteryPower) : 0) / 1000.0f);
+    add(charging ? "AKKU LÄDT" : discharging ? "AKKU GIBT" : "AKKU", "%s kW");
   }
   if (hasForecast && n < 3) {
     formatDecimal(num, sizeof(num), forecast / 1000.0f);
@@ -598,6 +601,26 @@ static void renderBattery(const UiView& v, bool live) {
 
 // Ohne Fahrzeug Sonnenüberschuss, Haus und Akku zeigen, sofern evcc eine PV-Anlage kennt (auch nachts)
 static bool showHouse(const EvccState& s) { return s.valid && !s.connected && s.pvPower >= 0; }
+
+// Anteil der Ladung aus eigener Erzeugung. evcc zählt Sonne und Hausakku zusammen (greenShare);
+// hier aufgeteilt im Verhältnis von selbst genutzter Sonne und Akku-Entladung.
+// Der Balken zeigt das ganze Haus, die Statuszeile den Anteil der Ladung.
+static int greenShareText(const EvccState& s, char* buf, size_t len) {
+  if (s.greenShare < 0) return 0;
+  const float green = constrain(s.greenShare, 0.0f, 1.0f) * 100.0f;
+  const float battery = s.batterySoc >= 0 ? LV_MAX(0.0f, s.batteryPower) : 0;
+  const float feedIn = s.hasGrid ? LV_MAX(0.0f, -s.gridPower) : 0;
+  const float sun = LV_MAX(0.0f, s.pvPower - feedIn);
+  if (s.pvPower < 0 && battery < 50) return snprintf(buf, len, " · %d %% Sonne", (int)lroundf(green));  // PV unbekannt
+  const float sources = (sun >= 50 ? sun : 0) + (battery >= 50 ? battery : 0);
+  if (sources <= 0) return 0;  // nachts ohne Akku: kein Zusatz
+  const int sunPct = (int)lroundf(green * (sun >= 50 ? sun : 0) / sources);
+  const int batteryPct = (int)lroundf(green) - sunPct;
+  if (sunPct > 0 && batteryPct > 0)
+    return snprintf(buf, len, " · " ICON_SUN " %d %% · " ICON_BATTERY " %d %%", sunPct, batteryPct);
+  if (batteryPct > 0) return snprintf(buf, len, " · %d %% Akku", batteryPct);
+  return snprintf(buf, len, " · %d %% Sonne", sunPct);
+}
 
 // Fahrzeug hat sein Ziel erreicht und lädt deshalb nicht weiter – egal wie viel Sonne da ist.
 // Maßgeblich ist das niedrigere der beiden Limits (Ladepunkt in evcc, Fahrzeug selbst).
@@ -669,8 +692,8 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
     if (s.phasesActive > 0) n += snprintf(buf + n, len - n, " · %d-phasig", s.phasesActive);
     if (s.batteryBoost)
       n += snprintf(buf + n, len - n, " · Akku hilft mit");
-    else if (s.greenShare >= 0 && (s.pvPower < 0 || s.pvPower >= 50))  // der Balken zeigt das ganze Haus, hier der Anteil der Ladung
-      n += snprintf(buf + n, len - n, " · %d %% Sonne", constrain((int)lroundf(s.greenShare * 100.0f), 0, 100));
+    else
+      n += greenShareText(s, buf + n, len - n);
     if (!strcmp(s.pvAction, "disable") && s.pvRemaining > 0) {
       formatCountdown(tmp, sizeof(tmp), s.pvRemaining);
       snprintf(buf + n, len - n, " · stoppt in %s", tmp);
@@ -725,8 +748,8 @@ void ui::render(const UiView& v) {
   const bool showPower = s.valid && s.connected;
   const bool house = showHouse(s);
 
-  // Hausakku oben neben der Uhr; ohne Fahrzeug steht er schon in der Kachel
-  const bool battery = s.valid && s.batterySoc >= 0 && !house;
+  // Hausakku oben neben der Uhr, ohne Fahrzeug steht seine Leistung in der Kachel
+  const bool battery = s.valid && s.batterySoc >= 0;
   setVisible(btnBattery, battery);
   if (battery) renderBattery(v, live);
   lv_obj_align_to(lblIcons, battery ? btnBattery : lblClock, LV_ALIGN_OUT_LEFT_BOTTOM, -10, battery && boostable(v) ? -BOOST_PAD_V : 0);
@@ -784,8 +807,9 @@ void ui::render(const UiView& v) {
   lv_label_set_text(lblStatus, buf);
   lv_obj_set_style_text_color(lblStatus, statusColor, 0);
 
-  // Energiebalken wie in evcc; ohne Netzleistung beim Laden wenigstens der Sonnenanteil der Ladeleistung
-  const bool chargeBar = showPower && s.charging && (s.hasGrid ? s.pvPower >= 0 : s.greenShare >= 0);
+  // Energiebalken wie in evcc, auch angesteckt ohne Laden (Ladelimit, Warten auf Überschuss);
+  // ohne Netzleistung nur beim Laden mit dem Sonnenanteil der Ladeleistung
+  const bool chargeBar = showPower && (s.hasGrid ? s.pvPower >= 0 : s.charging && s.greenShare >= 0);
   setVisible(barBlock, ((house && s.hasGrid) || chargeBar) && renderFlow(s, live));
 
   // Kacheln: Werte der laufenden bzw. letzten Sitzung, ohne Fahrzeug Haus, Akku und Prognose

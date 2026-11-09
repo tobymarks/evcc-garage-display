@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|evening|waiting|limit|boostready|boost|start|off|stale|heating|heatingdone";
+const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|evening|priority|nightfast|waiting|limit|boostready|boost|start|off|stale|heating|heatingdone";
 
 // Typisches Haus am Mittag: PV 6,2 kW, Haus 0,9 kW, Akku 78 % lädt mit 5 kW, 0,3 kW gehen ins Netz;
 // Smart braucht einphasig 1,4 kW. Beim Laden geht die Bilanz mit der Ladeleistung auf (Energiebalken).
@@ -81,6 +81,26 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
     p.mode = ChargeMode::Smart;
     house(p, 400, 1200, 600, 200);
     p.solarToday = 300;
+  } else if (!strcmp(name, "priority")) {
+    // Hausakku hat Vorrang bis 80 %: was er aufnimmt, bekäme ein Fahrzeug nicht
+    p.connected = false;
+    p.mode = ChargeMode::Smart;
+    house(p, 7300, 2200, -2300, -200);
+    p.batterySoc = 20;
+    p.prioritySoc = 80;
+  } else if (!strcmp(name, "nightfast")) {
+    // Nachts schnell laden, der Hausakku hilft mit (z. B. über den evcc-Optimizer)
+    p.mode = ChargeMode::Fast;
+    p.charging = true;
+    p.chargePower = 10300;
+    p.phasesActive = 3;
+    p.greenShare = 0.32f;
+    house(p, 0, 1400, 4700, 7000);
+    p.batterySoc = 55;
+    p.chargedEnergy = 5200;
+    p.chargeDuration = 1800;
+    p.sessionSolarPct = 30;
+    p.solarToday = 0;
   } else if (!strcmp(name, "waiting")) {
     p.mode = ChargeMode::Smart;
   } else if (!strcmp(name, "limit")) {
