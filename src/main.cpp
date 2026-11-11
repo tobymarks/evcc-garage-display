@@ -48,6 +48,10 @@ static uint32_t pendingSince[MAX_LOADPOINTS];
 static bool boostPending[MAX_LOADPOINTS];  // Battery Boost angefragt, evcc hat ihn noch nicht bestätigt
 static bool boostTarget[MAX_LOADPOINTS];
 static uint32_t boostSince[MAX_LOADPOINTS];
+static bool vehiclePending[MAX_LOADPOINTS];  // Fahrzeugwechsel angefragt, evcc hat ihn noch nicht bestätigt
+static char vehicleTargetName[MAX_LOADPOINTS][32];
+static char vehicleTargetTitle[MAX_LOADPOINTS][32];
+static uint32_t vehicleSince[MAX_LOADPOINTS];
 static const char* flashMsg = nullptr;
 static uint32_t flashUntil = 0;
 static bool dirty = true;
@@ -175,6 +179,34 @@ static void onBoostTapped() {
   dirty = true;
 }
 
+// Antippen der Fahrzeugzeile: durch die in evcc angelegten Fahrzeuge und "Gastfahrzeug" wechseln
+static void onVehicleTapped() {
+  lastActivity = millis();
+  const EvccState& st = states[current];
+  if (!st.valid || !st.connected || st.heating) return;
+  const char* shown = vehiclePending[current] ? vehicleTargetName[current] : st.vehicleName;
+  if (st.vehicleCount == 0 && !shown[0]) return;
+
+  int idx = -1;
+  for (uint8_t i = 0; i < st.vehicleCount; i++) {
+    if (!strcmp(st.vehicleNames[i], shown)) {
+      idx = i;
+      break;
+    }
+  }
+  const int next = idx < 0 ? 0 : idx + 1;
+  const char* targetName = next < st.vehicleCount ? st.vehicleNames[next] : "";
+  const char* targetTitle = next < st.vehicleCount ? st.vehicleTitles[next] : "Gastfahrzeug";
+
+  vehiclePending[current] = true;
+  strlcpy(vehicleTargetName[current], targetName, sizeof(vehicleTargetName[0]));
+  strlcpy(vehicleTargetTitle[current], targetTitle, sizeof(vehicleTargetTitle[0]));
+  vehicleSince[current] = millis();
+  flashMsg = nullptr;
+  evcc::requestVehicle(current, targetName);
+  dirty = true;
+}
+
 static void showLoadpoint(uint8_t index) {
   if (index == current || index >= evcc::count()) return;
   current = index;
@@ -196,7 +228,7 @@ static bool anyCharging() {
 
 static bool anyPending() {
   for (uint8_t i = 0; i < evcc::count(); i++)
-    if (pendingMode[i] != ChargeMode::None) return true;
+    if (pendingMode[i] != ChargeMode::None || boostPending[i] || vehiclePending[i]) return true;
   return false;
 }
 
@@ -261,6 +293,19 @@ static void updateState() {
         error = "evcc hat den Boost nicht übernommen";
       }
     }
+    if (evcc::takeVehicleResult(i) == CommandResult::Failed) {
+      vehiclePending[i] = false;
+      error = "Fahrzeug konnte nicht gewechselt werden";
+    }
+    if (vehiclePending[i]) {
+      if (st.valid && st.updatedMs > vehicleSince[i] && !strcmp(st.vehicleName, vehicleTargetName[i])) {
+        vehiclePending[i] = false;
+        dirty = true;
+      } else if (millis() - vehicleSince[i] > MODE_CONFIRM_TIMEOUT_MS) {
+        vehiclePending[i] = false;
+        error = "evcc hat das Fahrzeug nicht übernommen";
+      }
+    }
     if (error) {
       if (i == current) flash(error);
       dirty = true;
@@ -320,6 +365,8 @@ static void updateState() {
     v.pendingMode = pendingMode[current];
     v.boostButton = settings::get().boostButton || (preview && previewBoost);
     v.pendingBoost = boostPending[current] ? boostTarget[current] : -1;
+    v.pendingVehicle = !preview && vehiclePending[current];
+    strlcpy(v.pendingVehicleTitle, vehicleTargetTitle[current], sizeof(v.pendingVehicleTitle));
     v.page = current;
     v.pageCount = evcc::count();
     v.flash = flashMsg;
@@ -571,7 +618,7 @@ void setup() {
   brightness = settings::backlight();
   lastActivity = millis();
 
-  ui::begin(onModeSelected, openSettings, onSwipe, onBoostTapped);
+  ui::begin(onModeSelected, openSettings, onSwipe, onBoostTapped, onVehicleTapped);
   ui::onMessageTap(closeSettings);
   ui::showMessage(ICON_SETTINGS, "Verbinde …", "WLAN-Verbindung wird aufgebaut");
   lv_refr_now(nullptr);

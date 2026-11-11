@@ -47,6 +47,7 @@ static ui::Callback settingsCb;
 static ui::Callback messageTapCb;
 static ui::SwipeCallback swipeCb;
 static ui::Callback boostCb;
+static ui::Callback vehicleCb;
 
 // Raster für 480x480
 static constexpr int MARGIN = 24;
@@ -81,6 +82,7 @@ static lv_obj_t* lblBolt;
 static lv_obj_t* contIdle;
 static lv_obj_t* lblIdleIcon;
 static lv_obj_t* lblIdleText;
+static lv_obj_t* btnVehicle;  // Hülle um die Fahrzeugzeile; antippen wechselt das Fahrzeug
 static lv_obj_t* lblVehicle;
 static lv_obj_t* lblStatus;
 static lv_obj_t* barBlock;
@@ -214,6 +216,10 @@ static void onBatteryClicked(lv_event_t*) {
   if (boostCb) boostCb();
 }
 
+static void onVehicleClicked(lv_event_t*) {
+  if (vehicleCb) vehicleCb();
+}
+
 static void buildMain() {
   scrMain = lv_obj_create(nullptr);
   lv_obj_remove_flag(scrMain, LV_OBJ_FLAG_SCROLLABLE);
@@ -249,12 +255,20 @@ static void buildMain() {
   lv_obj_set_flex_flow(mid, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(mid, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-  // Kleine Zeile über der großen Zahl: Fahrzeug mit Ladestand bzw. "Kein Fahrzeug" über dem Überschuss
-  lblVehicle = makeLabel(mid, &font_22);
-  lv_obj_set_width(lblVehicle, CONTENT_W);
+  // Kleine Zeile über der großen Zahl: Fahrzeug mit Ladestand bzw. "Kein Fahrzeug" über dem Überschuss.
+  // Sind in evcc Fahrzeuge angelegt, lässt sich das Fahrzeug hier per Antippen wechseln.
+  btnVehicle = makeBox(mid);
+  lv_obj_set_size(btnVehicle, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_style_radius(btnVehicle, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_pad_hor(btnVehicle, 12, 0);
+  lv_obj_set_style_pad_ver(btnVehicle, 2, 0);
+  lv_obj_set_style_margin_bottom(btnVehicle, 2, 0);
+  lv_obj_set_ext_click_area(btnVehicle, 12);
+  lv_obj_add_event_cb(btnVehicle, onVehicleClicked, LV_EVENT_CLICKED, nullptr);
+  lblVehicle = makeLabel(btnVehicle, &font_22);
+  lv_obj_set_style_max_width(lblVehicle, CONTENT_W - 24, 0);
   lv_label_set_long_mode(lblVehicle, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_align(lblVehicle, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_pad_bottom(lblVehicle, 4, 0);
 
   // Ladeleistung – Zahl und Einheit auf gemeinsamer Grundlinie
   contPower = makeBox(mid);
@@ -423,6 +437,8 @@ static void applyTheme() {
   lv_obj_set_style_text_color(lblIdleIcon, t.muted, 0);
   lv_obj_set_style_text_color(lblIdleText, t.text, 0);
   lv_obj_set_style_text_color(lblVehicle, t.muted, 0);
+  lv_obj_set_style_bg_color(btnVehicle, t.pressed, LV_STATE_PRESSED);
+  lv_obj_set_style_bg_opa(btnVehicle, LV_OPA_COVER, LV_STATE_PRESSED);
   lv_obj_set_style_text_color(lblBattery, t.muted, 0);
   for (int i = 0; i < 3; i++) {
     lv_obj_set_style_bg_color(tile[i], t.box, 0);
@@ -671,6 +687,8 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
     snprintf(buf, len, "Modus wird gesetzt …");
   } else if (v.pendingBoost >= 0) {
     snprintf(buf, len, v.pendingBoost ? "Boost wird eingeschaltet …" : "Boost wird ausgeschaltet …");
+  } else if (v.pendingVehicle) {
+    snprintf(buf, len, "Fahrzeug wird gewechselt …");
   } else if (!s.connected && house && s.minChargePower > 0) {
     // Hilft bei der Entscheidung: reicht die Sonne gerade für Smart?
     if (surplus(s) >= s.minChargePower) {
@@ -754,8 +772,15 @@ void ui::render(const UiView& v) {
   if (battery) renderBattery(v, live);
   lv_obj_align_to(lblIcons, battery ? btnBattery : lblClock, LV_ALIGN_OUT_LEFT_BOTTOM, -10, battery && boostable(v) ? -BOOST_PAD_V : 0);
 
-  // Fahrzeug mit Ladestand, solange es angesteckt ist
-  const bool vehicle = showPower && (s.vehicleSoc > 0 || s.vehicleTitle[0]);
+  // Fahrzeug mit Ladestand, solange es angesteckt ist; sind Fahrzeuge in evcc angelegt,
+  // erscheint auch ohne erkanntes Auto "Gastfahrzeug", damit man es antippen und wechseln kann
+  const bool canSelectVehicle = showPower && !s.heating && (s.vehicleCount > 0 || s.vehicleName[0]);
+  const bool vehicle = showPower && (s.vehicleSoc > 0 || s.vehicleTitle[0] || canSelectVehicle || v.pendingVehicle);
+  if (canSelectVehicle)
+    lv_obj_add_flag(btnVehicle, LV_OBJ_FLAG_CLICKABLE);
+  else
+    lv_obj_remove_flag(btnVehicle, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_style_text_opa(lblVehicle, v.pendingVehicle ? LV_OPA_50 : LV_OPA_COVER, 0);
   if (house) {
     lv_label_set_text(lblVehicle, ICON_PLUG " Kein Fahrzeug");
   } else if (vehicle && s.heating) {
@@ -769,12 +794,16 @@ void ui::render(const UiView& v) {
       snprintf(buf, sizeof(buf), "%s", s.vehicleTitle);
     lv_label_set_text(lblVehicle, buf);
   } else if (vehicle) {
-    int n = snprintf(buf, sizeof(buf), ICON_CAR " %s", s.vehicleTitle);
-    if (s.vehicleSoc > 0)
-      snprintf(buf + n, sizeof(buf) - n, "%s%d %%", s.vehicleTitle[0] ? " · " : "", (int)lroundf(s.vehicleSoc));
+    const char* title = v.pendingVehicle        ? v.pendingVehicleTitle
+                        : s.vehicleTitle[0]     ? s.vehicleTitle
+                        : canSelectVehicle      ? "Gastfahrzeug"
+                                                : "";
+    int n = snprintf(buf, sizeof(buf), ICON_CAR "%s%s", title[0] ? " " : "", title);
+    if (!v.pendingVehicle && s.vehicleSoc > 0)
+      snprintf(buf + n, sizeof(buf) - n, "%s%d %%", title[0] ? " · " : " ", (int)lroundf(s.vehicleSoc));
     lv_label_set_text(lblVehicle, buf);
   }
-  setVisible(lblVehicle, house || vehicle);
+  setVisible(btnVehicle, house || vehicle);
   setVisible(contPower, showPower || house);
   setVisible(contIdle, !showPower && !house);
   if (showPower) {
@@ -846,9 +875,11 @@ void ui::setNight(bool value) {
   if (hasLastView) render(lastView);
 }
 
-void ui::begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback onSwipe, Callback onBoost) {
+void ui::begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback onSwipe, Callback onBoost,
+               Callback onVehicle) {
   modeCb = onMode;
   boostCb = onBoost;
+  vehicleCb = onVehicle;
   settingsCb = onSettingsRequested;
   swipeCb = onSwipe;
   buildMain();

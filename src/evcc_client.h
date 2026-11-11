@@ -29,7 +29,11 @@ struct EvccState {
   float vehicleSoc = 0;       // %, bei Heizgeräten die Temperatur in °C
   float limitSoc = 0;         // %, Ladelimit des Ladepunkts (0 = keins), bei Heizgeräten die Zieltemperatur
   float vehicleLimitSoc = 0;  // %, im Fahrzeug eingestelltes Limit (0 = unbekannt)
+  char vehicleName[32] = "";   // interner Name in evcc (leer = Gastfahrzeug)
   char vehicleTitle[32] = "";
+  uint8_t vehicleCount = 0;   // in evcc angelegte Fahrzeuge (für Wechsel per Antippen)
+  char vehicleNames[8][32] = {};
+  char vehicleTitles[8][32] = {};
   char pvAction[12] = "";
   uint32_t pvRemaining = 0;   // s
   bool planActive = false;
@@ -62,4 +66,7 @@ void requestMode(uint8_t index, ChargeMode mode);
 CommandResult takeCommandResult(uint8_t index);
 void requestBoost(uint8_t index, bool on);
 CommandResult takeBoostResult(uint8_t index);
+// Fahrzeug am Ladepunkt setzen (leerer Name = Gastfahrzeug / Zuordnung lösen)
+void requestVehicle(uint8_t index, const char* name);
+CommandResult takeVehicleResult(uint8_t index);
 }  // namespace evcc

@@ -18,6 +18,9 @@ static ChargeMode wanted[MAX_LOADPOINTS];
 static volatile CommandResult commandResult[MAX_LOADPOINTS];
 static int8_t wantedBoost[MAX_LOADPOINTS];  // -1 = nichts zu tun, sonst 0/1 (in begin() gesetzt)
 static volatile CommandResult boostResult[MAX_LOADPOINTS];
+static bool vehicleRequested[MAX_LOADPOINTS];
+static char wantedVehicle[MAX_LOADPOINTS][32];
+static volatile CommandResult vehicleResult[MAX_LOADPOINTS];
 
 static String baseUrl[MAX_LOADPOINTS];
 static String stateUrl;
@@ -38,13 +41,15 @@ static String urlEncode(const char* s) {
   return out;
 }
 
-static int httpRequest(const String& url, bool post, String* body) {
+static int httpRequest(const String& url, const char* method, String* body) {
   WiFiClient client;
   HTTPClient http;
   http.setConnectTimeout(2000);
   http.setTimeout(3000);
   if (!http.begin(client, url)) return -1;
-  const int code = post ? http.POST((uint8_t*)nullptr, 0) : http.GET();
+  const int code = !strcmp(method, "GET")    ? http.GET()
+                   : !strcmp(method, "POST") ? http.POST((uint8_t*)nullptr, 0)
+                                             : http.sendRequest(method);
   if (body && code == HTTP_CODE_OK) *body = http.getString();
   http.end();
   return code;
@@ -80,7 +85,16 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   s.vehicleSoc = lp["vehicleSoc"] | 0.0f;
   s.limitSoc = lp["limitSoc"] | 0.0f;
   s.vehicleLimitSoc = lp["vehicleLimitSoc"] | 0.0f;
+  strlcpy(s.vehicleName, lp["vehicleName"] | "", sizeof(s.vehicleName));
   strlcpy(s.vehicleTitle, lp["vehicleTitle"] | "", sizeof(s.vehicleTitle));
+  for (JsonObject v : root["veh"].as<JsonArray>()) {
+    if (s.vehicleCount >= sizeof(s.vehicleNames) / sizeof(*s.vehicleNames)) break;
+    const char* name = v["n"] | "";
+    if (!name[0]) continue;
+    strlcpy(s.vehicleNames[s.vehicleCount], name, sizeof(s.vehicleNames[0]));
+    strlcpy(s.vehicleTitles[s.vehicleCount], v["t"] | name, sizeof(s.vehicleTitles[0]));
+    s.vehicleCount++;
+  }
   strlcpy(s.pvAction, lp["pvAction"] | "", sizeof(s.pvAction));
   s.pvRemaining = (uint32_t)(lp["pvRemaining"] | 0.0f);
   s.planActive = lp["planActive"] | false;
@@ -106,7 +120,7 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
 
 static void poll() {
   String body;
-  if (httpRequest(stateUrl, false, &body) != HTTP_CODE_OK) return;
+  if (httpRequest(stateUrl, "GET", &body) != HTTP_CODE_OK) return;
 
   JsonDocument doc;
   if (deserializeJson(doc, body)) return;
@@ -135,7 +149,7 @@ static void poll() {
 }
 
 static bool post(uint8_t index, const char* path) {
-  const int code = httpRequest(baseUrl[index] + path, true, nullptr);
+  const int code = httpRequest(baseUrl[index] + path, "POST", nullptr);
   log_i("POST %s%s -> %d", baseUrl[index].c_str(), path, code);
   return code == HTTP_CODE_OK;
 }
@@ -158,6 +172,16 @@ static bool setMode(uint8_t index, ChargeMode mode) {
 }
 
 static bool setBoost(uint8_t index, bool on) { return post(index, on ? "/batteryboost/1" : "/batteryboost/0"); }
+
+static bool setVehicle(uint8_t index, const char* name) {
+  if (name[0]) {
+    const String path = "/vehicle/" + urlEncode(name);
+    return post(index, path.c_str());
+  }
+  const int code = httpRequest(baseUrl[index] + "/vehicle", "DELETE", nullptr);
+  log_i("DELETE %s/vehicle -> %d", baseUrl[index].c_str(), code);
+  return code == HTTP_CODE_OK;
+}
 
 static void task(void*) {
   uint32_t lastPoll = 0;
@@ -183,6 +207,18 @@ static void task(void*) {
       if (boost < 0) continue;
       const bool ok = WiFi.status() == WL_CONNECTED && setBoost(i, boost);
       boostResult[i] = ok ? CommandResult::Ok : CommandResult::Failed;
+      if (ok) lastPoll = 0;
+    }
+    for (uint8_t i = 0; i < lpCount; i++) {
+      char veh[32];
+      xSemaphoreTake(lock, portMAX_DELAY);
+      const bool req = vehicleRequested[i];
+      if (req) strlcpy(veh, wantedVehicle[i], sizeof(veh));
+      vehicleRequested[i] = false;
+      xSemaphoreGive(lock);
+      if (!req) continue;
+      const bool ok = WiFi.status() == WL_CONNECTED && setVehicle(i, veh);
+      vehicleResult[i] = ok ? CommandResult::Ok : CommandResult::Failed;
       if (ok) lastPoll = 0;
     }
     if (WiFi.status() == WL_CONNECTED && (lastPoll == 0 || millis() - lastPoll >= POLL_INTERVAL_MS)) {
@@ -212,14 +248,15 @@ void evcc::begin() {
   char jq[1024];
   snprintf(jq, sizeof(jq),
            "{lps:[.loadpoints[%s]|if . then {title,mode,alwaysCharge,chargePower,charging,connected,chargedEnergy,"
-           "chargeDuration,phasesActive,sessionSolarPercentage,vehicleTitle,vehicleSoc,"
+           "chargeDuration,phasesActive,sessionSolarPercentage,vehicleName,vehicleTitle,vehicleSoc,"
            "limitSoc:(.effectiveLimitSoc // .limitSoc),vehicleLimitSoc,pvAction,pvRemaining,"
            "planActive,smartCostActive,batteryBoost,minCurrent:(.effectiveMinCurrent // .minCurrent),phasesConfigured,"
            "chargerPhases1p3p,chargerFeatureHeating} else null end],green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
            "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc),"
            "batp:((try (if (.battery.devices|length)>0 then .battery.power else null end) catch null) // .batteryPower),"
            "grid:((try .grid.power catch null) // .gridPower),prio:.prioritySoc,"
-           "fc:(try [.forecast.solar.today.energy,.forecast.solar.tomorrow.energy] catch null)}",
+           "fc:(try [.forecast.solar.today.energy,.forecast.solar.tomorrow.energy] catch null),"
+           "veh:(try [.vehicles|to_entries[]|{n:.key,t:.value.title}] catch [])}",
            lps.c_str());
   stateUrl = server + "/api/state?jq=" + urlEncode(jq);
 
@@ -262,5 +299,19 @@ void evcc::requestBoost(uint8_t index, bool on) {
 CommandResult evcc::takeBoostResult(uint8_t index) {
   const CommandResult r = boostResult[index];
   boostResult[index] = CommandResult::None;
+  return r;
+}
+
+void evcc::requestVehicle(uint8_t index, const char* name) {
+  if (index >= lpCount) return;
+  xSemaphoreTake(lock, portMAX_DELAY);
+  strlcpy(wantedVehicle[index], name ? name : "", sizeof(wantedVehicle[0]));
+  vehicleRequested[index] = true;
+  xSemaphoreGive(lock);
+}
+
+CommandResult evcc::takeVehicleResult(uint8_t index) {
+  const CommandResult r = vehicleResult[index];
+  vehicleResult[index] = CommandResult::None;
   return r;
 }
