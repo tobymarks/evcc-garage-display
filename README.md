@@ -12,7 +12,7 @@ Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-
 | Bereich | Inhalt |
 | --- | --- |
 | Kopfzeile | Name des Ladepunkts, Uhrzeit, Ladestand des Hausakkus (sofern vorhanden), Warnsymbol bei WLAN-/evcc-Problemen |
-| Mitte | Angestecktes Fahrzeug mit Ladestand, darunter die Ladeleistung in kW mit grünem Blitz beim Laden. Ohne Fahrzeug der aktuelle Sonnenüberschuss (was gerade in den Akku und ins Netz geht) mit Kacheln für Haus, Akku und Solarprognose (Rest heute, abends für morgen) – und ob der Überschuss für Smart reicht. Ohne PV-Anlage nur „Kein Fahrzeug“ |
+| Mitte | Angestecktes Fahrzeug mit Ladestand (antippen wechselt durch die in evcc angelegten Fahrzeuge und „Gastfahrzeug"), darunter die Ladeleistung in kW mit grünem Blitz beim Laden. Ohne Fahrzeug der aktuelle Sonnenüberschuss (was gerade in den Akku und ins Netz geht) mit Kacheln für Haus, Akku und Solarprognose (Rest heute, abends für morgen) – und ob der Überschuss für Smart reicht. Ohne PV-Anlage nur „Kein Fahrzeug" |
 | Statuszeile | z. B. „Lädt · 3-phasig", „Wartet auf Sonnenüberschuss", „Genug Sonne – Start in 0:45" |
 | Balken | Energiefluss wie in evcc, die Werte stehen im Balken: Netzbezug (grau), Sonne (grün), Hausakku entlädt (dunkelgrün), Einspeisung (gelb). Beim Laden steht der Sonnenanteil der Ladung in der Statuszeile. Ohne Netzleistung in evcc nur Sonnen- und Netzanteil der Ladeleistung |
 | Kacheln | Geladene Energie, Dauer und durchschnittlicher Sonnenanteil der Sitzung |
@@ -30,7 +30,7 @@ hell, dunkel oder automatisch nach Sonnenstand. Die Helligkeit ist fest (ab Werk
 davorsteht.
 
 **Wärmepumpe und Heizstab:** Bei Heizgeräten in evcc zeigt das Display statt Ladestand die Temperatur
-(z. B. „43,3 °C“) und „Zieltemperatur erreicht“ statt „Ladelimit erreicht“.
+(z. B. „43,3 °C") und „Zieltemperatur erreicht" statt „Ladelimit erreicht".
 
 **Bildschirm aus:** Wird nicht geladen und nichts bedient, geht das Display nach 2 Minuten aus
 (einstellbar, 0 = immer an). Antippen weckt es, ohne eine Taste auszulösen. Beim Einstecken des Autos
@@ -62,7 +62,7 @@ evcc ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
   und Material Symbols (beide Apache-2.0), SVGs in `tools/icons` (das Akku-Symbol ist selbst gezeichnet). Erzeugt mit `tools/gen_fonts.sh` (braucht fontforge)
 - Daten: alle 3 s `GET /api/state?jq=…` – der jq-Filter liefert nur die benötigten Felder (~400 Byte statt ~70 KB),
   darunter `pvPower`, `homePower`, Ladestand und Leistung des Hausakkus und die Netzleistung
-- Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}` und `POST /api/loadpoints/<n>/mode/{smart|now}`
+- Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}`, `POST /api/loadpoints/<n>/mode/{smart|now}` sowie `POST /api/loadpoints/<n>/vehicle/<name>` bzw. `DELETE /api/loadpoints/<n>/vehicle`
 - Netzwerk läuft in einem eigenen Task auf Kern 0, die Oberfläche bleibt dadurch flüssig
 - Eine Taste zeigt den neuen Modus erst voll an, wenn evcc ihn bestätigt hat (vorher halbtransparent)
 
