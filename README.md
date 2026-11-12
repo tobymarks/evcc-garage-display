@@ -139,12 +139,32 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
 | `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)); `/preview` ohne Parameter beendet |
 | `/update` | Firmware-Version und Stand der automatischen Updates; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
-| `/diag` | Laufzeit, Neustartgrund, freier Speicher und Stack des evcc-Tasks, zurückgerollte Updates und der letzte gespeicherte Absturz |
+| `/diag` | Laufzeit, Neustartgrund, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze, die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte Updates und der letzte gespeicherte Absturz |
 | `/wifiscan` | löst eine WLAN-Suche aus (Lasttest für die Bildausgabe) |
 
 Ohne Gerät: `./tools/sim/render.sh <Ordner> nocar charging …` rendert dieselben Beispielzustände mit der
 echten Oberfläche (LVGL, Schriften) auf dem Rechner als PNG, hell und dunkel. Ohne Argumente erneuert es die
 Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
+
+## Neuigkeiten
+
+Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktionen sind Schalter unter
+`/settings`.
+
+- **12.11.2026**
+  - Einstellungsseite mit den Abschnitten Verbindung, Anzeige und System sowie einer Vorschau der Anzeige.
+    Die meisten Änderungen wirken sofort, ohne Neustart.
+  - Neuer Schalter „Fahrzeug wechseln" (ab Werk an, wie bisher) und ein optionales Passwort für
+    Weboberfläche und Firmware-Uploads (ab Werk keines).
+  - Updates: Neustarts laufen als vollständiger System-Reset. Vorher konnte das Display nach einem Update
+    auf die alte Firmware zurückfallen. `/diag` zeigt jetzt die letzten Starts.
+  - Fahrzeugzeile zeigte teils nur „…"; schnelles Durchtippen der Fahrzeuge sendet nur noch das zuletzt
+    gewählte an evcc; rund 48 KB mehr freier Arbeitsspeicher.
+- **11.11.2026** – Fahrzeug per Antippen der Fahrzeugzeile wechseln.
+- **09.11.2026** – WLAN-Verbindung wird aktiv wiederhergestellt; Akkuanteil, Batteriepriorität und
+  Energiebalken korrigiert.
+- **06.11.2026** – Helligkeit einstellbar, Wärmepumpe und Heizstab, Energiebalken wie in evcc, Kachel mit
+  Solarprognose.
 
 ## Anpassen
 
