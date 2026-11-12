@@ -22,6 +22,8 @@ void settings::load() {
   s.autoUpdate = prefs.getBool("autoupd", DEFAULT_AUTO_UPDATE);
   s.boostButton = prefs.getBool("boost", false);
   s.brightnessPct = prefs.getUChar("bright", DEFAULT_BRIGHTNESS_PCT);
+  s.vehicleSwitch = prefs.getBool("vehsw", true);
+  s.password = prefs.getString("pw", "");
   prefs.end();
 
   if (s.rotation > 3) s.rotation = DEFAULT_ROTATION;
@@ -42,6 +44,8 @@ void settings::save() {
   prefs.putBool("autoupd", s.autoUpdate);
   prefs.putBool("boost", s.boostButton);
   prefs.putUChar("bright", s.brightnessPct);
+  prefs.putBool("vehsw", s.vehicleSwitch);
+  prefs.putString("pw", s.password);
   prefs.end();
 }
 

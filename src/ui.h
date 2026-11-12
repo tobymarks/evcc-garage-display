@@ -17,6 +17,7 @@ struct UiView {
   bool pendingVehicle = false;          // Fahrzeugwechsel angefragt, bis evcc ihn bestätigt
   char pendingVehicleTitle[32] = "";
   bool hasVehicles = false;             // in evcc sind Fahrzeuge angelegt – die Fahrzeugzeile lässt sich antippen
+  bool vehicleSwitch = true;            // Fahrzeugwechsel per Antippen erlaubt (Einstellung)
 };
 
 namespace ui {

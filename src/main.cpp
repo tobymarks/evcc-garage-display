@@ -72,9 +72,14 @@ static bool previewBoost = false;  // Boost-Knopf in der Vorschau zeigen, auch w
 
 // ---------- WLAN-Einrichtung / Einstellungen ----------
 
-// Übernimmt die Werte aus dem Portal oder von /settings (gleiche Feldnamen) und startet neu
-static void applySettings(std::function<String(const char*)> value) {
+// Übernimmt die Werte aus dem Portal oder von /settings (gleiche Feldnamen).
+// Liefert true, wenn die Änderung erst nach einem Neustart wirkt (Verbindung, Drehung, Passwort);
+// alles andere liest die Oberfläche laufend aus den Einstellungen.
+static bool applySettings(std::function<String(const char*)> value) {
   Settings& s = settings::get();
+  const String oldHost = s.evccHost, oldLps = settings::loadpointsText(s), oldPassword = s.password;
+  const uint16_t oldPort = s.evccPort;
+  const uint8_t oldRotation = s.rotation;
   s.evccHost = value("host");
   s.evccHost.trim();
   // Nur der Rechnername zählt: "http://" davor und einen Pfad dahinter verzeihen
@@ -95,11 +100,23 @@ static void applySettings(std::function<String(const char*)> value) {
   if (!boost.isEmpty()) s.boostButton = boost.toInt() != 0;
   const String bright = value("bright");
   if (!bright.isEmpty()) s.brightnessPct = constrain(bright.toInt(), MIN_BRIGHTNESS_PCT, 100);
+  const String vehicleSwitch = value("vehsw");
+  if (!vehicleSwitch.isEmpty()) s.vehicleSwitch = vehicleSwitch.toInt() != 0;
+  // Leeres Feld = Passwort unverändert; entfernt wird es nur ausdrücklich
+  const String password = value("pw");
+  if (value("pwclear").toInt() != 0)
+    s.password = "";
+  else if (!password.isEmpty())
+    s.password = password.substring(0, MAX_PASSWORD_LEN);
   settings::save();
-  restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
+  return s.evccHost != oldHost || s.evccPort != oldPort || settings::loadpointsText(s) != oldLps ||
+         s.rotation != oldRotation || s.password != oldPassword;
 }
 
 static void saveParams() {
+  // Wer am Display das Portal öffnet, steht davor: so lässt sich ein vergessenes Passwort löschen
+  settings::get().password = "";
+  restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
   applySettings([](const char* key) {
     for (int i = 0; i < wm.getParametersCount(); i++) {
       WiFiManagerParameter* p = wm.getParameters()[i];
@@ -200,7 +217,7 @@ static void onVehicleTapped() {
   lastActivity = millis();
   if (previewActive()) return;
   const EvccState& st = states[current];
-  if (!st.valid || !st.connected || st.heating) return;
+  if (!settings::get().vehicleSwitch || !st.valid || !st.connected || st.heating) return;
   const bool wasPending = pending(Command::Vehicle, current).active;
   const char* shown = wasPending ? vehicleTargetName[current] : st.vehicleName;
   if (vehicles.count == 0 && !shown[0]) return;
@@ -396,6 +413,7 @@ static void updateState() {
     v.pendingBoost = pending(Command::Boost, current).active ? boostTarget[current] : -1;
     v.pendingVehicle = !preview && pending(Command::Vehicle, current).active;
     v.hasVehicles = vehicles.count > 0;
+    v.vehicleSwitch = settings::get().vehicleSwitch;
     strlcpy(v.pendingVehicleTitle, vehicleTargetTitle[current], sizeof(v.pendingVehicleTitle));
     v.page = current;
     v.pageCount = evcc::count();
@@ -530,7 +548,11 @@ small{display:block;font-weight:400;opacity:.65}input,select{box-sizing:border-b
 padding:.6rem;border:1px solid #8888;border-radius:.5rem;background:Field;color:FieldText}
 .row{display:flex;gap:.75rem}.row>div{flex:1;min-width:0}button{margin-top:1.8rem;width:100%;font:inherit;font-weight:600;
 padding:.8rem;border:0;border-radius:.5rem;background:var(--a);color:#000}footer{margin-top:2rem;opacity:.65;font-size:.85rem}
-footer a{color:inherit}
+footer a{color:inherit}h2{font-size:1.05rem;margin:2.2rem 0 0;padding-top:1.1rem;border-top:1px solid #8884}
+input[type=checkbox]{width:auto;margin-right:.5rem}.check{font-weight:400}.note{padding:.6rem .8rem;border-radius:.5rem;
+background:#0fdd8d33}figure{margin:1.1rem 0 0;text-align:center}figure img{width:15rem;max-width:100%;height:auto;
+border-radius:.9rem;border:1px solid #8884;display:block;margin:0 auto .6rem}
+button.plain{margin:0;width:auto;padding:.5rem .9rem;background:none;border:1px solid #8888;color:inherit;font-weight:400}
 </style></head><body><h1>evcc-Garage</h1>)";
 
 static void handleSettings() {
@@ -543,7 +565,15 @@ static void handleSettings() {
       }
     }
     updater::confirm();  // wer hier speichert, erreicht das Display – die Firmware läuft also
-    applySettings([](const char* key) { return web.arg(key); });
+    if (!applySettings([](const char* key) { return web.arg(key); })) {
+      // Wirkt sofort: neu zeichnen und zurück zur Seite, die dann die neue Anzeige lädt
+      lastActivity = millis();
+      dirty = true;
+      web.sendHeader("Location", "/settings?saved=1");
+      web.send(303);
+      return;
+    }
+    restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
     web.sendHeader("Refresh", "15; url=/settings");
     web.send(200, "text/html; charset=utf-8",
              String(FPSTR(SETTINGS_HEAD)) +
@@ -553,8 +583,9 @@ static void handleSettings() {
 
   const Settings& s = settings::get();
   String h = FPSTR(SETTINGS_HEAD);
-  h.reserve(4096);
-  h += "<form method=\"post\">";
+  h.reserve(7168);
+  if (web.hasArg("saved")) h += "<p class=\"note\">Gespeichert – die Änderung ist schon am Display zu sehen.</p>";
+  h += "<form method=\"post\"><h2>Verbindung</h2>";
   h += "<div class=\"row\"><div><label>evcc-Adresse</label><input name=\"host\" required value=\"" +
        htmlEscape(s.evccHost) + "\"></div>";
   h += "<div style=\"flex:.45\"><label>Port</label><input name=\"port\" type=\"number\" min=\"1\" max=\"65535\" value=\"" +
@@ -562,6 +593,14 @@ static void handleSettings() {
   h += "<label>Ladepunkte<small>Nummer wie in evcc (1 = erster). Mehrere mit Komma, z. B. 1,2,3 – dann wischen "
        "zum Wechseln.</small></label><input name=\"lp\" inputmode=\"numeric\" pattern=\"[0-9 ,]*\" value=\"" +
        settings::loadpointsText(s) + "\">";
+  h += "<h2>Anzeige</h2><figure><img id=\"shot\" alt=\"Aktuelle Anzeige des Displays\" width=\"480\" height=\"480\" hidden>"
+       "<button type=\"button\" class=\"plain\" id=\"load\">Aktuelle Anzeige laden</button></figure>";
+  h += "<label>Fahrzeug wechseln<small>Die Fahrzeugzeile über der Leistung antippen, um durch die in evcc angelegten "
+       "Fahrzeuge zu schalten.</small></label><select name=\"vehsw\">" + option(1, s.vehicleSwitch, "An") +
+       option(0, s.vehicleSwitch, "Aus") + "</select>";
+  h += "<label>Battery Boost<small>Im Modus Smart die Akku-Anzeige oben antippen, um wie in evcc den Hausakku "
+       "zum Laden dazuzuschalten.</small></label><select name=\"boost\">" + option(0, s.boostButton, "Aus") +
+       option(1, s.boostButton, "An") + "</select>";
   h += "<label>Design</label><select name=\"theme\">" + option(0, s.theme, "Automatisch nach Sonnenstand") +
        option(1, s.theme, "Immer hell") + option(2, s.theme, "Immer dunkel") + "</select>";
   char lat[12], lon[12];
@@ -581,15 +620,36 @@ static void handleSettings() {
   h += "<label>Drehung</label><select name=\"rot\">" + option(0, s.rotation, "0°") +
        option(1, s.rotation, "90° im Uhrzeigersinn") + option(2, s.rotation, "180°") +
        option(3, s.rotation, "270° im Uhrzeigersinn") + "</select>";
-  h += "<label>Battery Boost<small>Im Modus Smart die Akku-Anzeige oben antippen, um wie in evcc den Hausakku "
-       "zum Laden dazuzuschalten.</small></label><select name=\"boost\">" + option(0, s.boostButton, "Aus") +
-       option(1, s.boostButton, "An") + "</select>";
-  h += "<label>Automatische Updates</label><select name=\"autoupd\">" + option(1, s.autoUpdate, "An") +
+  h += "<h2>System</h2><label>Automatische Updates</label><select name=\"autoupd\">" + option(1, s.autoUpdate, "An") +
        option(0, s.autoUpdate, "Aus") + "</select>";
-  h += "<button>Speichern und neu starten</button></form><footer>Firmware " FW_VERSION
+  h += String("<label>Passwort<small>Schützt diese Seite und Firmware-Uploads im Heimnetz, Benutzername „admin“. ") +
+       (s.password.isEmpty() ? "Aktuell ist keines gesetzt." : "Aktuell ist eines gesetzt; leer lassen, um es zu behalten.") +
+       "</small></label><input name=\"pw\" type=\"password\" autocomplete=\"new-password\" maxlength=\"" +
+       String(MAX_PASSWORD_LEN) + "\" placeholder=\"" + (s.password.isEmpty() ? "Kein Passwort" : "Unverändert") + "\">";
+  if (!s.password.isEmpty())
+    h += "<label class=\"check\"><input type=\"checkbox\" name=\"pwclear\" value=\"1\">Passwort entfernen</label>";
+  h += "<button>Speichern</button><small>Verbindung, Drehung und Passwort starten das Display neu, alles andere "
+       "wirkt sofort.</small></form>";
+  h += "<script>const i=document.getElementById('shot'),b=document.getElementById('load');"
+       "function l(){b.textContent='Lädt …';i.onload=()=>{i.hidden=false;b.textContent='Aktualisieren'};"
+       "i.onerror=()=>{b.textContent='Erneut versuchen'};i.src='/screenshot.bmp?'+Date.now()}"
+       "b.onclick=l;if(location.search.includes('saved'))setTimeout(l,800)</script>";
+  h += "<footer>Firmware " FW_VERSION
        " · WLAN ändern: Titel am Display 3 s gedrückt halten<br><a href=\"" PROJECT_URL "\">Projektseite und Anleitung</a>"
        " · <a href=\"" REPO_URL "\">GitHub</a></footer></body></html>";
   web.send(200, "text/html; charset=utf-8", h);
+}
+
+// Ist ein Passwort gesetzt, verlangen alle Seiten die Anmeldung als "admin"
+static void guarded(const char* path, void (*handler)()) {
+  web.on(path, [handler]() {
+    const String& password = settings::get().password;
+    if (!password.isEmpty() && !web.authenticate(WEB_USER, password.c_str())) {
+      web.requestAuthentication(BASIC_AUTH, "evcc-Garage");
+      return;
+    }
+    handler();
+  });
 }
 
 static void startWebServer() {
@@ -597,19 +657,19 @@ static void startWebServer() {
     web.sendHeader("Location", "/settings");
     web.send(302);
   });
-  web.on("/settings", handleSettings);
-  web.on("/screenshot.bmp", []() { display::sendScreenshot(web); });
-  web.on("/preview", handlePreview);
+  guarded("/settings", handleSettings);
+  guarded("/screenshot.bmp", []() { display::sendScreenshot(web); });
+  guarded("/preview", handlePreview);
   // Update-Status; ?check=1 prüft sofort, ?install=1 installiert eine gefundene neue Version sofort
-  web.on("/update", []() {
+  guarded("/update", []() {
     if (web.hasArg("check")) updater::checkNow();
     if (web.hasArg("install")) updater::installNow();
     web.send(200, "text/plain; charset=utf-8", updater::status());
   });
   // Laufzeit, Neustartgrund, Speicher und der zuletzt gespeicherte Absturz (Coredump im Flash)
-  web.on("/diag", handleDiag);
+  guarded("/diag", handleDiag);
   // Lasttest gegen Bildstörungen: löst eine WLAN-Suche aus (wie das Einstellungsportal)
-  web.on("/wifiscan", []() {
+  guarded("/wifiscan", []() {
     const uint32_t start = millis();
     const int n = WiFi.scanNetworks();
     web.send(200, "text/plain", String(n) + " Netze in " + String(millis() - start) + " ms\n");
@@ -628,8 +688,11 @@ static void startNetworkServices() {
   }
   if (!otaStarted) {
     ArduinoOTA.setHostname(HOSTNAME);
+    // Das Passwort aus den Einstellungen gilt auch für Firmware-Uploads im Heimnetz
+    if (!settings::get().password.isEmpty()) ArduinoOTA.setPassword(settings::get().password.c_str());
 #ifdef OTA_PASSWORD
-    ArduinoOTA.setPassword(OTA_PASSWORD);
+    else
+      ArduinoOTA.setPassword(OTA_PASSWORD);
 #endif
     ArduinoOTA.onStart([]() {
       display::setBrightness(settings::backlight());

@@ -17,6 +17,8 @@ struct Settings {
   bool autoUpdate;           // neue Firmware selbst installieren
   bool boostButton;          // Akku-Anzeige oben schaltet im Modus Smart Battery Boost
   uint8_t brightnessPct;     // Helligkeit 10–100 %
+  bool vehicleSwitch;        // Fahrzeugzeile antippen wechselt das Fahrzeug
+  String password;           // schützt Weboberfläche und OTA (Benutzer "admin"); leer = offen
 };
 
 namespace settings {

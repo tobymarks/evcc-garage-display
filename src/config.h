@@ -9,6 +9,8 @@
 #define DEFAULT_LONGITUDE 10.0f
 #define DEFAULT_ROTATION 0         // 0–3, jeweils 90° im Uhrzeigersinn
 #define DEFAULT_THEME 0            // 0 = automatisch nach Sonnenstand, 1 = immer hell, 2 = immer dunkel
+#define WEB_USER "admin"           // Benutzername, wenn in den Einstellungen ein Passwort gesetzt ist
+#define MAX_PASSWORD_LEN 32
 #define DEFAULT_AUTO_UPDATE 1      // neue Firmware von der Projektseite selbst installieren
 
 #define HOSTNAME "evcc-garage"
