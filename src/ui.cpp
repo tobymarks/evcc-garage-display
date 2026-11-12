@@ -797,7 +797,8 @@ void ui::render(const UiView& v) {
 
   // Fahrzeug mit Ladestand, solange es angesteckt ist; sind Fahrzeuge in evcc angelegt,
   // erscheint auch ohne erkanntes Auto "Gastfahrzeug", damit man es antippen und wechseln kann
-  const bool canSelectVehicle = showPower && !s.heating && (v.hasVehicles || s.vehicleName[0]);
+  const bool canSelectVehicle =
+      v.vehicleSwitch && showPower && !s.heating && (v.hasVehicles || s.vehicleName[0]);
   const bool vehicle = showPower && (s.vehicleSoc > 0 || s.vehicleTitle[0] || canSelectVehicle || v.pendingVehicle);
   if (canSelectVehicle)
     lv_obj_add_flag(btnVehicle, LV_OBJ_FLAG_CLICKABLE);

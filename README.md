@@ -116,7 +116,15 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
 ## Später ändern
 
 - **Einstellungen im Heimnetz:** im Browser `http://evcc-garage.local:8080` aufrufen (leitet auf `/settings`).
-  Speichern startet das Display neu, das WLAN bleibt unverändert.
+  Unter „Anzeige" lässt sich ein- und ausschalten, was das Display zeigt und was sich antippen lässt
+  (Fahrzeug wechseln, Battery Boost); die Seite kann dazu die aktuelle Anzeige des Displays laden.
+  Diese Schalter sowie Design, Helligkeit und Bildschirm-Timeout wirken sofort. Nur Änderungen an
+  evcc-Adresse, Port, Ladepunkten, Drehung oder Passwort starten das Display neu. Das WLAN bleibt unverändert.
+- **Passwort (optional):** unter „System" setzen. Danach verlangen alle Seiten des Displays die Anmeldung als
+  `admin`, und Firmware-Uploads im Heimnetz brauchen dasselbe Passwort (`--auth=…` bei `espota`,
+  in PlatformIO `upload_flags = --auth=…`). Es wird unverschlüsselt im Heimnetz übertragen – also kein Passwort
+  verwenden, das woanders gilt. Vergessen? Am Display das Portal öffnen (siehe nächster Punkt) und dort
+  speichern: das löscht das Passwort.
 - **Einstellungen am Display** (auch für ein anderes WLAN): „Garage" oben links **3 Sekunden gedrückt halten** →
   das Portal `evcc-Garage` startet erneut. Antippen des Hinweises bricht ab.
 - Nach einem Stromausfall wartet das Display auf den Router und startet nach 5 Minuten ohne WLAN selbst neu.
@@ -141,8 +149,9 @@ Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
 ## Anpassen
 
 Zeiten und Standardwerte stehen in [src/config.h](src/config.h), Pins und Display-Timings in
-[src/board.h](src/board.h). Für ein OTA-Passwort in `platformio.ini` unter `build_flags`
-`-DOTA_PASSWORD=\"…\"` ergänzen.
+[src/board.h](src/board.h). Ein Passwort für Weboberfläche und OTA
+lässt sich unter `/settings` setzen; fest einkompilieren geht mit `-DOTA_PASSWORD=\"…\"` unter `build_flags`
+in `platformio.ini` (gilt, solange in den Einstellungen keines gesetzt ist).
 
 ## Lizenz
 
