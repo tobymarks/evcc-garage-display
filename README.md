@@ -146,6 +146,26 @@ Ohne Gerät: `./tools/sim/render.sh <Ordner> nocar charging …` rendert dieselb
 echten Oberfläche (LVGL, Schriften) auf dem Rechner als PNG, hell und dunkel. Ohne Argumente erneuert es die
 Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
 
+## Neuigkeiten
+
+Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktionen sind Schalter unter
+`/settings`.
+
+- **12.11.2026**
+  - Einstellungsseite mit den Abschnitten Verbindung, Anzeige und System sowie einer Vorschau der Anzeige.
+    Die meisten Änderungen wirken sofort, ohne Neustart.
+  - Neuer Schalter „Fahrzeug wechseln" (ab Werk an, wie bisher) und ein optionales Passwort für
+    Weboberfläche und Firmware-Uploads (ab Werk keines).
+  - Updates: Neustarts laufen als vollständiger System-Reset. Vorher konnte das Display nach einem Update
+    auf die alte Firmware zurückfallen. `/diag` zeigt jetzt die letzten Starts.
+  - Fahrzeugzeile zeigte teils nur „…"; schnelles Durchtippen der Fahrzeuge sendet nur noch das zuletzt
+    gewählte an evcc; rund 48 KB mehr freier Arbeitsspeicher.
+- **11.11.2026** – Fahrzeug per Antippen der Fahrzeugzeile wechseln.
+- **09.11.2026** – WLAN-Verbindung wird aktiv wiederhergestellt; Akkuanteil, Batteriepriorität und
+  Energiebalken korrigiert.
+- **06.11.2026** – Helligkeit einstellbar, Wärmepumpe und Heizstab, Energiebalken wie in evcc, Kachel mit
+  Solarprognose.
+
 ## Anpassen
 
 Zeiten und Standardwerte stehen in [src/config.h](src/config.h), Pins und Display-Timings in
