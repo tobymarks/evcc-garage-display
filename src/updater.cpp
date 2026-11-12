@@ -33,8 +33,9 @@ static uint32_t nextCheck = UPDATE_FIRST_CHECK_MS;
 static bool forceInstall = false;
 static bool confirmed = false;
 
-// Arduino bestätigt neue Firmware sonst sofort beim Start; wir erst nach UPDATE_CONFIRM_MS (siehe loop)
-bool verifyRollbackLater() { return true; }
+// Arduino bestätigt neue Firmware sonst sofort beim Start; wir erst nach UPDATE_CONFIRM_MS (siehe loop).
+// extern "C": der Kern sucht die Funktion unter ihrem C-Namen, sonst greift seine eigene (false).
+extern "C" bool verifyRollbackLater() { return true; }
 
 static void begin(HTTPClient& http, NetworkClientSecure& client, const String& url) {
   client.setCACertBundle(crtBundleStart, crtBundleEnd - crtBundleStart);

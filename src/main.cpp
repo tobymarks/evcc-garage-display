@@ -3,12 +3,15 @@
 
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+#include <Preferences.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <esp_core_dump.h>
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
+#include <esp_rom_sys.h>
+#include <rom/rtc.h>
 #include <functional>
 #include <lvgl.h>
 
@@ -116,6 +119,7 @@ static bool applySettings(std::function<String(const char*)> value) {
 static void saveParams() {
   // Wer am Display das Portal öffnet, steht davor: so lässt sich ein vergessenes Passwort löschen
   settings::get().password = "";
+  updater::confirm();  // wer das Portal bedient, hat ein laufendes Display vor sich
   restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
   applySettings([](const char* key) {
     for (int i = 0; i < wm.getParametersCount(); i++) {
@@ -473,15 +477,75 @@ static void handlePreview() {
 static volatile uint32_t wifiDisconnects = 0;
 static volatile uint8_t lastDisconnectReason = 0;
 
-static void handleDiag() {
+// Neustart als vollständiger System-Reset. ESP.restart() setzt nur die CPU zurück; Display-Ausgabe und
+// PSRAM laufen dabei weiter, und der folgende Start blieb auf diesem Board öfter hängen, bis der
+// Watchdog eingriff. Direkt nach einem Update holt der Bootloader dann die alte Firmware zurück.
+static void restartNow() {
+  display::setBrightness(0);
+  Serial.flush();
+  esp_rom_software_reset_system();
+  for (;;) {}
+}
+
+// ---------- Startprotokoll ----------
+// Die letzten Starts bleiben im Flash stehen. So lässt sich nachvollziehen, ob ein Update wirklich
+// gestartet ist oder ob der Bootloader nach einem zweiten Neustart die alte Firmware zurückgeholt hat.
+
+struct BootEntry {
+  char version[28];
+  uint8_t reason;     // esp_reset_reason()
+  uint8_t romReason;  // Rohwert des Chips, unterscheidet die Watchdogs
+  uint8_t slot;       // 0 = app0, 1 = app1
+  int8_t otaState;    // esp_ota_img_states_t beim Start, -1 = unbekannt
+};
+static constexpr int BOOT_LOG_SIZE = 8;
+static BootEntry bootLog[BOOT_LOG_SIZE];  // neuester zuerst
+static uint32_t bootNumber = 0;
+
+static const char* resetReasonName(uint8_t reason) {
   static const char* const REASONS[] = {"unbekannt", "Einschalten", "extern", "Software", "Absturz",
                                         "Interrupt-Watchdog", "Task-Watchdog", "Watchdog", "Deep Sleep",
                                         "Unterspannung", "SDIO"};
+  return reason < sizeof(REASONS) / sizeof(*REASONS) ? REASONS[reason] : "anderer";
+}
+
+static const char* otaStateName(int8_t state) {
+  static const char* const STATES[] = {"neu", "unbestätigt", "bestätigt", "ungültig", "abgebrochen"};
+  return state >= 0 && state < (int)(sizeof(STATES) / sizeof(*STATES)) ? STATES[state] : "unbekannt";
+}
+
+static int8_t otaState(const esp_partition_t* partition) {
+  esp_ota_img_states_t state;
+  return partition && esp_ota_get_state_partition(partition, &state) == ESP_OK && state <= ESP_OTA_IMG_ABORTED
+             ? (int8_t)state
+             : -1;
+}
+
+static void recordBoot() {
+  Preferences prefs;
+  prefs.begin("boot", false);
+  if (prefs.getBytesLength("log") == sizeof(bootLog)) prefs.getBytes("log", bootLog, sizeof(bootLog));
+  bootNumber = prefs.getULong("n", 0) + 1;
+  memmove(bootLog + 1, bootLog, sizeof(bootLog) - sizeof(bootLog[0]));
+  BootEntry& e = bootLog[0];
+  e = BootEntry();
+  strlcpy(e.version, FW_VERSION, sizeof(e.version));
+  e.reason = esp_reset_reason();
+  e.romReason = rtc_get_reset_reason(0);
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  e.slot = running ? running->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_0 : 0xFF;
+  e.otaState = otaState(running);
+  prefs.putBytes("log", bootLog, sizeof(bootLog));
+  prefs.putULong("n", bootNumber);
+  prefs.end();
+}
+
+static void handleDiag() {
   const esp_reset_reason_t reason = esp_reset_reason();
   char buf[160];
   String s;
   snprintf(buf, sizeof(buf), "Firmware %s\nLaufzeit %lu s\nNeustartgrund: %s\n", FW_VERSION, millis() / 1000,
-           reason < sizeof(REASONS) / sizeof(*REASONS) ? REASONS[reason] : "anderer");
+           resetReasonName(reason));
   s += buf;
   snprintf(buf, sizeof(buf), "WLAN %d dBm, Trennungen %lu", WiFi.RSSI(), (unsigned long)wifiDisconnects);
   s += buf;
@@ -503,6 +567,23 @@ static void handleDiag() {
   if (invalid && esp_ota_get_partition_description(invalid, &desc) == ESP_OK) {
     snprintf(buf, sizeof(buf), "Zurückgerollt: Firmware in %s (gebaut %s %s) startete nicht sauber\n", invalid->label,
              desc.date, desc.time);
+    s += buf;
+  }
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  if (running) {
+    snprintf(buf, sizeof(buf), "Laufende Firmware in %s: %s\n", running->label, otaStateName(otaState(running)));
+    s += buf;
+  }
+  const esp_partition_t* other = esp_ota_get_next_update_partition(nullptr);
+  if (other) {
+    snprintf(buf, sizeof(buf), "Anderer Firmware-Platz %s: %s\n", other->label, otaStateName(otaState(other)));
+    s += buf;
+  }
+  s += "Letzte Starts (neuester zuerst; Nr., Firmware, Platz, Zustand beim Start, Grund):\n";
+  for (int i = 0; i < BOOT_LOG_SIZE && bootLog[i].version[0]; i++) {
+    const BootEntry& e = bootLog[i];
+    snprintf(buf, sizeof(buf), "  %lu  %s  app%u  %s  %s (Chip %u)\n", (unsigned long)(bootNumber - i), e.version,
+             e.slot, otaStateName(e.otaState), resetReasonName(e.reason), e.romReason);
     s += buf;
   }
   esp_core_dump_summary_t dump;
@@ -694,6 +775,9 @@ static void startNetworkServices() {
     else
       ArduinoOTA.setPassword(OTA_PASSWORD);
 #endif
+    // Den Neustart nach dem Upload übernimmt der loop, damit er wie alle anderen abläuft
+    ArduinoOTA.setRebootOnSuccess(false);
+    ArduinoOTA.onEnd([]() { restartAt = millis() + 500; });
     ArduinoOTA.onStart([]() {
       display::setBrightness(settings::backlight());
       ui::showMessage(ICON_SETTINGS, "Update", "Neue Firmware wird installiert …");
@@ -716,6 +800,7 @@ static void startNetworkServices() {
 void setup() {
   Serial.begin(115200);
 
+  recordBoot();
   settings::load();
   display::begin(settings::get().rotation);
   brightness = settings::backlight();
@@ -824,12 +909,12 @@ void loop() {
   }
   handleUpdates();
 
-  if (restartAt && (int32_t)(millis() - restartAt) > 0) ESP.restart();
+  if (restartAt && (int32_t)(millis() - restartAt) > 0) restartNow();
 
   if (portalActive && !wm.getConfigPortalActive()) {
     portalActive = false;
     // Portal ohne WLAN abgelaufen (z. B. Router nach Stromausfall noch nicht bereit) → neu versuchen
-    if (WiFi.status() != WL_CONNECTED) ESP.restart();
+    if (WiFi.status() != WL_CONNECTED) restartNow();
     ui::showMain();
   }
 
