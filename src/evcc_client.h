@@ -33,6 +33,10 @@ struct EvccState {
   float vehicleSoc = 0;       // %, bei Heizgeräten die Temperatur in °C
   float limitSoc = 0;         // %, Ladelimit des Ladepunkts (0 = keins), bei Heizgeräten die Zieltemperatur
   float vehicleLimitSoc = 0;  // %, im Fahrzeug eingestelltes Limit (0 = unbekannt)
+  float limitEnergy = 0;      // kWh, Energielimit dieser Ladung (0 = keins)
+  // evcc kennt den Ladestand des Fahrzeugs: das Ladelimit gilt in Prozent. Sonst (Fahrzeug ohne
+  // Schnittstelle, Gastfahrzeug) lässt sich die Ladung nur über die Energie in kWh begrenzen.
+  bool socBased = false;
   char vehicleName[VEHICLE_NAME_LEN] = "";  // interner Name in evcc (leer = Gastfahrzeug)
   char vehicleTitle[32] = "";
   char pvAction[12] = "";
@@ -60,10 +64,11 @@ struct EvccVehicles {
   uint8_t count = 0;
   char names[MAX_VEHICLES][VEHICLE_NAME_LEN] = {};
   char titles[MAX_VEHICLES][32] = {};
+  bool offline[MAX_VEHICLES] = {};  // evcc bekommt von diesem Fahrzeug keinen Ladestand
 };
 
 enum class CommandResult : uint8_t { None, Ok, Failed };
-enum class Command : uint8_t { Mode, Boost, Vehicle, Count };
+enum class Command : uint8_t { Mode, Boost, Vehicle, Limit, Count };
 
 // Zuletzt ausgeführter Befehl einer Art an einem Ladepunkt
 struct CommandStatus {
@@ -85,6 +90,8 @@ uint32_t requestMode(uint8_t index, ChargeMode mode);
 uint32_t requestBoost(uint8_t index, bool on);
 // Fahrzeug am Ladepunkt setzen (leerer Name = Gastfahrzeug / Zuordnung lösen)
 uint32_t requestVehicle(uint8_t index, const char* name);
+// Ladelimit setzen: in Prozent (limitsoc) oder als Energie dieser Ladung in kWh (limitenergy, 0 = keins)
+uint32_t requestLimit(uint8_t index, bool energy, float value);
 CommandStatus status(Command command, uint8_t index);
 // Kleinster bisher freier Stack des Netzwerk-Tasks in Byte (für /diag)
 uint32_t stackFree();

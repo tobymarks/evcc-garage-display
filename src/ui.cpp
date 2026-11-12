@@ -49,6 +49,7 @@ static ui::Callback messageTapCb;
 static ui::SwipeCallback swipeCb;
 static ui::Callback boostCb;
 static ui::Callback vehicleCb;
+static ui::LimitCallback limitCb;
 
 // Raster für 480x480
 static constexpr int MARGIN = 24;
@@ -64,6 +65,8 @@ static constexpr int DOT = 10;
 static constexpr int DOTS_SHIFT = 12;  // so weit rückt der Modusumschalter für die Punkte nach oben
 static constexpr int BOOST_PAD_H = 12;  // Innenabstand der Akku-Anzeige als Boost-Knopf
 static constexpr int BOOST_PAD_V = 4;
+static constexpr int LIMIT_GAP = 14;  // Abstand zwischen Fahrzeug und Ladelimit
+static constexpr int LIMIT_PAD = 14;
 static constexpr int SLIDE_PX = 48;  // Weg der Inhalte beim Wechsel des Ladepunkts
 
 // Hauptbildschirm
@@ -83,8 +86,11 @@ static lv_obj_t* lblBolt;
 static lv_obj_t* contIdle;
 static lv_obj_t* lblIdleIcon;
 static lv_obj_t* lblIdleText;
+static lv_obj_t* rowVehicle;  // Fahrzeug und Ladelimit nebeneinander
 static lv_obj_t* btnVehicle;  // Hülle um die Fahrzeugzeile; antippen wechselt das Fahrzeug
 static lv_obj_t* lblVehicle;
+static lv_obj_t* btnLimit;    // Ladelimit; antippen öffnet die Auswahl
+static lv_obj_t* lblLimit;
 static lv_obj_t* lblStatus;
 static lv_obj_t* barBlock;
 static lv_obj_t* barBg;
@@ -110,6 +116,25 @@ static const char* SEG_TEXT[3] = {"Smart", "Langsam", "Schnell"};
 static const char* SEG_SUB[3] = {"nur Sonne", "lädt immer", "volle Leistung"};
 
 // Hinweisbildschirm
+// Auswahl des Ladelimits: liegt über dem Hauptbildschirm
+static constexpr int PICK_MAX = 9;
+static constexpr int PICK_GAP = 12;
+static constexpr int PICK_TOP = 112;
+static constexpr int PICK_CANCEL_H = 64;
+static constexpr uint32_t PICK_TIMEOUT_MS = 30000;  // ohne Auswahl schließt sie sich wieder
+static const float PICK_SOC[] = {50, 60, 70, 80, 90, 100};
+static const float PICK_ENERGY[] = {5, 10, 15, 20, 30, 40, 50, 60, 0};  // kWh, 0 = kein Limit
+static lv_obj_t* picker;
+static lv_obj_t* lblPickTitle;
+static lv_obj_t* lblPickSub;
+static lv_obj_t* pickBtn[PICK_MAX];
+static lv_obj_t* pickLbl[PICK_MAX];
+static lv_obj_t* btnPickCancel;
+static lv_obj_t* lblPickCancel;
+static lv_timer_t* pickTimer;
+static bool pickerOpen = false;
+static bool pickerEnergy = false;  // Auswahl in kWh statt in Prozent
+
 static lv_obj_t* scrMsg;
 static lv_obj_t* lblMsgIcon;
 static lv_obj_t* lblMsgTitle;
@@ -221,11 +246,41 @@ static void onVehicleClicked(lv_event_t*) {
   if (vehicleCb) vehicleCb();
 }
 
+static void renderPicker();
+
+static void closePicker() {
+  if (!pickerOpen) return;
+  pickerOpen = false;
+  lv_obj_add_flag(picker, LV_OBJ_FLAG_HIDDEN);
+  lv_timer_pause(pickTimer);
+}
+
+static void openPicker() {
+  if (!hasLastView) return;
+  pickerOpen = true;
+  pickerEnergy = !lastView.state.socBased;
+  renderPicker();
+  lv_obj_remove_flag(picker, LV_OBJ_FLAG_HIDDEN);
+  lv_timer_reset(pickTimer);
+  lv_timer_resume(pickTimer);
+}
+
+static void onLimitClicked(lv_event_t*) { openPicker(); }
+
+static void onPickCancel(lv_event_t*) { closePicker(); }
+
+static void onPick(lv_event_t* e) {
+  const int i = (int)(intptr_t)lv_event_get_user_data(e);
+  const bool energy = pickerEnergy;
+  closePicker();
+  if (limitCb) limitCb(energy, (energy ? PICK_ENERGY : PICK_SOC)[i]);
+}
+
 // Fahrzeugzeile: so breit wie ihr Text, damit die Hülle beim Antippen genau ihn umschließt.
 // Nur ein zu langer Text bekommt die volle Breite und wird mit "…" gekürzt – mit fester
 // Kürzung und Breite nach Inhalt zusammen bliebe vom Text nur "…" übrig.
-static void setVehicleText(const char* text) {
-  static constexpr int MAX_W = CONTENT_W - 24;
+static void setVehicleText(const char* text, int reserved = 0) {
+  const int MAX_W = CONTENT_W - 24 - reserved;
   lv_point_t size;
   lv_text_get_size(&size, text, &font_22, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
   const bool tooLong = size.x > MAX_W;
@@ -271,16 +326,33 @@ static void buildMain() {
 
   // Kleine Zeile über der großen Zahl: Fahrzeug mit Ladestand bzw. "Kein Fahrzeug" über dem Überschuss.
   // Sind in evcc Fahrzeuge angelegt, lässt sich das Fahrzeug hier per Antippen wechseln.
-  btnVehicle = makeBox(mid);
+  rowVehicle = makeBox(mid);
+  lv_obj_set_size(rowVehicle, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(rowVehicle, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(rowVehicle, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_column(rowVehicle, LIMIT_GAP, 0);
+  lv_obj_set_style_margin_bottom(rowVehicle, 2, 0);
+  btnVehicle = makeBox(rowVehicle);
   lv_obj_set_size(btnVehicle, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
   lv_obj_set_style_radius(btnVehicle, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_style_pad_hor(btnVehicle, 12, 0);
   lv_obj_set_style_pad_ver(btnVehicle, 2, 0);
-  lv_obj_set_style_margin_bottom(btnVehicle, 2, 0);
   lv_obj_set_ext_click_area(btnVehicle, 12);
   lv_obj_add_event_cb(btnVehicle, onVehicleClicked, LV_EVENT_CLICKED, nullptr);
   lblVehicle = makeLabel(btnVehicle, &font_22);
   lv_obj_set_style_text_align(lblVehicle, LV_TEXT_ALIGN_CENTER, 0);
+  // Ladelimit als eigene Fläche daneben (Einstellung): mit Rahmen, damit sie als Taste erkennbar ist
+  btnLimit = makeBox(rowVehicle);
+  lv_obj_set_size(btnLimit, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_style_radius(btnLimit, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_pad_hor(btnLimit, LIMIT_PAD, 0);
+  lv_obj_set_style_pad_ver(btnLimit, 2, 0);
+  lv_obj_set_style_border_width(btnLimit, 1, 0);
+  lv_obj_set_style_bg_opa(btnLimit, LV_OPA_COVER, 0);
+  lv_obj_set_ext_click_area(btnLimit, 12);
+  lv_obj_add_flag(btnLimit, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(btnLimit, onLimitClicked, LV_EVENT_CLICKED, nullptr);
+  lblLimit = makeLabel(btnLimit, &font_22);
 
   // Ladeleistung – Zahl und Einheit auf gemeinsamer Grundlinie
   contPower = makeBox(mid);
@@ -404,6 +476,48 @@ static void buildMain() {
   }
 }
 
+static void buildPicker() {
+  picker = makeBox(scrMain);
+  lv_obj_set_size(picker, 480, 480);
+  lv_obj_set_style_bg_opa(picker, LV_OPA_COVER, 0);
+  lv_obj_add_flag(picker, LV_OBJ_FLAG_CLICKABLE);         // fängt Berührungen ab
+  lv_obj_remove_flag(picker, LV_OBJ_FLAG_GESTURE_BUBBLE);  // kein Wischen zum nächsten Ladepunkt
+  lv_obj_add_flag(picker, LV_OBJ_FLAG_HIDDEN);
+
+  lblPickTitle = makeLabel(picker, &font_26);
+  lv_label_set_text(lblPickTitle, "Ladelimit");
+  lv_obj_set_pos(lblPickTitle, MARGIN + 4, (HEADER_H - font_26.line_height) / 2 + 4);
+  lblPickSub = makeLabel(picker, &font_22);
+  lv_obj_set_width(lblPickSub, CONTENT_W - 8);
+  lv_label_set_long_mode(lblPickSub, LV_LABEL_LONG_DOT);
+  lv_obj_set_pos(lblPickSub, MARGIN + 4, HEADER_H + 4);
+
+  for (int i = 0; i < PICK_MAX; i++) {
+    pickBtn[i] = makeBox(picker);
+    lv_obj_set_style_radius(pickBtn[i], 20, 0);
+    lv_obj_set_style_bg_opa(pickBtn[i], LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(pickBtn[i], 1, 0);
+    lv_obj_add_event_cb(pickBtn[i], onPick, LV_EVENT_CLICKED, (void*)(intptr_t)i);
+    pickLbl[i] = makeLabel(pickBtn[i], &font_26);
+    lv_obj_center(pickLbl[i]);
+  }
+
+  btnPickCancel = makeBox(picker);
+  lv_obj_set_size(btnPickCancel, CONTENT_W, PICK_CANCEL_H);
+  lv_obj_set_pos(btnPickCancel, MARGIN, 480 - MARGIN - PICK_CANCEL_H);
+  lv_obj_set_style_radius(btnPickCancel, PICK_CANCEL_H / 2, 0);
+  lv_obj_set_style_border_width(btnPickCancel, 1, 0);
+  lv_obj_set_style_bg_opa(btnPickCancel, LV_OPA_COVER, LV_STATE_PRESSED);
+  lv_obj_add_flag(btnPickCancel, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(btnPickCancel, onPickCancel, LV_EVENT_CLICKED, nullptr);
+  lblPickCancel = makeLabel(btnPickCancel, &font_24);
+  lv_label_set_text(lblPickCancel, "Abbrechen");
+  lv_obj_center(lblPickCancel);
+
+  pickTimer = lv_timer_create([](lv_timer_t*) { closePicker(); }, PICK_TIMEOUT_MS, nullptr);
+  lv_timer_pause(pickTimer);
+}
+
 static void onMessageClicked(lv_event_t*) {
   if (messageTapCb) messageTapCb();
 }
@@ -452,6 +566,16 @@ static void applyTheme() {
   lv_obj_set_style_bg_color(btnVehicle, t.pressed, LV_STATE_PRESSED);
   lv_obj_set_style_bg_opa(btnVehicle, LV_OPA_COVER, LV_STATE_PRESSED);
   lv_obj_set_style_text_color(lblBattery, t.muted, 0);
+  lv_obj_set_style_text_color(lblLimit, t.text, 0);
+  lv_obj_set_style_bg_color(btnLimit, t.box, 0);
+  lv_obj_set_style_border_color(btnLimit, t.border, 0);
+  lv_obj_set_style_bg_color(btnLimit, t.pressed, LV_STATE_PRESSED);
+  lv_obj_set_style_bg_color(picker, t.bg, 0);
+  lv_obj_set_style_text_color(lblPickTitle, t.text, 0);
+  lv_obj_set_style_text_color(lblPickSub, t.muted, 0);
+  lv_obj_set_style_border_color(btnPickCancel, t.border, 0);
+  lv_obj_set_style_bg_color(btnPickCancel, t.pressed, LV_STATE_PRESSED);
+  lv_obj_set_style_text_color(lblPickCancel, t.text, 0);
   for (int i = 0; i < 3; i++) {
     lv_obj_set_style_bg_color(tile[i], t.box, 0);
     lv_obj_set_style_text_color(tileLabel[i], t.muted, 0);
@@ -653,6 +777,11 @@ static int greenShareText(const EvccState& s, char* buf, size_t len) {
 // Fahrzeug hat sein Ziel erreicht und lädt deshalb nicht weiter – egal wie viel Sonne da ist.
 // Maßgeblich ist das niedrigere der beiden Limits (Ladepunkt in evcc, Fahrzeug selbst).
 static bool limitReached(const EvccState& s, char* buf, size_t len) {
+  // Ohne Ladestand begrenzt evcc die Energie der Ladung
+  if (!s.heating && !s.socBased && s.limitEnergy > 0 && s.chargedEnergy >= s.limitEnergy * 1000.0f - 50.0f) {
+    snprintf(buf, len, "Ladelimit erreicht");
+    return true;
+  }
   if (s.vehicleSoc <= 0) return false;
   // Heizgeräte melden Ist- und Zieltemperatur
   if (s.heating) {
@@ -711,6 +840,8 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
     snprintf(buf, len, v.pendingBoost ? "Boost wird eingeschaltet …" : "Boost wird ausgeschaltet …");
   } else if (v.pendingVehicle) {
     snprintf(buf, len, "Fahrzeug wird gewechselt …");
+  } else if (v.pendingLimit >= 0) {
+    snprintf(buf, len, "Ladelimit wird gesetzt …");
   } else if (!s.connected && house && s.minChargePower > 0) {
     // Hilft bei der Entscheidung: reicht die Sonne gerade für Smart?
     if (surplus(s) >= s.minChargePower) {
@@ -756,6 +887,103 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
   }
 }
 
+// "20 kWh", "12,5 kWh"
+static void formatEnergy(char* buf, size_t len, float kwh) {
+  if (fabsf(kwh - roundf(kwh)) < 0.05f) {
+    snprintf(buf, len, "%d kWh", (int)lroundf(kwh));
+  } else {
+    char num[16];
+    formatDecimal(num, sizeof(num), kwh);
+    snprintf(buf, len, "%s kWh", num);
+  }
+}
+
+// Ladelimit neben der Fahrzeugzeile: Prozent, wenn evcc den Ladestand kennt, sonst Energie der Ladung
+static bool limitShown(const UiView& v) {
+  const EvccState& s = v.state;
+  return v.limitButton && s.valid && s.connected && !s.heating;
+}
+
+// Angezeigtes Limit: das angefragte, bis evcc es bestätigt. Prozent: 100 = voll, Energie: 0 = keins
+static float limitValue(const UiView& v) {
+  if (v.pendingLimit >= 0) return v.pendingLimit;
+  if (!v.state.socBased) return v.state.limitEnergy;
+  return v.state.limitSoc > 0 ? v.state.limitSoc : 100;
+}
+
+// Setzt den Text des Ladelimits und liefert die Breite, die es in der Zeile belegt
+static int renderLimit(const UiView& v) {
+  char buf[32];
+  const float value = limitValue(v);
+  if (v.state.socBased) {
+    snprintf(buf, sizeof(buf), "Limit %d %%", (int)lroundf(value));
+  } else if (value > 0) {
+    char num[20];
+    formatEnergy(num, sizeof(num), value);
+    snprintf(buf, sizeof(buf), "Limit %s", num);
+  } else {
+    snprintf(buf, sizeof(buf), "Kein Limit");
+  }
+  lv_label_set_text(lblLimit, buf);
+  lv_obj_set_style_text_opa(lblLimit, v.pendingLimit >= 0 ? LV_OPA_50 : LV_OPA_COVER, 0);
+  lv_point_t size;
+  lv_text_get_size(&size, buf, &font_22, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+  return size.x + 2 * LIMIT_PAD + 2 + LIMIT_GAP;
+}
+
+static void renderPicker() {
+  const UiView& v = lastView;
+  const EvccState& s = v.state;
+  const Theme& t = *theme;
+  const int count = pickerEnergy ? (int)(sizeof(PICK_ENERGY) / sizeof(PICK_ENERGY[0]))
+                                 : (int)(sizeof(PICK_SOC) / sizeof(PICK_SOC[0]));
+  const int rows = (count + 2) / 3;
+  const int areaH = 480 - MARGIN - PICK_CANCEL_H - PICK_GAP - 4 - PICK_TOP;
+  const int w = (CONTENT_W - 2 * PICK_GAP) / 3;
+  const int h = (areaH - (rows - 1) * PICK_GAP) / rows;
+  const float current = limitValue(v);
+  char buf[64], num[20];
+
+  if (pickerEnergy) {
+    formatDecimal(num, sizeof(num), s.chargedEnergy / 1000.0f);
+    snprintf(buf, sizeof(buf), "Für diese Ladung · bisher %s kWh", num);
+  } else if (s.vehicleSoc > 0) {
+    snprintf(buf, sizeof(buf), "%s%sjetzt %d %%", s.vehicleTitle, s.vehicleTitle[0] ? " · " : "",
+             (int)lroundf(s.vehicleSoc));
+  } else {
+    snprintf(buf, sizeof(buf), "%s", s.vehicleTitle[0] ? s.vehicleTitle : "Laden bis");
+  }
+  lv_label_set_text(lblPickSub, buf);
+
+  for (int i = 0; i < PICK_MAX; i++) {
+    setVisible(pickBtn[i], i < count);
+    if (i >= count) continue;
+    const float value = (pickerEnergy ? PICK_ENERGY : PICK_SOC)[i];
+    lv_obj_set_size(pickBtn[i], w, h);
+    lv_obj_set_pos(pickBtn[i], MARGIN + (i % 3) * (w + PICK_GAP), PICK_TOP + (i / 3) * (h + PICK_GAP));
+    if (!pickerEnergy)
+      snprintf(buf, sizeof(buf), "%d %%", (int)value);
+    else if (value > 0)
+      formatEnergy(buf, sizeof(buf), value);
+    else
+      snprintf(buf, sizeof(buf), "Kein Limit");
+    lv_label_set_text(pickLbl[i], buf);
+    lv_obj_set_style_text_font(pickLbl[i], !pickerEnergy ? &font_32 : value > 0 ? &font_24 : &font_22, 0);
+    // Weniger als schon geladen ergibt kein sinnvolles Energielimit
+    const bool enabled = !pickerEnergy || value == 0 || value * 1000.0f > s.chargedEnergy;
+    const bool active = fabsf(value - current) < 0.05f;
+    if (enabled)
+      lv_obj_add_flag(pickBtn[i], LV_OBJ_FLAG_CLICKABLE);
+    else
+      lv_obj_remove_flag(pickBtn[i], LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(pickBtn[i], active ? t.activeBg : t.box, 0);
+    lv_obj_set_style_bg_color(pickBtn[i], active ? t.activeBg : t.pressed, LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(pickBtn[i], active ? t.activeBg : t.border, 0);
+    lv_obj_set_style_text_color(pickLbl[i], active ? t.activeFg : t.text, 0);
+    lv_obj_set_style_text_opa(pickLbl[i], enabled ? LV_OPA_COVER : LV_OPA_30, 0);
+  }
+}
+
 static void renderDots(const UiView& v) {
   const Theme& t = *theme;
   const bool multi = v.pageCount > 1;
@@ -771,7 +999,8 @@ static void renderDots(const UiView& v) {
 }
 
 void ui::render(const UiView& v) {
-  if (hasLastView && v.page != lastView.page) slideIn(v.page > lastView.page ? 1 : -1);
+  const bool pageChanged = hasLastView && v.page != lastView.page;
+  if (pageChanged) slideIn(v.page > lastView.page ? 1 : -1);
   lastView = v;
   hasLastView = true;
   const EvccState& s = v.state;
@@ -805,6 +1034,14 @@ void ui::render(const UiView& v) {
   else
     lv_obj_remove_flag(btnVehicle, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_style_text_opa(lblVehicle, v.pendingVehicle ? LV_OPA_50 : LV_OPA_COVER, 0);
+  const bool limit = limitShown(v);
+  const int limitW = limit ? renderLimit(v) : 0;
+  setVisible(btnLimit, limit);
+  // Die Auswahl gehört zu diesem Ladepunkt und dieser Art von Limit
+  if (pickerOpen && (!limit || pageChanged || pickerEnergy == s.socBased || v.stale))
+    closePicker();
+  else if (pickerOpen)
+    renderPicker();
   if (house) {
     setVehicleText(ICON_PLUG " Kein Fahrzeug");
   } else if (vehicle && s.heating) {
@@ -825,9 +1062,10 @@ void ui::render(const UiView& v) {
     int n = snprintf(buf, sizeof(buf), ICON_CAR "%s%s", title[0] ? " " : "", title);
     if (!v.pendingVehicle && s.vehicleSoc > 0)
       snprintf(buf + n, sizeof(buf) - n, "%s%d %%", title[0] ? " · " : " ", (int)lroundf(s.vehicleSoc));
-    setVehicleText(buf);
+    setVehicleText(buf, limitW);
   }
   setVisible(btnVehicle, house || vehicle);
+  setVisible(rowVehicle, house || vehicle || limit);
   setVisible(contPower, showPower || house);
   setVisible(contIdle, !showPower && !house);
   if (showPower) {
@@ -900,13 +1138,15 @@ void ui::setNight(bool value) {
 }
 
 void ui::begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback onSwipe, Callback onBoost,
-               Callback onVehicle) {
+               Callback onVehicle, LimitCallback onLimit) {
+  limitCb = onLimit;
   modeCb = onMode;
   boostCb = onBoost;
   vehicleCb = onVehicle;
   settingsCb = onSettingsRequested;
   swipeCb = onSwipe;
   buildMain();
+  buildPicker();
   buildMessage();
   applyTheme();
   render(UiView());
@@ -918,6 +1158,13 @@ void ui::showMessage(const char* icon, const char* title, const char* text) {
   lv_label_set_text(lblMsgTitle, title);
   lv_label_set_text(lblMsgText, text);
   if (lv_screen_active() != scrMsg) lv_screen_load(scrMsg);
+}
+
+void ui::showLimitPicker(bool show) {
+  if (show)
+    openPicker();
+  else
+    closePicker();
 }
 
 void ui::onMessageTap(Callback cb) { messageTapCb = cb; }

@@ -18,6 +18,7 @@ struct Settings {
   bool boostButton;          // Akku-Anzeige oben schaltet im Modus Smart Battery Boost
   uint8_t brightnessPct;     // Helligkeit 10–100 %
   bool vehicleSwitch;        // Fahrzeugzeile antippen wechselt das Fahrzeug
+  bool chargeLimit;          // Ladelimit neben der Fahrzeugzeile anzeigen und per Antippen einstellen
   String password;           // schützt Weboberfläche und OTA (Benutzer "admin"); leer = offen
 };
 
