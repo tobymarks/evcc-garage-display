@@ -16,6 +16,7 @@ struct UiView {
   int8_t pendingBoost = -1;             // angefragter Boost (0/1), bis evcc ihn bestätigt
   bool pendingVehicle = false;          // Fahrzeugwechsel angefragt, bis evcc ihn bestätigt
   char pendingVehicleTitle[32] = "";
+  bool hasVehicles = false;             // in evcc sind Fahrzeuge angelegt – die Fahrzeugzeile lässt sich antippen
 };
 
 namespace ui {

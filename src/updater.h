@@ -14,6 +14,10 @@ Event loop(bool idle);
 void checkNow();
 // Installiert eine bekannte neuere Version sofort, auch ohne Leerlauf und ohne automatische Updates
 void installNow();
+// Läuft gerade eine Prüfung oder Installation?
+bool working();
+// Laufende Firmware sofort als gut markieren (sonst nach UPDATE_CONFIRM_MS mit WLAN)
+void confirm();
 const char* availableVersion();  // "" = aktuell
 String status();
 }  // namespace updater

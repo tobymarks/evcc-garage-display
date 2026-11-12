@@ -139,6 +139,7 @@ static void initRgbPanel() {
 
 static uint8_t touchAddr = 0;
 static bool touchDown = false;
+static uint8_t touchErrors = 0;
 static uint16_t touchX = 0, touchY = 0;
 
 static bool gtRead(uint16_t reg, uint8_t* buf, uint8_t len) {
@@ -175,7 +176,16 @@ static void initTouch() {
 static bool readTouch(uint16_t& x, uint16_t& y) {
   if (!touchAddr) return false;
   uint8_t status;
-  if (gtRead(0x814E, &status, 1) && (status & 0x80)) {
+  if (!gtRead(0x814E, &status, 1)) {
+    // Antwortet der Touch-Chip dauerhaft nicht, soll keine Berührung hängen bleiben
+    if (touchErrors < 10) touchErrors++;
+    if (touchErrors >= 10) touchDown = false;
+    x = touchX;
+    y = touchY;
+    return touchDown;
+  }
+  touchErrors = 0;
+  if (status & 0x80) {
     const uint8_t points = status & 0x0F;
     uint8_t p[4];
     touchDown = points > 0 && gtRead(0x8150, p, sizeof(p));
@@ -206,6 +216,17 @@ static void logicalToPhysical(int x, int y, int& px, int& py) {
 // ---------- LVGL ----------
 
 static uint32_t tickCb() { return millis(); }
+
+// Zeichenpuffer im internen RAM (schneller); ist dort nichts frei, im PSRAM
+static uint8_t* allocBuffer() {
+  void* buf = heap_caps_malloc(BUF_BYTES, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  if (!buf) buf = heap_caps_malloc(BUF_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!buf) {
+    log_e("kein Speicher für den Zeichenpuffer");
+    abort();
+  }
+  return (uint8_t*)buf;
+}
 
 static void flushCb(lv_display_t* disp, const lv_area_t* area, uint8_t* px) {
   lv_area_t a = *area;
@@ -266,11 +287,10 @@ void display::begin(uint8_t rot) {
 
   lv_display_t* disp = lv_display_create(LCD_WIDTH, LCD_HEIGHT);
   lv_display_set_flush_cb(disp, flushCb);
-  void* buf1 = heap_caps_malloc(BUF_BYTES, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  void* buf2 = heap_caps_malloc(BUF_BYTES, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  lv_display_set_buffers(disp, buf1, buf2, BUF_BYTES, LV_DISPLAY_RENDER_MODE_PARTIAL);
+  // Ein Puffer genügt: flushCb kopiert sofort in den Framebuffer
+  lv_display_set_buffers(disp, allocBuffer(), nullptr, BUF_BYTES, LV_DISPLAY_RENDER_MODE_PARTIAL);
   if (rotation) {
-    rotateBuf = (uint8_t*)heap_caps_malloc(BUF_BYTES, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    rotateBuf = allocBuffer();
     lv_display_set_rotation(disp, (lv_display_rotation_t)rotation);
   }
 

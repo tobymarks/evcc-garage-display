@@ -43,15 +43,19 @@ static uint32_t restartAt = 0;
 
 static EvccState states[MAX_LOADPOINTS];
 static uint8_t current = 0;  // angezeigter Ladepunkt (Position in den Einstellungen)
-static ChargeMode pendingMode[MAX_LOADPOINTS];
-static uint32_t pendingSince[MAX_LOADPOINTS];
-static bool boostPending[MAX_LOADPOINTS];  // Battery Boost angefragt, evcc hat ihn noch nicht bestätigt
+static EvccVehicles vehicles;  // in evcc angelegte Fahrzeuge
+// Angefragte Änderung (Modus, Boost, Fahrzeug), bis evcc sie bestätigt
+struct Pending {
+  bool active = false;
+  uint32_t id = 0;     // Nummer der Anfrage im evcc-Client; 0 = noch nicht abgeschickt
+  uint32_t since = 0;
+};
+static Pending pendings[(int)Command::Count][MAX_LOADPOINTS];
+static ChargeMode modeTarget[MAX_LOADPOINTS];
 static bool boostTarget[MAX_LOADPOINTS];
-static uint32_t boostSince[MAX_LOADPOINTS];
-static bool vehiclePending[MAX_LOADPOINTS];  // Fahrzeugwechsel angefragt, evcc hat ihn noch nicht bestätigt
-static char vehicleTargetName[MAX_LOADPOINTS][32];
+static char vehicleTargetName[MAX_LOADPOINTS][VEHICLE_NAME_LEN];
 static char vehicleTargetTitle[MAX_LOADPOINTS][32];
-static uint32_t vehicleSince[MAX_LOADPOINTS];
+static uint32_t vehicleSendAt[MAX_LOADPOINTS];  // erst abschicken, wenn nicht weitergetippt wird
 static const char* flashMsg = nullptr;
 static uint32_t flashUntil = 0;
 static bool dirty = true;
@@ -73,6 +77,11 @@ static void applySettings(std::function<String(const char*)> value) {
   Settings& s = settings::get();
   s.evccHost = value("host");
   s.evccHost.trim();
+  // Nur der Rechnername zählt: "http://" davor und einen Pfad dahinter verzeihen
+  const int scheme = s.evccHost.indexOf("://");
+  if (scheme >= 0) s.evccHost.remove(0, scheme + 3);
+  const int slash = s.evccHost.indexOf('/');
+  if (slash >= 0) s.evccHost.remove(slash);
   s.evccPort = constrain(value("port").toInt(), 1, 65535);
   settings::parseLoadpoints(value("lp").c_str(), s);
   s.latitude = value("lat").toFloat();
@@ -156,55 +165,61 @@ static void closeSettings() {
 
 // ---------- Bedienung ----------
 
+static bool previewActive();
+
+static Pending& pending(Command command, uint8_t index) { return pendings[(int)command][index]; }
+
+static void startPending(Command command, uint8_t index, uint32_t id) {
+  pending(command, index) = {true, id, millis()};
+  flashMsg = nullptr;
+  dirty = true;
+}
+
 static void onModeSelected(ChargeMode mode) {
   lastActivity = millis();
-  const ChargeMode shown = pendingMode[current] != ChargeMode::None ? pendingMode[current] : states[current].mode;
+  if (previewActive()) return;  // die Vorschau zeigt nicht den echten Ladepunkt
+  const ChargeMode shown = pending(Command::Mode, current).active ? modeTarget[current] : states[current].mode;
   if (mode == shown) return;
-  pendingMode[current] = mode;
-  pendingSince[current] = millis();
-  flashMsg = nullptr;
-  evcc::requestMode(current, mode);
-  dirty = true;
+  modeTarget[current] = mode;
+  startPending(Command::Mode, current, evcc::requestMode(current, mode));
 }
 
 // Antippen der Akku-Anzeige: Battery Boost umschalten
 static void onBoostTapped() {
   lastActivity = millis();
-  const bool shown = boostPending[current] ? boostTarget[current] : states[current].batteryBoost;
-  boostPending[current] = true;
+  if (previewActive()) return;
+  const bool shown = pending(Command::Boost, current).active ? boostTarget[current] : states[current].batteryBoost;
   boostTarget[current] = !shown;
-  boostSince[current] = millis();
-  flashMsg = nullptr;
-  evcc::requestBoost(current, !shown);
-  dirty = true;
+  startPending(Command::Boost, current, evcc::requestBoost(current, !shown));
 }
 
-// Antippen der Fahrzeugzeile: durch die in evcc angelegten Fahrzeuge und "Gastfahrzeug" wechseln
+// Antippen der Fahrzeugzeile: durch die in evcc angelegten Fahrzeuge und "Gastfahrzeug" wechseln.
+// Abgeschickt wird erst, wenn nicht weitergetippt wird – sonst bekäme der Ladepunkt beim
+// Durchtippen kurz jedes Fahrzeug dazwischen zugewiesen.
 static void onVehicleTapped() {
   lastActivity = millis();
+  if (previewActive()) return;
   const EvccState& st = states[current];
   if (!st.valid || !st.connected || st.heating) return;
-  const char* shown = vehiclePending[current] ? vehicleTargetName[current] : st.vehicleName;
-  if (st.vehicleCount == 0 && !shown[0]) return;
+  const bool wasPending = pending(Command::Vehicle, current).active;
+  const char* shown = wasPending ? vehicleTargetName[current] : st.vehicleName;
+  if (vehicles.count == 0 && !shown[0]) return;
 
   int idx = -1;
-  for (uint8_t i = 0; i < st.vehicleCount; i++) {
-    if (!strcmp(st.vehicleNames[i], shown)) {
+  for (uint8_t i = 0; i < vehicles.count; i++) {
+    if (!strcmp(vehicles.names[i], shown)) {
       idx = i;
       break;
     }
   }
   const int next = idx < 0 ? 0 : idx + 1;
-  const char* targetName = next < st.vehicleCount ? st.vehicleNames[next] : "";
-  const char* targetTitle = next < st.vehicleCount ? st.vehicleTitles[next] : "Gastfahrzeug";
-
-  vehiclePending[current] = true;
+  // Zeiger in die Liste, nicht in das Ziel selbst – das wird gleich überschrieben
+  const char* targetName = next < vehicles.count ? vehicles.names[next] : "";
+  const char* targetTitle = next < vehicles.count ? vehicles.titles[next] : "Gastfahrzeug";
   strlcpy(vehicleTargetName[current], targetName, sizeof(vehicleTargetName[0]));
   strlcpy(vehicleTargetTitle[current], targetTitle, sizeof(vehicleTargetTitle[0]));
-  vehicleSince[current] = millis();
-  flashMsg = nullptr;
-  evcc::requestVehicle(current, targetName);
-  dirty = true;
+  startPending(Command::Vehicle, current, 0);
+  vehicleSendAt[current] = millis() + VEHICLE_TAP_DELAY_MS;
 }
 
 static void showLoadpoint(uint8_t index) {
@@ -222,13 +237,15 @@ static void onSwipe(int delta) {
 
 static bool anyCharging() {
   for (uint8_t i = 0; i < evcc::count(); i++)
-    if (states[i].valid && states[i].charging) return true;
+    // Fällt evcc beim Laden aus, bleibt der letzte Stand stehen – nach einer Weile zählt er nicht mehr
+    if (states[i].valid && states[i].charging && millis() - states[i].updatedMs < CHARGING_STALE_MS) return true;
   return false;
 }
 
 static bool anyPending() {
   for (uint8_t i = 0; i < evcc::count(); i++)
-    if (pendingMode[i] != ChargeMode::None || boostPending[i] || vehiclePending[i]) return true;
+    for (int c = 0; c < (int)Command::Count; c++)
+      if (pendings[c][i].active) return true;
   return false;
 }
 
@@ -253,59 +270,71 @@ static bool darkTheme() {
   return timeValid() && sun::elevation(time(nullptr), s.latitude, s.longitude) < NIGHT_SUN_ELEVATION;
 }
 
+// Prüft eine angefragte Änderung: reached = evcc meldet den gewünschten Wert.
+// Liefert eine Fehlermeldung, wenn der Befehl scheiterte oder evcc ihn nicht übernommen hat.
+static const char* checkPending(Command command, uint8_t i, bool reached, const char* failed, const char* refused) {
+  Pending& p = pending(command, i);
+  if (!p.active || !p.id) return nullptr;
+  // Nur das Ergebnis genau dieser Anfrage zählt, nicht das einer früheren
+  const CommandStatus done = evcc::status(command, i);
+  if (done.id == p.id) {
+    if (done.result == CommandResult::Failed) {
+      p.active = false;
+      return failed;
+    }
+    // Bestätigt erst ein Zustand, dessen Abfrage nach dem Befehl begonnen hat
+    if (states[i].valid && (int32_t)(states[i].polledMs - done.doneMs) >= 0 && reached) {
+      p.active = false;
+      dirty = true;
+      return nullptr;
+    }
+  }
+  if (millis() - p.since > MODE_CONFIRM_TIMEOUT_MS) {
+    p.active = false;
+    return refused;
+  }
+  return nullptr;
+}
+
 static void updateState() {
   static bool lastConnected[MAX_LOADPOINTS], lastCharging[MAX_LOADPOINTS];
   static bool lastWifi = false, lastStale = true;
   static char lastClock[6] = "";
 
-  if (evcc::latest(states)) dirty = true;
+  if (evcc::latest(states, vehicles)) dirty = true;
 
   const uint32_t touched = display::lastTouchMs();
   const bool inUse = touched && millis() - touched < AUTO_SWITCH_AFTER_TOUCH_MS;
   int jumpTo = -1;  // Ladepunkt, an dem sich gerade etwas getan hat
   for (uint8_t i = 0; i < evcc::count(); i++) {
     const EvccState& st = states[i];
+
+    Pending& veh = pending(Command::Vehicle, i);
+    if (veh.active && st.valid && !st.connected) {
+      veh.active = false;  // abgesteckt: der Wechsel hat sich erledigt
+      dirty = true;
+    } else if (veh.active && !veh.id && (int32_t)(millis() - vehicleSendAt[i]) >= 0) {
+      if (!strcmp(st.vehicleName, vehicleTargetName[i])) {
+        veh.active = false;  // einmal im Kreis getippt – nichts zu tun
+        dirty = true;
+      } else {
+        veh.id = evcc::requestVehicle(i, vehicleTargetName[i]);
+        veh.since = millis();
+      }
+    }
+
     // Fehler nur melden, wenn der Ladepunkt gerade zu sehen ist
     const char* error = nullptr;
-    if (evcc::takeCommandResult(i) == CommandResult::Failed) {
-      pendingMode[i] = ChargeMode::None;
-      error = "Modus konnte nicht gesetzt werden";
-    }
-    if (pendingMode[i] != ChargeMode::None) {
-      if (st.valid && st.updatedMs > pendingSince[i] && st.mode == pendingMode[i]) {
-        pendingMode[i] = ChargeMode::None;
-        dirty = true;
-      } else if (millis() - pendingSince[i] > MODE_CONFIRM_TIMEOUT_MS) {
-        pendingMode[i] = ChargeMode::None;
-        error = "evcc hat den Modus nicht übernommen";
-      }
-    }
-    if (evcc::takeBoostResult(i) == CommandResult::Failed) {
-      boostPending[i] = false;
-      error = "Boost konnte nicht geschaltet werden";
-    }
-    if (boostPending[i]) {
-      if (st.valid && st.updatedMs > boostSince[i] && st.batteryBoost == boostTarget[i]) {
-        boostPending[i] = false;
-        dirty = true;
-      } else if (millis() - boostSince[i] > MODE_CONFIRM_TIMEOUT_MS) {
-        boostPending[i] = false;
-        error = "evcc hat den Boost nicht übernommen";
-      }
-    }
-    if (evcc::takeVehicleResult(i) == CommandResult::Failed) {
-      vehiclePending[i] = false;
-      error = "Fahrzeug konnte nicht gewechselt werden";
-    }
-    if (vehiclePending[i]) {
-      if (st.valid && st.updatedMs > vehicleSince[i] && !strcmp(st.vehicleName, vehicleTargetName[i])) {
-        vehiclePending[i] = false;
-        dirty = true;
-      } else if (millis() - vehicleSince[i] > MODE_CONFIRM_TIMEOUT_MS) {
-        vehiclePending[i] = false;
-        error = "evcc hat das Fahrzeug nicht übernommen";
-      }
-    }
+    const char* e;
+    if ((e = checkPending(Command::Mode, i, st.mode == modeTarget[i], "Modus konnte nicht gesetzt werden",
+                          "evcc hat den Modus nicht übernommen")))
+      error = e;
+    if ((e = checkPending(Command::Boost, i, st.batteryBoost == boostTarget[i],
+                          "Boost konnte nicht geschaltet werden", "evcc hat den Boost nicht übernommen")))
+      error = e;
+    if ((e = checkPending(Command::Vehicle, i, !strcmp(st.vehicleName, vehicleTargetName[i]),
+                          "Fahrzeug konnte nicht gewechselt werden", "evcc hat das Fahrzeug nicht übernommen")))
+      error = e;
     if (error) {
       if (i == current) flash(error);
       dirty = true;
@@ -362,10 +391,11 @@ static void updateState() {
     v.state = preview ? previewState : state;
     v.wifiConnected = preview || wifi;
     v.stale = preview ? previewStale : stale;
-    v.pendingMode = pendingMode[current];
+    v.pendingMode = pending(Command::Mode, current).active ? modeTarget[current] : ChargeMode::None;
     v.boostButton = settings::get().boostButton || (preview && previewBoost);
-    v.pendingBoost = boostPending[current] ? boostTarget[current] : -1;
-    v.pendingVehicle = !preview && vehiclePending[current];
+    v.pendingBoost = pending(Command::Boost, current).active ? boostTarget[current] : -1;
+    v.pendingVehicle = !preview && pending(Command::Vehicle, current).active;
+    v.hasVehicles = vehicles.count > 0;
     strlcpy(v.pendingVehicleTitle, vehicleTargetTitle[current], sizeof(v.pendingVehicleTitle));
     v.page = current;
     v.pageCount = evcc::count();
@@ -383,7 +413,7 @@ static void updateState() {
 
 static void updateBacklight() {
   if (display::takeWakeRequest()) lastActivity = millis();
-  if (display::lastTouchMs() > lastActivity) lastActivity = display::lastTouchMs();
+  if ((int32_t)(display::lastTouchMs() - lastActivity) > 0) lastActivity = display::lastTouchMs();
 
   const bool keepOn = portalActive || anyCharging() ||
                       settings::get().screenTimeoutMin == 0 ||
@@ -446,6 +476,8 @@ static void handleDiag() {
   snprintf(buf, sizeof(buf), "Interner RAM frei %u, minimal %u, größter Block %u\nPSRAM frei %u\n",
            heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
            heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+  s += buf;
+  snprintf(buf, sizeof(buf), "evcc-Task: Stack frei mindestens %lu Byte\n", (unsigned long)evcc::stackFree());
   s += buf;
   // Startete eine neue Firmware nicht sauber, hat der Bootloader die vorherige wiederhergestellt
   esp_app_desc_t desc;
@@ -510,6 +542,7 @@ static void handleSettings() {
         return;
       }
     }
+    updater::confirm();  // wer hier speichert, erreicht das Display – die Firmware läuft also
     applySettings([](const char* key) { return web.arg(key); });
     web.sendHeader("Refresh", "15; url=/settings");
     web.send(200, "text/html; charset=utf-8",
@@ -603,6 +636,13 @@ static void startNetworkServices() {
       ui::showMessage(ICON_SETTINGS, "Update", "Neue Firmware wird installiert …");
       lv_refr_now(nullptr);
     });
+    // Bricht der Upload ab, bliebe der Hinweis sonst bis zum Neustart stehen
+    ArduinoOTA.onError([](ota_error_t) {
+      if (portalActive)
+        showPortalMessage();
+      else
+        ui::showMain();
+    });
     ArduinoOTA.begin();
     otaStarted = true;
   }
@@ -671,10 +711,17 @@ static void maintainWifi() {
     }
     return;
   }
+  // Ist evcc länger aus, hilft das Neuverbinden nicht: nach dem ersten Versuch nur noch selten,
+  // und nie während eines Firmware-Downloads
+  static bool retried = false;
   if (states[0].updatedMs != 0 && now - states[0].updatedMs < STALE_AFTER_MS) {
     lastAttempt = now;
-  } else if (now - lastAttempt >= WIFI_STALE_RECONNECT_MS) {
+    retried = false;
+  } else if (updater::working()) {
     lastAttempt = now;
+  } else if (now - lastAttempt >= (retried ? WIFI_STALE_RETRY_MS : WIFI_STALE_RECONNECT_MS)) {
+    lastAttempt = now;
+    retried = true;
     WiFi.disconnect();
     WiFi.reconnect();
   }
