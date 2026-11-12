@@ -1,6 +1,7 @@
 #include "ui.h"
 
 #include <lvgl.h>
+#include <stdarg.h>
 
 #include "config.h"
 #include "fw_version.h"
@@ -220,6 +221,19 @@ static void onVehicleClicked(lv_event_t*) {
   if (vehicleCb) vehicleCb();
 }
 
+// Fahrzeugzeile: so breit wie ihr Text, damit die Hülle beim Antippen genau ihn umschließt.
+// Nur ein zu langer Text bekommt die volle Breite und wird mit "…" gekürzt – mit fester
+// Kürzung und Breite nach Inhalt zusammen bliebe vom Text nur "…" übrig.
+static void setVehicleText(const char* text) {
+  static constexpr int MAX_W = CONTENT_W - 24;
+  lv_point_t size;
+  lv_text_get_size(&size, text, &font_22, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+  const bool tooLong = size.x > MAX_W;
+  lv_label_set_long_mode(lblVehicle, tooLong ? LV_LABEL_LONG_DOT : LV_LABEL_LONG_CLIP);
+  lv_obj_set_width(lblVehicle, tooLong ? MAX_W : LV_SIZE_CONTENT);
+  lv_label_set_text(lblVehicle, text);
+}
+
 static void buildMain() {
   scrMain = lv_obj_create(nullptr);
   lv_obj_remove_flag(scrMain, LV_OBJ_FLAG_SCROLLABLE);
@@ -266,8 +280,6 @@ static void buildMain() {
   lv_obj_set_ext_click_area(btnVehicle, 12);
   lv_obj_add_event_cb(btnVehicle, onVehicleClicked, LV_EVENT_CLICKED, nullptr);
   lblVehicle = makeLabel(btnVehicle, &font_22);
-  lv_obj_set_style_max_width(lblVehicle, CONTENT_W - 24, 0);
-  lv_label_set_long_mode(lblVehicle, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_align(lblVehicle, LV_TEXT_ALIGN_CENTER, 0);
 
   // Ladeleistung – Zahl und Einheit auf gemeinsamer Grundlinie
@@ -662,6 +674,16 @@ static bool limitReached(const EvccState& s, char* buf, size_t len) {
   return true;
 }
 
+// Hängt an buf an und liefert die neue Länge; was nicht mehr passt, fällt weg
+static int append(char* buf, size_t len, int n, const char* fmt, ...) {
+  if (n < 0 || (size_t)n >= len - 1) return n;
+  va_list args;
+  va_start(args, fmt);
+  const int written = vsnprintf(buf + n, len - n, fmt, args);
+  va_end(args);
+  return written < 0 ? n : LV_MIN(n + written, (int)len - 1);
+}
+
 static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_color_t& color) {
   const EvccState& s = v.state;
   const Theme& t = *theme;
@@ -706,16 +728,17 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
     color = t.warn;
     snprintf(buf, len, "Ladepunkt ist aus – Modus wählen");
   } else if (s.charging) {
-    int n = snprintf(buf, len, s.heating ? "Heizt" : "Lädt");
-    if (s.phasesActive > 0) n += snprintf(buf + n, len - n, " · %d-phasig", s.phasesActive);
-    if (s.batteryBoost)
-      n += snprintf(buf + n, len - n, " · Akku hilft mit");
-    else
-      n += greenShareText(s, buf + n, len - n);
+    int n = append(buf, len, 0, s.heating ? "Heizt" : "Lädt");
+    if (s.phasesActive > 0) n = append(buf, len, n, " · %d-phasig", s.phasesActive);
     if (!strcmp(s.pvAction, "disable") && s.pvRemaining > 0) {
+      // Die Warnung verdrängt den Sonnenanteil – beides zusammen passt nicht in die Zeile
       formatCountdown(tmp, sizeof(tmp), s.pvRemaining);
-      snprintf(buf + n, len - n, " · stoppt in %s", tmp);
+      append(buf, len, n, " · stoppt in %s", tmp);
       color = t.warn;
+    } else if (s.batteryBoost) {
+      append(buf, len, n, " · Akku hilft mit");
+    } else if (greenShareText(s, tmp, sizeof(tmp)) > 0) {
+      append(buf, len, n, "%s", tmp);
     }
   } else if (limitReached(s, tmp, sizeof(tmp))) {
     color = t.solarText;
@@ -774,7 +797,7 @@ void ui::render(const UiView& v) {
 
   // Fahrzeug mit Ladestand, solange es angesteckt ist; sind Fahrzeuge in evcc angelegt,
   // erscheint auch ohne erkanntes Auto "Gastfahrzeug", damit man es antippen und wechseln kann
-  const bool canSelectVehicle = showPower && !s.heating && (s.vehicleCount > 0 || s.vehicleName[0]);
+  const bool canSelectVehicle = showPower && !s.heating && (v.hasVehicles || s.vehicleName[0]);
   const bool vehicle = showPower && (s.vehicleSoc > 0 || s.vehicleTitle[0] || canSelectVehicle || v.pendingVehicle);
   if (canSelectVehicle)
     lv_obj_add_flag(btnVehicle, LV_OBJ_FLAG_CLICKABLE);
@@ -782,7 +805,7 @@ void ui::render(const UiView& v) {
     lv_obj_remove_flag(btnVehicle, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_style_text_opa(lblVehicle, v.pendingVehicle ? LV_OPA_50 : LV_OPA_COVER, 0);
   if (house) {
-    lv_label_set_text(lblVehicle, ICON_PLUG " Kein Fahrzeug");
+    setVehicleText(ICON_PLUG " Kein Fahrzeug");
   } else if (vehicle && s.heating) {
     // Wärmepumpe oder Heizstab: Temperatur mit einer Nachkommastelle wie in evcc, ohne Auto-Symbol
     char temp[16];
@@ -792,7 +815,7 @@ void ui::render(const UiView& v) {
                s.vehicleTitle[0] ? " · " : " ", temp);
     else
       snprintf(buf, sizeof(buf), "%s", s.vehicleTitle);
-    lv_label_set_text(lblVehicle, buf);
+    setVehicleText(buf);
   } else if (vehicle) {
     const char* title = v.pendingVehicle        ? v.pendingVehicleTitle
                         : s.vehicleTitle[0]     ? s.vehicleTitle
@@ -801,7 +824,7 @@ void ui::render(const UiView& v) {
     int n = snprintf(buf, sizeof(buf), ICON_CAR "%s%s", title[0] ? " " : "", title);
     if (!v.pendingVehicle && s.vehicleSoc > 0)
       snprintf(buf + n, sizeof(buf) - n, "%s%d %%", title[0] ? " · " : " ", (int)lroundf(s.vehicleSoc));
-    lv_label_set_text(lblVehicle, buf);
+    setVehicleText(buf);
   }
   setVisible(btnVehicle, house || vehicle);
   setVisible(contPower, showPower || house);

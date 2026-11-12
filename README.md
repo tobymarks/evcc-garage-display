@@ -60,7 +60,7 @@ evcc ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
   - Diese Einstellungen stehen unter `custom_sdkconfig` in `platformio.ini`; das Framework wird deshalb beim ersten Build neu kompiliert (einige Minuten)
 - Schriften: Montserrat (SIL OFL) und die Icons der evcc-Oberfläche – [Shopicons](https://github.com/H2D2-Design/h2d2-shopicons)
   und Material Symbols (beide Apache-2.0), SVGs in `tools/icons` (das Akku-Symbol ist selbst gezeichnet). Erzeugt mit `tools/gen_fonts.sh` (braucht fontforge)
-- Daten: alle 3 s `GET /api/state?jq=…` – der jq-Filter liefert nur die benötigten Felder (~400 Byte statt ~70 KB),
+- Daten: alle 3 s `GET /api/state?jq=…` – der jq-Filter liefert nur die benötigten Felder (unter 1 KB statt ~70 KB),
   darunter `pvPower`, `homePower`, Ladestand und Leistung des Hausakkus und die Netzleistung
 - Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}`, `POST /api/loadpoints/<n>/mode/{smart|now}` sowie `POST /api/loadpoints/<n>/vehicle/<name>` bzw. `DELETE /api/loadpoints/<n>/vehicle`
 - Netzwerk läuft in einem eigenen Task auf Kern 0, die Oberfläche bleibt dadurch flüssig
@@ -131,7 +131,7 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
 | `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)); `/preview` ohne Parameter beendet |
 | `/update` | Firmware-Version und Stand der automatischen Updates; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
-| `/diag` | Laufzeit, Neustartgrund, freier Speicher, zurückgerollte Updates und der letzte gespeicherte Absturz |
+| `/diag` | Laufzeit, Neustartgrund, freier Speicher und Stack des evcc-Tasks, zurückgerollte Updates und der letzte gespeicherte Absturz |
 | `/wifiscan` | löst eine WLAN-Suche aus (Lasttest für die Bildausgabe) |
 
 Ohne Gerät: `./tools/sim/render.sh <Ordner> nocar charging …` rendert dieselben Beispielzustände mit der

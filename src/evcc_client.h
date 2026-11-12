@@ -8,10 +8,14 @@
 //   Fast   = now                        → volle Leistung
 enum class ChargeMode : uint8_t { None, Smart, Slow, Fast };
 
+#define VEHICLE_NAME_LEN 48  // interner Name eines Fahrzeugs in evcc, mit Abschluss
+#define MAX_VEHICLES 16      // mehr Fahrzeuge lassen sich nicht durchtippen
+
 struct EvccState {
   bool valid = false;
   bool missing = false;     // evcc kennt die eingestellte Ladepunkt-Nummer nicht
   uint32_t updatedMs = 0;
+  uint32_t polledMs = 0;    // Start der Abfrage, aus der dieser Zustand stammt
 
   char title[32] = "";
   ChargeMode mode = ChargeMode::None;
@@ -29,11 +33,8 @@ struct EvccState {
   float vehicleSoc = 0;       // %, bei Heizgeräten die Temperatur in °C
   float limitSoc = 0;         // %, Ladelimit des Ladepunkts (0 = keins), bei Heizgeräten die Zieltemperatur
   float vehicleLimitSoc = 0;  // %, im Fahrzeug eingestelltes Limit (0 = unbekannt)
-  char vehicleName[32] = "";   // interner Name in evcc (leer = Gastfahrzeug)
+  char vehicleName[VEHICLE_NAME_LEN] = "";  // interner Name in evcc (leer = Gastfahrzeug)
   char vehicleTitle[32] = "";
-  uint8_t vehicleCount = 0;   // in evcc angelegte Fahrzeuge (für Wechsel per Antippen)
-  char vehicleNames[8][32] = {};
-  char vehicleTitles[8][32] = {};
   char pvAction[12] = "";
   uint32_t pvRemaining = 0;   // s
   bool planActive = false;
@@ -54,19 +55,37 @@ struct EvccState {
   float solarTomorrow = -1;   // Wh, Solarprognose für morgen
 };
 
+// In evcc angelegte Fahrzeuge (für den Wechsel per Antippen) – gelten für alle Ladepunkte
+struct EvccVehicles {
+  uint8_t count = 0;
+  char names[MAX_VEHICLES][VEHICLE_NAME_LEN] = {};
+  char titles[MAX_VEHICLES][32] = {};
+};
+
 enum class CommandResult : uint8_t { None, Ok, Failed };
+enum class Command : uint8_t { Mode, Boost, Vehicle, Count };
+
+// Zuletzt ausgeführter Befehl einer Art an einem Ladepunkt
+struct CommandStatus {
+  uint32_t id = 0;  // Nummer aus request…(), 0 = noch keiner
+  CommandResult result = CommandResult::None;
+  uint32_t doneMs = 0;  // Zeitpunkt, zu dem evcc geantwortet hat
+};
 
 // Ladepunkte werden über ihre Position in den Einstellungen angesprochen (0 … count()-1)
 namespace evcc {
 void begin();
 uint8_t count();
-// Kopiert den neuesten Zustand aller Ladepunkte; true, wenn er sich seit dem letzten Aufruf geändert hat.
-bool latest(EvccState* out);
-void requestMode(uint8_t index, ChargeMode mode);
-CommandResult takeCommandResult(uint8_t index);
-void requestBoost(uint8_t index, bool on);
-CommandResult takeBoostResult(uint8_t index);
+// Kopiert den neuesten Zustand aller Ladepunkte und die Fahrzeugliste, sofern sich seit dem
+// letzten Aufruf etwas geändert hat; dann true.
+bool latest(EvccState* out, EvccVehicles& vehicles);
+// Befehle laufen im Netzwerk-Task; je Art und Ladepunkt zählt nur der zuletzt angefragte.
+// Rückgabe: Nummer der Anfrage, zum Abgleich mit status().
+uint32_t requestMode(uint8_t index, ChargeMode mode);
+uint32_t requestBoost(uint8_t index, bool on);
 // Fahrzeug am Ladepunkt setzen (leerer Name = Gastfahrzeug / Zuordnung lösen)
-void requestVehicle(uint8_t index, const char* name);
-CommandResult takeVehicleResult(uint8_t index);
+uint32_t requestVehicle(uint8_t index, const char* name);
+CommandStatus status(Command command, uint8_t index);
+// Kleinster bisher freier Stack des Netzwerk-Tasks in Byte (für /diag)
+uint32_t stackFree();
 }  // namespace evcc

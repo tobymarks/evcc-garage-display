@@ -132,10 +132,8 @@ void updater::begin() {
 
 updater::Event updater::loop(bool idle) {
   // Neue Firmware läuft stabil → behalten (sonst stellt der Bootloader beim nächsten Neustart die alte wieder her)
-  if (!confirmed && millis() > UPDATE_CONFIRM_MS) {
-    confirmed = true;
-    esp_ota_mark_app_valid_cancel_rollback();
-  }
+  // Ohne WLAN käme kein weiteres Update mehr an – dann lieber beim nächsten Neustart zurück zur alten.
+  if (millis() > UPDATE_CONFIRM_MS && WiFi.status() == WL_CONNECTED) confirm();
 
   if (installFinished) {
     installFinished = false;
@@ -156,10 +154,20 @@ updater::Event updater::loop(bool idle) {
     start(Job::Install);
     if (busy) return Event::Installing;
   }
+  // "Sofort installieren" gilt nur für eine jetzt bekannte Version, nicht für spätere
+  if (!available[0]) forceInstall = false;
   return Event::None;
 }
 
 void updater::checkNow() { nextCheck = millis(); }
+
+bool updater::working() { return busy; }
+
+void updater::confirm() {
+  if (confirmed) return;
+  confirmed = true;
+  esp_ota_mark_app_valid_cancel_rollback();
+}
 
 void updater::installNow() { forceInstall = true; }
 
