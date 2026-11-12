@@ -62,7 +62,7 @@ evcc ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
   und Material Symbols (beide Apache-2.0), SVGs in `tools/icons` (das Akku-Symbol ist selbst gezeichnet). Erzeugt mit `tools/gen_fonts.sh` (braucht fontforge)
 - Daten: alle 3 s `GET /api/state?jq=…` – der jq-Filter liefert nur die benötigten Felder (unter 1 KB statt ~70 KB),
   darunter `pvPower`, `homePower`, Ladestand und Leistung des Hausakkus und die Netzleistung
-- Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}`, `POST /api/loadpoints/<n>/mode/{smart|now}` sowie `POST /api/loadpoints/<n>/vehicle/<name>` bzw. `DELETE /api/loadpoints/<n>/vehicle`
+- Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}`, `POST /api/loadpoints/<n>/mode/{smart|now}` sowie `POST /api/loadpoints/<n>/vehicle/<name>` bzw. `DELETE /api/loadpoints/<n>/vehicle`; Ladelimit: `POST /api/loadpoints/<n>/limitsoc/<Prozent>` bzw. `POST /api/loadpoints/<n>/limitenergy/<kWh>`
 - Netzwerk läuft in einem eigenen Task auf Kern 0, die Oberfläche bleibt dadurch flüssig
 - Eine Taste zeigt den neuen Modus erst voll an, wenn evcc ihn bestätigt hat (vorher halbtransparent)
 
@@ -117,7 +117,7 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
 
 - **Einstellungen im Heimnetz:** im Browser `http://evcc-garage.local:8080` aufrufen (leitet auf `/settings`).
   Unter „Anzeige" lässt sich ein- und ausschalten, was das Display zeigt und was sich antippen lässt
-  (Fahrzeug wechseln, Battery Boost); die Seite kann dazu die aktuelle Anzeige des Displays laden.
+  (Fahrzeug wechseln, Ladelimit, Battery Boost); die Seite kann dazu die aktuelle Anzeige des Displays laden.
   Diese Schalter sowie Design, Helligkeit und Bildschirm-Timeout wirken sofort. Nur Änderungen an
   evcc-Adresse, Port, Ladepunkten, Drehung oder Passwort starten das Display neu. Das WLAN bleibt unverändert.
 - **Passwort (optional):** unter „System" setzen. Danach verlangen alle Seiten des Displays die Anmeldung als
@@ -152,6 +152,10 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
 `/settings`.
 
 - **12.11.2026**
+  - Neuer Schalter „Ladelimit" (ab Werk aus): Neben dem Fahrzeug steht das Ladelimit, antippen öffnet die
+    Auswahl. Kennt evcc den Ladestand, gilt es in Prozent (50–100 %). Ohne Ladestand – etwa bei Fahrzeugen
+    ohne funktionierende Hersteller-Schnittstelle oder beim Gastfahrzeug – begrenzt es wie in evcc die
+    Energie dieser Ladung in kWh. evcc setzt das Limit beim Abstecken zurück.
   - Einstellungsseite mit den Abschnitten Verbindung, Anzeige und System sowie einer Vorschau der Anzeige.
     Die meisten Änderungen wirken sofort, ohne Neustart.
   - Neuer Schalter „Fahrzeug wechseln" (ab Werk an, wie bisher) und ein optionales Passwort für

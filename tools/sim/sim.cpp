@@ -70,7 +70,14 @@ int main(int argc, char** argv) {
       v.pageCount = count;
       *sep = 0;
     }
-    const std::string file = std::string(argv[i]) + (v.pageCount > 1 ? "-lp" + std::to_string(v.page + 1) : "");
+    // "limitsoc+pick" – mit geöffneter Auswahl des Ladelimits
+    bool pick = false;
+    if (char* plus = strstr(argv[i], "+pick")) {
+      pick = true;
+      *plus = 0;
+    }
+    v.limitButton = !strncmp(argv[i], "limit", 5) && strcmp(argv[i], "limit");
+    const std::string file = std::string(argv[i]) + (pick ? "-pick" : "") + (v.pageCount > 1 ? "-lp" + std::to_string(v.page + 1) : "");
     // "settings": Hinweis beim Öffnen der Einstellungen (Text wie in main.cpp)
     const bool settings = !strcmp(argv[i], "settings");
     if (settings)
@@ -90,6 +97,7 @@ int main(int argc, char** argv) {
       if (!settings) {
         ui::showMain();
         ui::render(v);
+        ui::showLimitPicker(pick);
       }
       now += 1000;
       lv_timer_handler();  // Animationen (Wechsel des Ladepunkts) zu Ende laufen lassen

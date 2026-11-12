@@ -20,6 +20,8 @@ struct Slot {
   ChargeMode mode = ChargeMode::None;
   bool on = false;
   char vehicle[VEHICLE_NAME_LEN] = "";
+  bool limitEnergy = false;  // Limit in kWh statt in Prozent
+  float limit = 0;
   CommandStatus done;
 };
 static Slot slots[(int)Command::Count][MAX_LOADPOINTS];
@@ -89,6 +91,7 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   s.vehicleSoc = lp["vehicleSoc"] | 0.0f;
   s.limitSoc = lp["limitSoc"] | 0.0f;
   s.vehicleLimitSoc = lp["vehicleLimitSoc"] | 0.0f;
+  s.limitEnergy = lp["limitEnergy"] | 0.0f;
   strlcpy(s.vehicleName, lp["vehicleName"] | "", sizeof(s.vehicleName));
   strlcpy(s.vehicleTitle, lp["vehicleTitle"] | "", sizeof(s.vehicleTitle));
   strlcpy(s.pvAction, lp["pvAction"] | "", sizeof(s.pvAction));
@@ -123,6 +126,7 @@ static void parseVehicles(JsonObject root, EvccVehicles& out) {
     if (!name[0] || strlen(name) >= VEHICLE_NAME_LEN) continue;
     strlcpy(out.names[out.count], name, sizeof(out.names[0]));
     strlcpy(out.titles[out.count], v["t"] | name, sizeof(out.titles[0]));
+    out.offline[out.count] = v["o"] | false;
     out.count++;
   }
 }
@@ -156,6 +160,13 @@ static void poll() {
     all[i].polledMs = started;
   }
   parseVehicles(root, vehicles);
+  // Wie in evcc: Prozent-Limit, sobald ein Ladestand da ist oder das Fahrzeug einen liefern kann
+  for (uint8_t i = 0; i < lpCount; i++) {
+    EvccState& st = all[i];
+    st.socBased = st.vehicleSoc > 0;
+    for (uint8_t k = 0; k < vehicles.count && !st.socBased && st.vehicleName[0]; k++)
+      if (!strcmp(vehicles.names[k], st.vehicleName)) st.socBased = !vehicles.offline[k];
+  }
 
   xSemaphoreTake(lock, portMAX_DELAY);
   for (uint8_t i = 0; i < lpCount; i++) shared[i] = all[i];
@@ -204,6 +215,15 @@ static bool setVehicle(uint8_t index, const char* name) {
   return code == HTTP_CODE_OK;
 }
 
+static bool setLimit(uint8_t index, bool energy, float value) {
+  char path[32];
+  if (energy)
+    snprintf(path, sizeof(path), "/limitenergy/%.1f", value);
+  else
+    snprintf(path, sizeof(path), "/limitsoc/%d", (int)lroundf(value));
+  return post(index, path) == HTTP_CODE_OK;
+}
+
 static void task(void*) {
   uint32_t lastPoll = 0;
   for (;;) {
@@ -216,6 +236,8 @@ static void task(void*) {
         const bool on = slot.on;
         char vehicle[VEHICLE_NAME_LEN];
         strlcpy(vehicle, slot.vehicle, sizeof(vehicle));
+        const bool limitEnergy = slot.limitEnergy;
+        const float limit = slot.limit;
         slot.wantedId = 0;
         xSemaphoreGive(lock);
         if (!id) continue;
@@ -226,6 +248,7 @@ static void task(void*) {
             case Command::Mode: ok = setMode(i, mode); break;
             case Command::Boost: ok = setBoost(i, on); break;
             case Command::Vehicle: ok = setVehicle(i, vehicle); break;
+            case Command::Limit: ok = setLimit(i, limitEnergy, limit); break;
             default: break;
           }
           lastPoll = 0;  // sofort neuen Zustand holen
@@ -260,18 +283,18 @@ void evcc::begin() {
   }
   // Ältere evcc-Versionen liefern Akku und Netz als batterySoc, batteryPower und gridPower,
   // neuere unter battery.soc, battery.power und grid.power
-  char jq[1280];
+  char jq[1408];
   const int jqLen = snprintf(jq, sizeof(jq),
            "{lps:[.loadpoints[%s]|if . then {title,mode,alwaysCharge,chargePower,charging,connected,chargedEnergy,"
            "chargeDuration,phasesActive,sessionSolarPercentage,vehicleName,vehicleTitle,vehicleSoc,"
-           "limitSoc:(.effectiveLimitSoc // .limitSoc),vehicleLimitSoc,pvAction,pvRemaining,"
+           "limitSoc:(.effectiveLimitSoc // .limitSoc),vehicleLimitSoc,limitEnergy,pvAction,pvRemaining,"
            "planActive,smartCostActive,batteryBoost,minCurrent:(.effectiveMinCurrent // .minCurrent),phasesConfigured,"
            "chargerPhases1p3p,chargerFeatureHeating} else null end],green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
            "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc),"
            "batp:((try (if (.battery.devices|length)>0 then .battery.power else null end) catch null) // .batteryPower),"
            "grid:((try .grid.power catch null) // .gridPower),prio:.prioritySoc,"
            "fc:(try [.forecast.solar.today.energy,.forecast.solar.tomorrow.energy] catch null),"
-           "veh:(try [.vehicles|to_entries[]|{n:.key,t:.value.title}] catch [])}",
+           "veh:(try [.vehicles|to_entries[]|{n:.key,t:.value.title,o:any(.value.features[]?;.==\"Offline\")}] catch [])}",
            lps.c_str());
   if (jqLen >= (int)sizeof(jq)) log_e("jq-Filter abgeschnitten (%d Zeichen)", jqLen);
   stateUrl = server + "/api/state?jq=" + urlEncode(jq);
@@ -319,6 +342,20 @@ uint32_t evcc::requestVehicle(uint8_t index, const char* name) {
   return request(
       Command::Vehicle, index,
       [](Slot& s, const void* v) { strlcpy(s.vehicle, (const char*)v, sizeof(s.vehicle)); }, name ? name : "");
+}
+
+uint32_t evcc::requestLimit(uint8_t index, bool energy, float value) {
+  struct Limit {
+    bool energy;
+    float value;
+  } limit = {energy, value};
+  return request(
+      Command::Limit, index,
+      [](Slot& s, const void* v) {
+        s.limitEnergy = ((const Limit*)v)->energy;
+        s.limit = ((const Limit*)v)->value;
+      },
+      &limit);
 }
 
 CommandStatus evcc::status(Command command, uint8_t index) {

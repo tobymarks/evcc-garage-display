@@ -18,15 +18,21 @@ struct UiView {
   char pendingVehicleTitle[32] = "";
   bool hasVehicles = false;             // in evcc sind Fahrzeuge angelegt – die Fahrzeugzeile lässt sich antippen
   bool vehicleSwitch = true;            // Fahrzeugwechsel per Antippen erlaubt (Einstellung)
+  bool limitButton = false;             // Ladelimit neben dem Fahrzeug zeigen und einstellen (Einstellung)
+  float pendingLimit = -1;              // angefragtes Ladelimit (% bzw. kWh), bis evcc es bestätigt; -1 = keins
 };
 
 namespace ui {
 using ModeCallback = void (*)(ChargeMode);
 using Callback = void (*)();
 using SwipeCallback = void (*)(int delta);  // +1 = nächster, -1 = vorheriger Ladepunkt
+// Ladelimit gewählt: in Prozent oder (energy) als Energie dieser Ladung in kWh, 0 = kein Limit
+using LimitCallback = void (*)(bool energy, float value);
 
 void begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback onSwipe, Callback onBoost = nullptr,
-           Callback onVehicle = nullptr);
+           Callback onVehicle = nullptr, LimitCallback onLimit = nullptr);
+// Auswahl des Ladelimits öffnen bzw. schließen (öffnet sich sonst per Antippen des Limits)
+void showLimitPicker(bool show);
 void setNight(bool night);
 void render(const UiView& view);
 

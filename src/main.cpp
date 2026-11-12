@@ -58,6 +58,8 @@ static ChargeMode modeTarget[MAX_LOADPOINTS];
 static bool boostTarget[MAX_LOADPOINTS];
 static char vehicleTargetName[MAX_LOADPOINTS][VEHICLE_NAME_LEN];
 static char vehicleTargetTitle[MAX_LOADPOINTS][32];
+static float limitTarget[MAX_LOADPOINTS];
+static bool limitTargetEnergy[MAX_LOADPOINTS];  // Limit in kWh statt in Prozent
 static uint32_t vehicleSendAt[MAX_LOADPOINTS];  // erst abschicken, wenn nicht weitergetippt wird
 static const char* flashMsg = nullptr;
 static uint32_t flashUntil = 0;
@@ -71,6 +73,7 @@ static EvccState previewState;
 static bool previewStale = false;
 static int previewDark = -1;  // -1 = Einstellung verwenden
 static uint32_t previewUntil = 0;
+static bool previewLimit = false;  // Ladelimit in der Vorschau zeigen, auch wenn es ausgeschaltet ist
 static bool previewBoost = false;  // Boost-Knopf in der Vorschau zeigen, auch wenn er ausgeschaltet ist
 
 // ---------- WLAN-Einrichtung / Einstellungen ----------
@@ -103,6 +106,8 @@ static bool applySettings(std::function<String(const char*)> value) {
   if (!boost.isEmpty()) s.boostButton = boost.toInt() != 0;
   const String bright = value("bright");
   if (!bright.isEmpty()) s.brightnessPct = constrain(bright.toInt(), MIN_BRIGHTNESS_PCT, 100);
+  const String chargeLimit = value("limit");
+  if (!chargeLimit.isEmpty()) s.chargeLimit = chargeLimit.toInt() != 0;
   const String vehicleSwitch = value("vehsw");
   if (!vehicleSwitch.isEmpty()) s.vehicleSwitch = vehicleSwitch.toInt() != 0;
   // Leeres Feld = Passwort unverändert; entfernt wird es nur ausdrücklich
@@ -243,6 +248,17 @@ static void onVehicleTapped() {
   vehicleSendAt[current] = millis() + VEHICLE_TAP_DELAY_MS;
 }
 
+// Ladelimit in der Auswahl gewählt
+static void onLimitSelected(bool energy, float value) {
+  lastActivity = millis();
+  if (previewActive()) return;
+  const EvccState& st = states[current];
+  if (!settings::get().chargeLimit || !st.valid || !st.connected || st.heating) return;
+  limitTarget[current] = value;
+  limitTargetEnergy[current] = energy;
+  startPending(Command::Limit, current, evcc::requestLimit(current, energy, value));
+}
+
 static void showLoadpoint(uint8_t index) {
   if (index == current || index >= evcc::count()) return;
   current = index;
@@ -356,6 +372,16 @@ static void updateState() {
     if ((e = checkPending(Command::Vehicle, i, !strcmp(st.vehicleName, vehicleTargetName[i]),
                           "Fahrzeug konnte nicht gewechselt werden", "evcc hat das Fahrzeug nicht übernommen")))
       error = e;
+    Pending& lim = pending(Command::Limit, i);
+    if (lim.active && st.valid && !st.connected) {
+      lim.active = false;  // abgesteckt: evcc setzt das Limit ohnehin zurück
+      dirty = true;
+    }
+    const bool limitReached = limitTargetEnergy[i] ? fabsf(st.limitEnergy - limitTarget[i]) < 0.05f
+                                                   : lroundf(st.limitSoc) == lroundf(limitTarget[i]);
+    if ((e = checkPending(Command::Limit, i, limitReached, "Ladelimit konnte nicht gesetzt werden",
+                          "evcc hat das Ladelimit nicht übernommen")))
+      error = e;
     if (error) {
       if (i == current) flash(error);
       dirty = true;
@@ -418,6 +444,8 @@ static void updateState() {
     v.pendingVehicle = !preview && pending(Command::Vehicle, current).active;
     v.hasVehicles = vehicles.count > 0;
     v.vehicleSwitch = settings::get().vehicleSwitch;
+    v.limitButton = settings::get().chargeLimit || (preview && previewLimit);
+    v.pendingLimit = !preview && pending(Command::Limit, current).active ? limitTarget[current] : -1;
     strlcpy(v.pendingVehicleTitle, vehicleTargetTitle[current], sizeof(v.pendingVehicleTitle));
     v.page = current;
     v.pageCount = evcc::count();
@@ -467,6 +495,7 @@ static void handlePreview() {
 
   previewState = p;
   previewBoost = !strncmp(web.arg("s").c_str(), "boost", 5);
+  previewLimit = web.arg("s") == "limitsoc" || web.arg("s") == "limitkwh";
   previewDark = web.hasArg("dark") ? web.arg("dark").toInt() != 0 : -1;
   previewUntil = millis() + PREVIEW_DURATION_MS;
   lastActivity = millis();
@@ -679,6 +708,9 @@ static void handleSettings() {
   h += "<label>Fahrzeug wechseln<small>Die Fahrzeugzeile über der Leistung antippen, um durch die in evcc angelegten "
        "Fahrzeuge zu schalten.</small></label><select name=\"vehsw\">" + option(1, s.vehicleSwitch, "An") +
        option(0, s.vehicleSwitch, "Aus") + "</select>";
+  h += "<label>Ladelimit<small>Zeigt neben dem Fahrzeug das Ladelimit; antippen stellt es für diese Ladung ein. "
+       "In Prozent, wenn evcc den Ladestand kennt, sonst als Energie in kWh.</small></label><select name=\"limit\">" +
+       option(0, s.chargeLimit, "Aus") + option(1, s.chargeLimit, "An") + "</select>";
   h += "<label>Battery Boost<small>Im Modus Smart die Akku-Anzeige oben antippen, um wie in evcc den Hausakku "
        "zum Laden dazuzuschalten.</small></label><select name=\"boost\">" + option(0, s.boostButton, "Aus") +
        option(1, s.boostButton, "An") + "</select>";
@@ -806,7 +838,7 @@ void setup() {
   brightness = settings::backlight();
   lastActivity = millis();
 
-  ui::begin(onModeSelected, openSettings, onSwipe, onBoostTapped, onVehicleTapped);
+  ui::begin(onModeSelected, openSettings, onSwipe, onBoostTapped, onVehicleTapped, onLimitSelected);
   ui::onMessageTap(closeSettings);
   ui::showMessage(ICON_SETTINGS, "Verbinde …", "WLAN-Verbindung wird aufgebaut");
   lv_refr_now(nullptr);

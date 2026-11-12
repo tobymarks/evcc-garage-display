@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|evening|priority|nightfast|waiting|limit|boostready|boost|start|off|stale|heating|heatingdone";
+const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|evening|priority|nightfast|waiting|limit|boostready|boost|start|off|stale|heating|heatingdone|limitsoc|limitkwh";
 
 // Typisches Haus am Mittag: PV 6,2 kW, Haus 0,9 kW, Akku 78 % lädt mit 5 kW, 0,3 kW gehen ins Netz;
 // Smart braucht einphasig 1,4 kW. Beim Laden geht die Bilanz mit der Ladeleistung auf (Energiebalken).
@@ -26,6 +26,7 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
   p.mode = ChargeMode::Slow;
   strncpy(p.vehicleTitle, "ID.4", sizeof(p.vehicleTitle) - 1);
   p.vehicleSoc = 41;
+  p.socBased = true;
   p.hasBoost = true;
   stale = false;
   house(p, 6200, 900, -5000, -300);
@@ -144,6 +145,26 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
       house(p, 3400, 900, -400, 0);
     } else {
       p.vehicleSoc = 55.2f;
+    }
+  } else if (!strcmp(name, "limitsoc") || !strcmp(name, "limitkwh")) {
+    // Ladelimit einstellbar: mit Ladestand in Prozent, ohne (Fahrzeug ohne Schnittstelle) als Energie
+    p.mode = ChargeMode::Smart;
+    p.charging = true;
+    p.chargePower = 4140;
+    p.phasesActive = 1;
+    p.greenShare = 1.0f;
+    house(p, 6200, 900, -1160, 0);
+    p.chargedEnergy = 12400;
+    p.chargeDuration = 10800;
+    p.sessionSolarPct = 97;
+    p.vehicleSoc = 64;
+    p.limitSoc = 80;
+    if (!strcmp(name, "limitkwh")) {
+      strncpy(p.vehicleTitle, "ID. Buzz", sizeof(p.vehicleTitle) - 1);
+      p.vehicleSoc = 0;
+      p.limitSoc = 100;
+      p.socBased = false;
+      p.limitEnergy = 30;
     }
   } else if (!strcmp(name, "off")) {
     p.mode = ChargeMode::None;

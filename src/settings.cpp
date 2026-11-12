@@ -23,6 +23,7 @@ void settings::load() {
   s.boostButton = prefs.getBool("boost", false);
   s.brightnessPct = prefs.getUChar("bright", DEFAULT_BRIGHTNESS_PCT);
   s.vehicleSwitch = prefs.getBool("vehsw", true);
+  s.chargeLimit = prefs.getBool("limit", false);
   s.password = prefs.getString("pw", "");
   prefs.end();
 
@@ -45,6 +46,7 @@ void settings::save() {
   prefs.putBool("boost", s.boostButton);
   prefs.putUChar("bright", s.brightnessPct);
   prefs.putBool("vehsw", s.vehicleSwitch);
+  prefs.putBool("limit", s.chargeLimit);
   prefs.putString("pw", s.password);
   prefs.end();
 }
