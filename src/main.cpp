@@ -591,6 +591,10 @@ static void handleDiag() {
     s += buf;
   }
   s += "\n";
+  // Hintergrundbeleuchtung als PWM-Wert: zeigt, ob /wake, /sleep und der Timeout gegriffen haben
+  snprintf(buf, sizeof(buf), "Bildschirm %s, Helligkeit %d von 255\n",
+           brightness == 0 ? (forcedSleep ? "aus (per /sleep)" : "aus") : "an", brightness);
+  s += buf;
   snprintf(buf, sizeof(buf), "Interner RAM frei %u, minimal %u, größter Block %u\nPSRAM frei %u\n",
            heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
            heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), heap_caps_get_free_size(MALLOC_CAP_SPIRAM));

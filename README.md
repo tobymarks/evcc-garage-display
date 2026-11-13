@@ -155,7 +155,7 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
 | `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)); `/preview` ohne Parameter beendet |
 | `/update` | Firmware-Version und Stand der automatischen Updates, auch Installationen, nach denen die neue Version nicht lief; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
-| `/diag` | Laufzeit, Neustartgrund, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze (und ob der Inhalt des anderen startfähig ist), die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte und nicht gestartete Updates und der letzte gespeicherte Absturz |
+| `/diag` | Laufzeit, Neustartgrund, Zustand des Bildschirms, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze (und ob der Inhalt des anderen startfähig ist), die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte und nicht gestartete Updates und der letzte gespeicherte Absturz |
 | `/wake`, `/sleep` | Bildschirm an- bzw. ausschalten, siehe „Bildschirm von außen schalten" |
 | `/wifiscan` | löst eine WLAN-Suche aus (Lasttest für die Bildausgabe) |
 
