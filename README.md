@@ -180,10 +180,9 @@ Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
 Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktionen sind Schalter unter
 `/settings`.
 
-- **14.11.2026**
+- **13.11.2026**
   - Neuer Schalter „Solarseite" (ab Werk aus): zusätzliche Seite hinter den Ladepunkten mit der aktuellen
     Erzeugung, dem Tag je Stunde bzw. der Leistung je Anlage, dem Ertrag von heute und der Prognose.
-- **13.11.2026**
   - Bildschirm von außen schalten: `/wake` und `/sleep`, etwa für Bewegungsmelder über Home Assistant
     oder ioBroker.
   - Updates: Lief nach einer Installation weiter die alte Firmware, lud das Display dieselbe Version alle
