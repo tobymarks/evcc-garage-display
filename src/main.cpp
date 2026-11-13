@@ -9,9 +9,11 @@
 #include <WiFiManager.h>
 #include <esp_core_dump.h>
 #include <esp_flash.h>
+#include <esp_flash_partitions.h>
 #include <esp_heap_caps.h>
 #include <esp_image_format.h>
 #include <esp_ota_ops.h>
+#include <esp_rom_crc.h>
 #include <esp_rom_sys.h>
 #include <rom/rtc.h>
 #include <functional>
@@ -588,11 +590,25 @@ static const char* otaStateName(int8_t state) {
   return state >= 0 && state < (int)(sizeof(STATES) / sizeof(*STATES)) ? STATES[state] : "unbekannt";
 }
 
+// Zustand eines Firmware-Platzes aus den beiden Starteinträgen (otadata). esp_ota_get_state_partition()
+// nimmt den ersten passenden Eintrag. Nach einem gescheiterten und einem geglückten Update in denselben
+// Platz gibt es zwei, und der erste kann der überholte sein – der Bootloader richtet sich nach dem gültigen.
 static int8_t otaState(const esp_partition_t* partition) {
-  esp_ota_img_states_t state;
-  return partition && esp_ota_get_state_partition(partition, &state) == ESP_OK && state <= ESP_OTA_IMG_ABORTED
-             ? (int8_t)state
-             : -1;
+  const esp_partition_t* otadata =
+      esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
+  if (!partition || !otadata) return -1;
+  const uint32_t slot = partition->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_MIN;
+  int8_t best = -1;
+  for (int i = 0; i < 2; i++) {
+    esp_ota_select_entry_t entry;
+    if (esp_partition_read(otadata, i * otadata->erase_size, &entry, sizeof(entry)) != ESP_OK) continue;
+    if (entry.ota_seq == UINT32_MAX || entry.ota_state > ESP_OTA_IMG_ABORTED) continue;
+    if (entry.crc != esp_rom_crc32_le(UINT32_MAX, (const uint8_t*)&entry.ota_seq, sizeof(entry.ota_seq))) continue;
+    if ((entry.ota_seq - 1) % 2 != slot) continue;  // zwei Firmware-Plätze, siehe partitions.csv
+    const bool failed = entry.ota_state == ESP_OTA_IMG_INVALID || entry.ota_state == ESP_OTA_IMG_ABORTED;
+    if (best < 0 || !failed) best = (int8_t)entry.ota_state;
+  }
+  return best;
 }
 
 static void recordBoot() {
@@ -646,15 +662,16 @@ static void handleDiag() {
   snprintf(buf, sizeof(buf), "Flash-Baustein: Kennung 0x%06lx, %lu MB\n", (unsigned long)flashId,
            (unsigned long)(flashSize >> 20));
   s += buf;
-  // Startete eine neue Firmware nicht sauber, hat der Bootloader die vorherige wiederhergestellt
+  // Startete eine neue Firmware nicht sauber, hat der Bootloader die vorherige wiederhergestellt. Läuft
+  // inzwischen eine Firmware aus demselben Platz, ist der Eintrag überholt: Dort steht dann eine andere.
   esp_app_desc_t desc;
+  const esp_partition_t* running = esp_ota_get_running_partition();
   const esp_partition_t* invalid = esp_ota_get_last_invalid_partition();
-  if (invalid && esp_ota_get_partition_description(invalid, &desc) == ESP_OK) {
+  if (invalid && invalid != running && esp_ota_get_partition_description(invalid, &desc) == ESP_OK) {
     snprintf(buf, sizeof(buf), "Zurückgerollt: Firmware in %s (gebaut %s %s) startete nicht sauber\n", invalid->label,
              desc.date, desc.time);
     s += buf;
   }
-  const esp_partition_t* running = esp_ota_get_running_partition();
   if (running) {
     snprintf(buf, sizeof(buf), "Laufende Firmware in %s: %s\n", running->label, otaStateName(otaState(running)));
     s += buf;
@@ -1025,7 +1042,9 @@ void loop() {
     ArduinoOTA.handle();
     web.handleClient();
   }
-  handleUpdates();
+  // Steht ein Neustart an (Update installiert, Firmware hochgeladen, Einstellungen gespeichert), beginnt
+  // kein Update mehr: Es schriebe in den Platz, aus dem das Display gleich starten soll
+  if (!restartAt) handleUpdates();
 
   if (restartAt && (int32_t)(millis() - restartAt) > 0) restartNow();
 
