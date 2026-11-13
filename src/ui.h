@@ -20,6 +20,10 @@ struct UiView {
   bool vehicleSwitch = true;            // Fahrzeugwechsel per Antippen erlaubt (Einstellung)
   bool limitButton = false;             // Ladelimit neben dem Fahrzeug zeigen und einstellen (Einstellung)
   float pendingLimit = -1;              // angefragtes Ladelimit (% bzw. kWh), bis evcc es bestätigt; -1 = keins
+  // Solarseite hinter den Ladepunkten (Einstellung): state liefert dann nur die Hausdaten
+  bool solar = false;
+  EvccSolar solarData;
+  int8_t hour = -1;                     // aktuelle Stunde in Ortszeit, -1 = Uhrzeit unbekannt
 };
 
 namespace ui {

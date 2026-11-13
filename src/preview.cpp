@@ -1,8 +1,9 @@
 #include "preview.h"
 
+#include <math.h>
 #include <string.h>
 
-const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|evening|priority|nightfast|waiting|limit|boostready|boost|start|off|stale|heating|heatingdone|limitsoc|limitkwh";
+const char* const preview::NAMES = "charging|solar|fast|nocar|nocarlow|nocarfull|night|evening|priority|nightfast|waiting|limit|boostready|boost|start|off|stale|heating|heatingdone|limitsoc|limitkwh|pv|pvmulti|pvnight|pvsummer|pvold";
 
 // Typisches Haus am Mittag: PV 6,2 kW, Haus 0,9 kW, Akku 78 % lädt mit 5 kW, 0,3 kW gehen ins Netz;
 // Smart braucht einphasig 1,4 kW. Beim Laden geht die Bilanz mit der Ladeleistung auf (Energiebalken).
@@ -171,6 +172,72 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
     p.modeOff = true;
   } else {
     return false;
+  }
+  return true;
+}
+
+// Ein Novembertag mit einer 10-kWp-Anlage: erzeugte kWh je Stunde und die Prognose dazu
+static const float PV_MADE[24] = {0, 0, 0, 0, 0, 0, 0, 0.01f, 1.02f, 3.19f, 4.11f, 4.46f, 4.41f, 2.5f, 0.51f, 1.03f, 0.08f};
+static const float PV_FORECAST[24] = {0,     0,     0,     0,     0,     0,     0.07f, 0.42f, 1.07f, 1.95f,
+                                      3.02f, 3.05f, 2.65f, 2.29f, 1.72f, 0.92f, 0.25f, 0.05f, 0.01f};
+
+bool preview::solarScene(const char* name, EvccState& p, EvccSolar& solar, int8_t& hour) {
+  p = EvccState();
+  p.valid = true;
+  strncpy(p.title, "Garage", sizeof(p.title) - 1);
+  p.mode = ChargeMode::Slow;
+  house(p, 4400, 900, -3200, -300);
+  p.solarToday = 4300;
+  p.solarTomorrow = 19000;
+  solar = EvccSolar();
+  solar.valid = true;
+  solar.plantTotal = solar.plantCount = 1;
+  strncpy(solar.plantTitle[0], "Photovoltaik", sizeof(solar.plantTitle[0]) - 1);
+  solar.plantPower[0] = 4400;
+  hour = 13;
+  memcpy(solar.hourForecast, PV_FORECAST, sizeof(PV_FORECAST));
+  for (int h = 0; h < 13; h++) solar.hourEnergy[h] = PV_MADE[h];
+  solar.hourEnergy[13] = 1.0f;  // die laufende Stunde ist erst zum Teil vorbei
+
+  if (!strcmp(name, "pv")) {
+  } else if (!strcmp(name, "pvmulti")) {
+    static const char* const TITLES[3] = {"Dach Süd", "Dach West", "Garage"};
+    static const float POWER[3] = {2600, 1300, 500};
+    solar.plantTotal = solar.plantCount = 3;
+    for (int i = 0; i < 3; i++) {
+      strncpy(solar.plantTitle[i], TITLES[i], sizeof(solar.plantTitle[0]) - 1);
+      solar.plantPower[i] = POWER[i];
+    }
+  } else if (!strcmp(name, "pvnight")) {
+    hour = 21;
+    memcpy(solar.hourEnergy, PV_MADE, sizeof(PV_MADE));
+    house(p, 0, 450, 350, 100);
+    p.batterySoc = 64;
+    p.solarToday = 0;
+    p.solarTomorrow = 19000;
+    solar.plantPower[0] = 0;
+  } else if (!strcmp(name, "pvsummer")) {
+    // Langer Sommertag mit großer Anlage: mehr Stunden, dreistellige Tageswerte
+    hour = 15;
+    for (int h = 5; h <= 21; h++) {
+      const float x = (h - 13) / 4.6f;
+      solar.hourForecast[h] = 22.0f * expf(-x * x);
+      solar.hourEnergy[h] = h < 15 ? solar.hourForecast[h] * (h % 4 == 0 ? 0.8f : 1.05f) : 0;
+    }
+    solar.hourEnergy[15] = 6.5f;
+    house(p, 18600, 1400, -5000, -12200);
+    p.solarToday = 48200;
+    p.solarTomorrow = 152000;
+    solar.plantPower[0] = 18600;
+  } else if (!strcmp(name, "pvold")) {
+    // evcc ohne Verlauf: keine Stundenwerte, kein Tagesertrag
+    solar.valid = false;
+  } else {
+    return false;
+  }
+  for (int h = 0; h < 24; h++) {
+    solar.today += solar.hourEnergy[h];
+    solar.forecastToday += solar.hourForecast[h];
   }
   return true;
 }

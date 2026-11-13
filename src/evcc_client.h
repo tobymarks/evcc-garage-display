@@ -59,6 +59,22 @@ struct EvccState {
   float solarTomorrow = -1;   // Wh, Solarprognose für morgen
 };
 
+// Solarseite: Erzeugung je Stunde und je Anlage. Die Stundenwerte liefert evcc unter
+// /api/history/energy (neuere Versionen); ohne sie bleibt valid false und die Seite zeigt nur,
+// was der normale Zustand hergibt.
+#define MAX_PV_PLANTS 3
+struct EvccSolar {
+  bool valid = false;             // Stundenwerte von heute liegen vor
+  float hourEnergy[24] = {};      // kWh, je Stunde heute erzeugt (alle Anlagen)
+  float hourForecast[24] = {};    // kWh, Prognose je Stunde heute
+  float today = 0;                // kWh, heute bisher erzeugt
+  float forecastToday = 0;        // kWh, Prognose für den ganzen Tag
+  uint8_t plantTotal = 0;         // PV-Anlagen in evcc
+  uint8_t plantCount = 0;         // Zeilen in plantTitle/plantPower; bei mehr Anlagen fasst die letzte den Rest zusammen
+  char plantTitle[MAX_PV_PLANTS][24] = {};
+  float plantPower[MAX_PV_PLANTS] = {};  // W
+};
+
 // In evcc angelegte Fahrzeuge (für den Wechsel per Antippen) – gelten für alle Ladepunkte
 struct EvccVehicles {
   uint8_t count = 0;
@@ -81,9 +97,9 @@ struct CommandStatus {
 namespace evcc {
 void begin();
 uint8_t count();
-// Kopiert den neuesten Zustand aller Ladepunkte und die Fahrzeugliste, sofern sich seit dem
-// letzten Aufruf etwas geändert hat; dann true.
-bool latest(EvccState* out, EvccVehicles& vehicles);
+// Kopiert den neuesten Zustand aller Ladepunkte, die Fahrzeugliste und die Solardaten, sofern sich
+// seit dem letzten Aufruf etwas geändert hat; dann true.
+bool latest(EvccState* out, EvccVehicles& vehicles, EvccSolar& solar);
 // Befehle laufen im Netzwerk-Task; je Art und Ladepunkt zählt nur der zuletzt angefragte.
 // Rückgabe: Nummer der Anfrage, zum Abgleich mit status().
 uint32_t requestMode(uint8_t index, ChargeMode mode);

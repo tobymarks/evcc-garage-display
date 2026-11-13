@@ -68,13 +68,21 @@ static constexpr int BOOST_PAD_V = 4;
 static constexpr int LIMIT_GAP = 14;  // Abstand zwischen Fahrzeug und Ladelimit
 static constexpr int LIMIT_PAD = 14;
 static constexpr int SLIDE_PX = 48;  // Weg der Inhalte beim Wechsel des Ladepunkts
+static constexpr int MAX_PAGES = MAX_LOADPOINTS + 1;  // Ladepunkte und die Solarseite
+// Solarseite: Balken je Stunde, mindestens 6–20 Uhr, im Sommer so weit wie die Sonne reicht
+static constexpr int CHART_H = 84;
+static constexpr int CHART_MAX = 24;
+static constexpr int CHART_AXIS = 8;        // Beschriftung alle drei Stunden
+static constexpr int CHART_MIN = 4;         // Stummel für Stunden ohne Erzeugung
+static constexpr float CHART_NONE = 0.05f;  // kWh, darunter gilt eine Stunde als leer
+static constexpr int PLANT_TRACK_H = 8;
 
 // Hauptbildschirm
 static lv_obj_t* scrMain;
 static lv_obj_t* lblTitle;
 static lv_obj_t* mid;
 static lv_obj_t* dots;
-static lv_obj_t* dot[MAX_LOADPOINTS];
+static lv_obj_t* dot[MAX_PAGES];
 static lv_obj_t* lblIcons;
 static lv_obj_t* btnBattery;  // Hülle um die Akku-Anzeige; mit Battery Boost ein Knopf
 static lv_obj_t* lblBattery;
@@ -98,6 +106,16 @@ static lv_obj_t* barBg;
 enum FlowPart { FLOW_GRID, FLOW_SUN, FLOW_BATTERY, FLOW_FEEDIN, FLOW_COUNT };
 static lv_obj_t* flowPart[FLOW_COUNT];
 static lv_obj_t* flowLbl[FLOW_COUNT];
+static lv_obj_t* chartBlock;
+static lv_obj_t* chartBar[CHART_MAX];
+static lv_obj_t* chartFill[CHART_MAX];  // bisher Erzeugtes der laufenden Stunde, über ihrer Prognose
+static lv_obj_t* chartAxis[CHART_AXIS];
+static lv_obj_t* plantsBlock;
+static lv_obj_t* plantRow[MAX_PV_PLANTS];
+static lv_obj_t* plantName[MAX_PV_PLANTS];
+static lv_obj_t* plantValue[MAX_PV_PLANTS];
+static lv_obj_t* plantTrack[MAX_PV_PLANTS];
+static lv_obj_t* plantFill[MAX_PV_PLANTS];
 static lv_obj_t* tiles;
 static lv_obj_t* tile[3];
 static lv_obj_t* tileLabel[3];
@@ -400,6 +418,55 @@ static void buildMain() {
     lv_obj_center(flowLbl[i]);
   }
 
+  // Solarseite: Erzeugung je Stunde – erzeugt (grün) und Prognose (grau)
+  chartBlock = makeBox(mid);
+  lv_obj_set_size(chartBlock, CONTENT_W, 14 + CHART_H + 5 + font_16.line_height);
+  lv_obj_set_style_pad_top(chartBlock, 14, 0);
+  lv_obj_add_flag(chartBlock, LV_OBJ_FLAG_OVERFLOW_VISIBLE);  // Beschriftung der Randbalken
+  for (int i = 0; i < CHART_MAX; i++) {
+    chartBar[i] = makeBox(chartBlock);
+    lv_obj_set_style_radius(chartBar[i], 6, 0);
+    lv_obj_set_style_bg_opa(chartBar[i], LV_OPA_COVER, 0);
+    lv_obj_set_style_clip_corner(chartBar[i], true, 0);
+    chartFill[i] = makeBox(chartBar[i]);
+    lv_obj_set_style_radius(chartFill[i], 6, 0);
+    lv_obj_set_style_bg_opa(chartFill[i], LV_OPA_COVER, 0);
+  }
+  for (int i = 0; i < CHART_AXIS; i++) {
+    chartAxis[i] = makeLabel(chartBlock, &font_16);
+    lv_obj_set_width(chartAxis[i], 40);
+    lv_obj_set_style_text_align(chartAxis[i], LV_TEXT_ALIGN_CENTER, 0);
+  }
+
+  // Solarseite bei mehreren Anlagen: Leistung je Anlage mit Balken im Verhältnis zur stärksten
+  plantsBlock = makeBox(mid);
+  lv_obj_set_size(plantsBlock, CONTENT_W, LV_SIZE_CONTENT);
+  lv_obj_set_style_pad_top(plantsBlock, 16, 0);
+  lv_obj_set_style_pad_row(plantsBlock, 10, 0);
+  lv_obj_set_flex_flow(plantsBlock, LV_FLEX_FLOW_COLUMN);
+  for (int i = 0; i < MAX_PV_PLANTS; i++) {
+    plantRow[i] = makeBox(plantsBlock);
+    lv_obj_set_size(plantRow[i], CONTENT_W, font_24.line_height + 5 + PLANT_TRACK_H);
+    plantName[i] = makeLabel(plantRow[i], &font_22);
+    lv_obj_set_width(plantName[i], CONTENT_W - 130);  // Platz für "12,4 kW" rechts
+    lv_label_set_long_mode(plantName[i], LV_LABEL_LONG_DOT);
+    // gemeinsame Grundlinie mit dem größeren Wert
+    lv_obj_set_pos(plantName[i], 0,
+                   (font_24.line_height - font_24.base_line) - (font_22.line_height - font_22.base_line));
+    plantValue[i] = makeLabel(plantRow[i], &font_24);
+    lv_obj_align(plantValue[i], LV_ALIGN_TOP_RIGHT, 0, 0);
+    plantTrack[i] = makeBox(plantRow[i]);
+    lv_obj_set_size(plantTrack[i], CONTENT_W, PLANT_TRACK_H);
+    lv_obj_set_pos(plantTrack[i], 0, font_24.line_height + 5);
+    lv_obj_set_style_radius(plantTrack[i], PLANT_TRACK_H / 2, 0);
+    lv_obj_set_style_bg_opa(plantTrack[i], LV_OPA_COVER, 0);
+    lv_obj_set_style_clip_corner(plantTrack[i], true, 0);
+    plantFill[i] = makeBox(plantTrack[i]);
+    lv_obj_set_height(plantFill[i], PLANT_TRACK_H);
+    lv_obj_set_style_radius(plantFill[i], PLANT_TRACK_H / 2, 0);
+    lv_obj_set_style_bg_opa(plantFill[i], LV_OPA_COVER, 0);
+  }
+
   // Kacheln mit den Werten der Ladesitzung bzw. ohne Fahrzeug Sonne, Haus und Akku
   tiles = makeBox(mid);
   lv_obj_set_size(tiles, CONTENT_W, LV_SIZE_CONTENT);
@@ -468,7 +535,7 @@ static void buildMain() {
   lv_obj_align(dots, LV_ALIGN_BOTTOM_MID, 0, -(MARGIN + DOTS_SHIFT - DOT) / 2);
   lv_obj_set_flex_flow(dots, LV_FLEX_FLOW_ROW);
   lv_obj_set_style_pad_column(dots, 12, 0);
-  for (int i = 0; i < MAX_LOADPOINTS; i++) {
+  for (int i = 0; i < MAX_PAGES; i++) {
     dot[i] = makeBox(dots);
     lv_obj_set_size(dot[i], DOT, DOT);
     lv_obj_set_style_radius(dot[i], LV_RADIUS_CIRCLE, 0);
@@ -716,7 +783,7 @@ static void renderHouseTiles(const EvccState& s, bool live) {
 // Battery Boost lässt sich schalten: eingeschaltet, Auto angesteckt, Modus Smart (oder Boost läuft noch)
 static bool boostable(const UiView& v) {
   const EvccState& s = v.state;
-  return v.boostButton && s.hasBoost && s.valid && s.connected && s.batterySoc >= 0 &&
+  return !v.solar && v.boostButton && s.hasBoost && s.valid && s.connected && s.batterySoc >= 0 &&
          (s.mode == ChargeMode::Smart || s.batteryBoost || v.pendingBoost == 1);
 }
 
@@ -990,11 +1057,179 @@ static void renderDots(const UiView& v) {
   setVisible(dots, multi);
   const int segY = SEG_Y - (multi ? DOTS_SHIFT : 0);
   lv_obj_set_y(segBg, segY);
-  lv_obj_set_height(mid, segY - HEADER_H);
-  for (int i = 0; i < MAX_LOADPOINTS; i++) {
+  // Die Solarseite hat keine Modustasten: ihre Mitte reicht bis dorthin, wo sie sonst enden
+  setVisible(segBg, !v.solar);
+  lv_obj_set_height(mid, (v.solar ? segY + SEG_H : segY) - HEADER_H);
+  for (int i = 0; i < MAX_PAGES; i++) {
     setVisible(dot[i], i < v.pageCount);
     lv_obj_set_style_bg_color(dot[i], i == v.page ? t.text : t.muted, 0);
     lv_obj_set_style_bg_opa(dot[i], i == v.page ? LV_OPA_COVER : LV_OPA_50, 0);
+  }
+}
+
+// "18,2 kWh"; ab 100 kWh ohne Nachkommastelle, damit es in die Kachel passt
+static void formatTileEnergy(char* buf, size_t len, float kwh) {
+  if (kwh >= 99.95f) {
+    snprintf(buf, len, "%d kWh", (int)lroundf(kwh));
+  } else {
+    char num[16];
+    formatDecimal(num, sizeof(num), kwh);
+    snprintf(buf, len, "%s kWh", num);
+  }
+}
+
+// Solarseite: Erzeugung je Stunde. Vergangene Stunden zeigen das Erzeugte, kommende die Prognose,
+// die laufende beides übereinander.
+static void renderChart(const UiView& v) {
+  const Theme& t = *theme;
+  const EvccSolar& d = v.solarData;
+  int first = 6, last = 20;
+  for (int h = 0; h < 24; h++) {
+    if (d.hourEnergy[h] < CHART_NONE && d.hourForecast[h] < CHART_NONE) continue;
+    first = LV_MIN(first, h);
+    last = LV_MAX(last, h);
+  }
+  const int n = last - first + 1;
+  const int gap = n <= 15 ? 7 : n <= 19 ? 5 : 4;
+  const int w = (CONTENT_W - (n - 1) * gap) / n;
+  float max = 0.5f;  // an trüben Tagen nicht jede Kleinigkeit auf volle Höhe ziehen
+  for (int h = first; h <= last; h++) max = LV_MAX(max, LV_MAX(d.hourEnergy[h], d.hourForecast[h]));
+  auto height = [&](float kwh) { return LV_CLAMP(CHART_MIN, (int)lroundf(kwh / max * CHART_H), CHART_H); };
+
+  int axis = 0;
+  for (int i = 0; i < CHART_MAX; i++) {
+    setVisible(chartBar[i], i < n);
+    if (i >= n) continue;
+    const int h = first + i;
+    const float made = d.hourEnergy[h], forecast = d.hourForecast[h];
+    const bool past = v.hour < 0 || h < v.hour, current = h == v.hour;
+    const int px = height(past ? made : current ? LV_MAX(made, forecast) : forecast);
+    const int x = (int)lroundf((float)i * (CONTENT_W - w) / (n - 1));
+    lv_obj_set_pos(chartBar[i], x, CHART_H - px);
+    lv_obj_set_size(chartBar[i], w, px);
+    lv_obj_set_style_bg_color(chartBar[i], past && made >= CHART_NONE ? t.solar : t.border, 0);
+    const bool partly = current && made >= CHART_NONE;
+    setVisible(chartFill[i], partly);
+    if (partly) {
+      const int filled = LV_MIN(px, height(made));
+      lv_obj_set_size(chartFill[i], w, filled);
+      lv_obj_set_pos(chartFill[i], 0, px - filled);
+      lv_obj_set_style_bg_color(chartFill[i], t.solar, 0);
+    }
+    if (h % 3 == 0 && axis < CHART_AXIS) {
+      lv_label_set_text_fmt(chartAxis[axis], "%d", h);
+      lv_obj_set_pos(chartAxis[axis], x + w / 2 - 20, CHART_H + 5);
+      lv_obj_set_style_text_color(chartAxis[axis], t.muted, 0);
+      setVisible(chartAxis[axis], true);
+      axis++;
+    }
+  }
+  for (; axis < CHART_AXIS; axis++) setVisible(chartAxis[axis], false);
+}
+
+static void renderPlants(const EvccSolar& d) {
+  const Theme& t = *theme;
+  float max = 1;
+  for (int i = 0; i < d.plantCount; i++) max = LV_MAX(max, d.plantPower[i]);
+  char num[16];
+  for (int i = 0; i < MAX_PV_PLANTS; i++) {
+    setVisible(plantRow[i], i < d.plantCount);
+    if (i >= d.plantCount) continue;
+    const float power = LV_MAX(0.0f, d.plantPower[i]);
+    lv_label_set_text(plantName[i], d.plantTitle[i]);
+    lv_obj_set_style_text_color(plantName[i], t.text, 0);
+    formatDecimal(num, sizeof(num), power / 1000.0f);
+    lv_label_set_text_fmt(plantValue[i], "%s kW", num);
+    lv_obj_set_style_text_color(plantValue[i], t.text, 0);
+    lv_obj_set_style_bg_color(plantTrack[i], t.border, 0);
+    const int width = (int)lroundf(power / max * CONTENT_W);
+    setVisible(plantFill[i], width >= PLANT_TRACK_H);  // schmaler ließe sich die Rundung nicht zeichnen
+    lv_obj_set_width(plantFill[i], width);
+    lv_obj_set_style_bg_color(plantFill[i], t.solar, 0);
+  }
+}
+
+// Solarseite hinter den Ladepunkten: was die Sonne gerade bringt, der Tag je Stunde bzw. die
+// Leistung je Anlage, darunter heute, Rest und morgen. Keine Tasten – hier gibt es nichts zu schalten.
+static void renderSolar(const UiView& v, bool live) {
+  const EvccState& s = v.state;
+  const EvccSolar& d = v.solarData;
+  const Theme& t = *theme;
+  char buf[64];
+
+  closePicker();
+  const bool data = s.valid && s.pvPower >= 0;
+  lv_obj_remove_flag(btnVehicle, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_style_text_opa(lblVehicle, LV_OPA_COVER, 0);
+  setVisible(btnLimit, false);
+  setVisible(btnVehicle, data);
+  setVisible(rowVehicle, data);
+  setVisible(contPower, data);
+  setVisible(contIdle, !data);
+  setVisible(barBlock, false);
+  const bool rows = data && live && d.plantCount >= 2;
+  if (data) {
+    if (rows)
+      snprintf(buf, sizeof(buf), "Erzeugung jetzt · %u Anlagen", d.plantTotal);
+    else
+      snprintf(buf, sizeof(buf), "Erzeugung jetzt");
+    setVehicleText(buf);
+    const bool producing = s.pvPower >= 50;
+    formatDecimal(buf, sizeof(buf), LV_MAX(0.0f, s.pvPower) / 1000.0f);
+    lv_label_set_text(lblPower, buf);
+    lv_obj_set_style_text_color(lblPower, live && producing ? t.text : t.muted, 0);
+    setBigIcon(ICON_SUN);
+    lv_obj_set_style_text_opa(lblBolt, live && producing ? LV_OPA_COVER : LV_OPA_40, 0);
+  } else if (!s.valid) {
+    const bool starting = millis() < STALE_AFTER_MS;
+    lv_label_set_text(lblIdleIcon, !v.wifiConnected ? ICON_WIFI_OFF : ICON_CLOUD_OFF);
+    lv_label_set_text(lblIdleText, !v.wifiConnected ? "Kein WLAN" : starting ? "Verbinde …" : "Keine Daten");
+  } else {
+    lv_label_set_text(lblIdleIcon, ICON_SUN);
+    lv_label_set_text(lblIdleText, "Keine PV-Anlage");
+  }
+
+  // Die Statuszeile meldet hier nur Störungen; dann weichen ihr Verlauf und Anlagen
+  const bool trouble = !v.wifiConnected || v.stale;
+  setVisible(lblStatus, trouble);
+  if (trouble) {
+    lv_color_t color;
+    renderStatus(v, false, buf, sizeof(buf), color);
+    lv_label_set_text(lblStatus, buf);
+    lv_obj_set_style_text_color(lblStatus, color, 0);
+  }
+  setVisible(plantsBlock, rows);
+  if (rows) renderPlants(d);
+  const bool chart = data && live && !rows && d.valid;
+  setVisible(chartBlock, chart);
+  if (chart) renderChart(v);
+
+  // Heute bisher, was heute noch kommt, morgen. Kommt heute nichts mehr, steht statt des Rests
+  // die Prognose für den ganzen Tag – zum Vergleich mit dem Erzeugten.
+  int n = 0;
+  // Bei drei Kacheln bleibt wenig Breite: stößt ein Wert an den Rand, fällt seine Nachkommastelle weg
+  const int tileRoom = (CONTENT_W - 2 * TILE_GAP) / 3 - 14 - 10;
+  auto add = [&](const char* label, float kwh) {
+    lv_label_set_text(tileLabel[n], label);
+    formatTileEnergy(buf, sizeof(buf), kwh);
+    lv_point_t size;
+    lv_text_get_size(&size, buf, &font_24, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    if (size.x > tileRoom) snprintf(buf, sizeof(buf), "%d kWh", (int)lroundf(kwh));
+    lv_label_set_text(tileValue[n], buf);
+    n++;
+  };
+  if (data && d.valid) add("HEUTE", d.today);
+  if (data && s.solarToday >= 0) {
+    if (s.solarToday >= 100 || !d.valid)
+      add("REST HEUTE", s.solarToday / 1000.0f);
+    else
+      add("PROGNOSE", d.forecastToday);
+  }
+  if (data && s.solarTomorrow >= 0) add("MORGEN", s.solarTomorrow / 1000.0f);
+  setVisible(tiles, n > 0);
+  for (int i = 0; i < 3; i++) {
+    setVisible(tile[i], i < n);
+    lv_obj_set_style_text_color(tileValue[i], live ? t.text : t.muted, 0);
   }
 }
 
@@ -1009,7 +1244,7 @@ void ui::render(const UiView& v) {
   char buf[64];
 
   renderDots(v);
-  lv_label_set_text(lblTitle, s.valid || s.missing ? s.title : "evcc");
+  lv_label_set_text(lblTitle, v.solar ? "Solar" : s.valid || s.missing ? s.title : "evcc");
   lv_label_set_text(lblClock, v.clock);
   lv_label_set_text(lblIcons, !v.wifiConnected ? ICON_WIFI_OFF : v.stale ? ICON_ALERT : "");
   lv_obj_set_style_text_color(lblIcons, t.error, 0);
@@ -1023,6 +1258,14 @@ void ui::render(const UiView& v) {
   setVisible(btnBattery, battery);
   if (battery) renderBattery(v, live);
   lv_obj_align_to(lblIcons, battery ? btnBattery : lblClock, LV_ALIGN_OUT_LEFT_BOTTOM, -10, battery && boostable(v) ? -BOOST_PAD_V : 0);
+
+  if (v.solar) {
+    renderSolar(v, live);
+    return;
+  }
+  setVisible(chartBlock, false);
+  setVisible(plantsBlock, false);
+  setVisible(lblStatus, true);
 
   // Fahrzeug mit Ladestand, solange es angesteckt ist; sind Fahrzeuge in evcc angelegt,
   // erscheint auch ohne erkanntes Auto "Gastfahrzeug", damit man es antippen und wechseln kann

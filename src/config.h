@@ -29,6 +29,8 @@
 #define WIFI_STALE_RECONNECT_MS 120000    // WLAN auch neu verbinden, wenn trotz WL_CONNECTED 2 min keine Daten fließen
 #define WIFI_STALE_RETRY_MS 600000        // … und danach nur noch alle 10 min, solange weiter nichts kommt
 #define VEHICLE_TAP_DELAY_MS 800          // Fahrzeugwechsel erst abschicken, wenn so lange nicht weitergetippt wird
+#define SOLAR_INTERVAL_MS 300000          // Stundenwerte für die Solarseite alle 5 min
+#define SOLAR_RETRY_MS 30000              // … nach einem Fehlschlag (Uhrzeit fehlt noch, evcc nicht erreichbar) früher
 #define CHARGING_STALE_MS 600000          // ohne Daten von evcc gilt "lädt" so lange weiter (Bildschirm an, keine Updates)
 
 // Projektseite (Anleitung, Browser-Installer) und Quellcode – verlinkt unter /settings

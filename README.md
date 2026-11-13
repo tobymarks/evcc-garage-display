@@ -24,6 +24,15 @@ gerade zu sehen ist. Wird an einem anderen Ladepunkt ein Auto angesteckt oder be
 springt das Display dorthin – außer jemand hat es in der letzten Minute bedient. Alle Ladepunkte kommen mit
 einer einzigen Abfrage.
 
+**Solarseite (Schalter unter `/settings`, ab Werk aus):** eine zusätzliche Seite hinter den Ladepunkten, erreichbar
+durch Wischen. Sie zeigt die aktuelle Erzeugung, darunter den Tag je Stunde – grün, was erzeugt wurde, grau die
+Prognose für die kommenden Stunden – und in Kacheln den Ertrag von heute, was heute noch kommt und die Prognose
+für morgen. Kommt heute nichts mehr, steht statt des Rests die Prognose für den ganzen Tag zum Vergleich. Kennt
+evcc mehrere PV-Anlagen, stehen statt der Stundenbalken die Leistungen je Anlage (höchstens drei Zeilen, weitere
+zusammengefasst). Tasten gibt es dort keine; wird ein Auto angesteckt oder beginnt das Laden, springt das Display
+wie sonst zum Ladepunkt. Tagesverlauf und Tagesertrag kommen aus dem Verlauf von evcc
+(`/api/history/energy`, getestet mit 0.319); ältere Versionen zeigen nur Erzeugung und Prognose.
+
 **Design:** angelehnt an die evcc-Weboberfläche (ab 0.317): gleiche Farben, Schrift (Montserrat) und Icons –
 hell, dunkel oder automatisch nach Sonnenstand. Die Helligkeit ist fest (ab Werk 100 %, unter
 `/settings` in 10-%-Schritten einstellbar) – es gibt keine Nachtdimmung, in der Garage ist Licht, wenn jemand
@@ -76,6 +85,9 @@ evcc ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
   und Material Symbols (beide Apache-2.0), SVGs in `tools/icons` (das Akku-Symbol ist selbst gezeichnet). Erzeugt mit `tools/gen_fonts.sh` (braucht fontforge)
 - Daten: alle 3 s `GET /api/state?jq=…` – der jq-Filter liefert nur die benötigten Felder (unter 1 KB statt ~70 KB),
   darunter `pvPower`, `homePower`, Ladestand und Leistung des Hausakkus und die Netzleistung
+- Solarseite: alle 5 min `GET /api/history/energy?from=…&to=…&aggregate=hour` für den laufenden Tag (Erzeugung und
+  Prognose je Stunde) und die Prognose der kommenden Stunden aus `forecast.solar.timeseries`, von evcc per jq
+  je Stunde zusammengefasst – nur, wenn die Seite eingeschaltet ist
 - Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}`, `POST /api/loadpoints/<n>/mode/{smart|now}` sowie `POST /api/loadpoints/<n>/vehicle/<name>` bzw. `DELETE /api/loadpoints/<n>/vehicle`; Ladelimit: `POST /api/loadpoints/<n>/limitsoc/<Prozent>` bzw. `POST /api/loadpoints/<n>/limitenergy/<kWh>`
 - Netzwerk läuft in einem eigenen Task auf Kern 0, die Oberfläche bleibt dadurch flüssig
 - Eine Taste zeigt den neuen Modus erst voll an, wenn evcc ihn bestätigt hat (vorher halbtransparent)
@@ -133,7 +145,7 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
 
 - **Einstellungen im Heimnetz:** im Browser `http://evcc-garage.local:8080` aufrufen (leitet auf `/settings`).
   Unter „Anzeige" lässt sich ein- und ausschalten, was das Display zeigt und was sich antippen lässt
-  (Fahrzeug wechseln, Ladelimit, Battery Boost); die Seite kann dazu die aktuelle Anzeige des Displays laden.
+  (Fahrzeug wechseln, Ladelimit, Battery Boost, Solarseite); die Seite kann dazu die aktuelle Anzeige des Displays laden.
   Diese Schalter sowie Design, Helligkeit und Bildschirm-Timeout wirken sofort. Nur Änderungen an
   evcc-Adresse, Port, Ladepunkten, Drehung oder Passwort starten das Display neu. Das WLAN bleibt unverändert.
 - **Passwort (optional):** unter „System" setzen. Danach verlangen alle Seiten des Displays die Anmeldung als
@@ -153,9 +165,9 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | --- | --- |
 | `/settings` | Einstellungen ändern (wie im Portal, ohne WLAN) |
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
-| `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)); `/preview` ohne Parameter beendet |
+| `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)), die Solarseite mit `pv`, `pvmulti`, `pvnight`, `pvsummer` oder mit den echten Daten `pvlive`; `/preview` ohne Parameter beendet |
 | `/update` | Firmware-Version und Stand der automatischen Updates, auch Installationen, nach denen die neue Version nicht lief; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
-| `/diag` | Laufzeit, Neustartgrund, Zustand des Bildschirms, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze (und ob der Inhalt des anderen startfähig ist), die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte und nicht gestartete Updates und der letzte gespeicherte Absturz |
+| `/diag` | Laufzeit, Neustartgrund, Zustand des Bildschirms, Flash-Baustein, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze (und ob der Inhalt des anderen startfähig ist), die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte und nicht gestartete Updates und der letzte gespeicherte Absturz |
 | `/wake`, `/sleep` | Bildschirm an- bzw. ausschalten, siehe „Bildschirm von außen schalten" |
 | `/wifiscan` | löst eine WLAN-Suche aus (Lasttest für die Bildausgabe) |
 
@@ -168,6 +180,9 @@ Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
 Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktionen sind Schalter unter
 `/settings`.
 
+- **14.11.2026**
+  - Neuer Schalter „Solarseite" (ab Werk aus): zusätzliche Seite hinter den Ladepunkten mit der aktuellen
+    Erzeugung, dem Tag je Stunde bzw. der Leistung je Anlage, dem Ertrag von heute und der Prognose.
 - **13.11.2026**
   - Bildschirm von außen schalten: `/wake` und `/sleep`, etwa für Bewegungsmelder über Home Assistant
     oder ioBroker.

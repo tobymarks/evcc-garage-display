@@ -24,6 +24,7 @@ void settings::load() {
   s.brightnessPct = prefs.getUChar("bright", DEFAULT_BRIGHTNESS_PCT);
   s.vehicleSwitch = prefs.getBool("vehsw", true);
   s.chargeLimit = prefs.getBool("limit", false);
+  s.solarPage = prefs.getBool("solar", false);
   s.password = prefs.getString("pw", "");
   prefs.end();
 
@@ -47,6 +48,7 @@ void settings::save() {
   prefs.putUChar("bright", s.brightnessPct);
   prefs.putBool("vehsw", s.vehicleSwitch);
   prefs.putBool("limit", s.chargeLimit);
+  prefs.putBool("solar", s.solarPage);
   prefs.putString("pw", s.password);
   prefs.end();
 }
