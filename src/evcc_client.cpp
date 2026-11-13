@@ -447,7 +447,7 @@ void evcc::begin() {
 
   lock = xSemaphoreCreateMutex();
   // Netzwerk auf Kern 0, damit LVGL (loop, Kern 1) flüssig bleibt
-  xTaskCreatePinnedToCore(task, "evcc", 10240, nullptr, 1, &taskHandle, 0);
+  xTaskCreatePinnedToCore(task, "evcc", 8192, nullptr, 1, &taskHandle, 0);
 }
 
 uint8_t evcc::count() { return lpCount; }
