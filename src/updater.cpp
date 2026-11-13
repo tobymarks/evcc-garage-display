@@ -2,10 +2,13 @@
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
+#include <MD5Builder.h>
 #include <NetworkClientSecure.h>
+#include <Preferences.h>
 #include <Update.h>
 #include <WiFi.h>
 #include <esp_ota_ops.h>
+#include <esp_partition.h>
 
 #include "config.h"
 #include "fw_version.h"
@@ -32,6 +35,73 @@ static char lastResult[80] = "noch nicht geprüft";
 static uint32_t nextCheck = UPDATE_FIRST_CHECK_MS;
 static bool forceInstall = false;
 static bool confirmed = false;
+
+// Installierte Version, die danach nicht lief (bleibt über Neustarts erhalten): Auf manchen Displays
+// startet der Bootloader nach dem Update wieder die alte Firmware. Ohne Zähler lüde das Display
+// dieselbe Version dann alle paar Minuten erneut und startete jedes Mal neu.
+static char triedVersion[sizeof(available)] = "";
+static volatile uint8_t triedCount = 0;     // so oft installiert
+static volatile uint8_t triedReadback = 0;  // … davon stand die Firmware nachweislich richtig im Flash
+
+static uint8_t failedAttempts() { return available[0] && !strcmp(triedVersion, available) ? triedCount : 0; }
+
+static void clearAttempts() {
+  if (!triedCount) return;
+  triedVersion[0] = '\0';
+  triedCount = triedReadback = 0;
+  Preferences prefs;
+  prefs.begin("update", false);
+  prefs.clear();
+  prefs.end();
+}
+
+static void loadAttempts() {
+  Preferences prefs;
+  prefs.begin("update", false);
+  if (prefs.isKey("ver")) prefs.getString("ver", triedVersion, sizeof(triedVersion));
+  triedCount = prefs.getUChar("n", 0);
+  triedReadback = prefs.getUChar("ok", 0);
+  prefs.end();
+  if (!strcmp(triedVersion, FW_VERSION)) clearAttempts();  // die installierte Version läuft jetzt: erledigt
+}
+
+static void noteAttempt(bool readbackOk) {
+  if (strcmp(triedVersion, available)) {
+    strlcpy(triedVersion, available, sizeof(triedVersion));
+    triedCount = triedReadback = 0;
+  }
+  if (triedCount < UINT8_MAX) {
+    triedCount = triedCount + 1;
+    if (readbackOk) triedReadback = triedReadback + 1;
+  }
+  Preferences prefs;
+  prefs.begin("update", false);
+  prefs.putString("ver", triedVersion);
+  prefs.putUChar("n", triedCount);
+  prefs.putUChar("ok", triedReadback);
+  prefs.end();
+}
+
+// Liest die geschriebene Firmware direkt vom Flash-Baustein zurück. Update.end() prüft sie nur über den
+// Flash-Cache; das hier zeigt, ob wirklich im Flash steht, was heruntergeladen wurde.
+static bool flashMatches(const esp_partition_t* partition, size_t len, const String& md5) {
+  constexpr size_t BLOCK = 4096;
+  uint8_t* buf = (uint8_t*)ps_malloc(BLOCK);  // PSRAM: der interne RAM ist knapp
+  if (!buf) return false;
+  MD5Builder builder;
+  builder.begin();
+  bool ok = true;
+  for (size_t offset = 0; ok && offset < len;) {
+    const size_t n = min(BLOCK, len - offset);
+    ok = esp_partition_read(partition, offset, buf, n) == ESP_OK;
+    builder.add(buf, n);
+    offset += n;
+    if (offset % (64 * BLOCK) == 0) vTaskDelay(1);  // andere Tasks auf diesem Kern nicht aushungern
+  }
+  free(buf);
+  builder.calculate();
+  return ok && md5.equalsIgnoreCase(builder.toString());
+}
 
 // Arduino bestätigt neue Firmware sonst sofort beim Start; wir erst nach UPDATE_CONFIRM_MS (siehe loop).
 // extern "C": der Kern sucht die Funktion unter ihrem C-Namen, sonst greift seine eigene (false).
@@ -64,6 +134,7 @@ static void check() {
     return;
   }
   if (!strcmp(version, FW_VERSION)) {
+    clearAttempts();  // z. B. per USB auf den veröffentlichten Stand gebracht: frühere Fehlversuche sind überholt
     available[0] = '\0';
     snprintf(lastResult, sizeof(lastResult), "aktuell");
     return;
@@ -86,6 +157,7 @@ static bool install() {
     http.end();
     return false;
   }
+  const esp_partition_t* target = esp_ota_get_next_update_partition(nullptr);  // dorthin schreibt Update
   if (!Update.begin(len, U_FLASH)) {
     snprintf(lastResult, sizeof(lastResult), "Update nicht möglich: %s", Update.errorString());
     http.end();
@@ -99,7 +171,11 @@ static bool install() {
     Update.abort();
     return false;
   }
-  snprintf(lastResult, sizeof(lastResult), "%s installiert", available);
+  // Ohne Prüfsumme lässt sich nichts vergleichen; das zählt dann nicht als Fehler
+  const bool readbackOk = !target || binMd5.length() != 32 || flashMatches(target, len, binMd5);
+  noteAttempt(readbackOk);
+  snprintf(lastResult, sizeof(lastResult), "%s installiert%s", available,
+           readbackOk ? "" : " (Flash-Inhalt weicht ab)");
   return true;
 }
 
@@ -127,6 +203,7 @@ static void start(Job j) {
 
 void updater::begin() {
   // TLS braucht viel Stack; Kern 0 wie das evcc-Polling, damit die Oberfläche flüssig bleibt
+  loadAttempts();
   xTaskCreatePinnedToCore(task, "update", 16384, nullptr, 1, &taskHandle, 0);
   log_i("Firmware %s", FW_VERSION);
 }
@@ -151,7 +228,10 @@ updater::Event updater::loop(bool idle) {
     start(Job::Check);
     return Event::None;
   }
-  if (available[0] && (forceInstall || (settings::get().autoUpdate && idle))) {
+  // Lief eine Version nach mehreren Installationen nicht, nur noch selten erneut versuchen:
+  // Jeder Fehlversuch endet mit einem Neustart, die Laufzeit zählt also seit dem letzten.
+  const bool retryDue = failedAttempts() < UPDATE_FAST_ATTEMPTS || millis() >= UPDATE_RETRY_AFTER_MS;
+  if (available[0] && (forceInstall || (settings::get().autoUpdate && idle && retryDue))) {
     start(Job::Install);
     if (busy) return Event::Installing;
   }
@@ -167,6 +247,10 @@ bool updater::working() { return busy; }
 void updater::confirm() {
   if (confirmed) return;
   confirmed = true;
+  // esp_ota_mark_app_valid_cancel_rollback() bestätigt den zuletzt gesetzten Starteintrag, nicht die
+  // laufende Firmware. Hat der Bootloader nach einem Update doch wieder die alte gestartet, würde sie
+  // sonst die neue als gut markieren, und deren Rückfallschutz wäre weg.
+  if (esp_ota_get_running_partition() != esp_ota_get_boot_partition()) return;
   esp_ota_mark_app_valid_cancel_rollback();
 }
 
@@ -181,5 +265,25 @@ String updater::status() {
   s += "Letzte Prüfung: ";
   s += !busy ? lastResult : job == Job::Install ? "Installation läuft …" : "läuft …";
   s += "\n";
+  s += failureNote();
+  return s;
+}
+
+String updater::failureNote() {
+  if (!triedCount) return String();
+  char buf[240];
+  snprintf(buf, sizeof(buf),
+           "Version %s wurde %u-mal installiert, lief danach aber nicht (Flash-Inhalt nach dem Schreiben "
+           "%u-mal richtig).\n",
+           triedVersion, triedCount, triedReadback);
+  String s = buf;
+  if (failedAttempts() >= UPDATE_FAST_ATTEMPTS && settings::get().autoUpdate) {
+    const uint32_t now = millis();
+    if (now >= UPDATE_RETRY_AFTER_MS)
+      s += "Nächster automatischer Versuch, sobald das Display 10 Minuten nicht gebraucht wird";
+    else
+      s += "Nächster automatischer Versuch in etwa " + String((UPDATE_RETRY_AFTER_MS - now) / 3600000UL + 1) + " h";
+    s += "; sofort mit /update?check=1&install=1\n";
+  }
   return s;
 }

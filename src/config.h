@@ -41,6 +41,8 @@
 #define UPDATE_CHECK_INTERVAL_MS (6 * 3600000UL)
 #define UPDATE_IDLE_MS (10 * 60000UL)           // installiert erst, wenn so lange niemand bedient und nicht geladen wird
 #define UPDATE_CONFIRM_MS 60000                 // läuft die neue Firmware so lange und hat WLAN, gilt sie als gut (sonst zurück zur alten)
+#define UPDATE_FAST_ATTEMPTS 3                  // so oft wird eine Version direkt nacheinander installiert, wenn sie danach nicht läuft
+#define UPDATE_RETRY_AFTER_MS (24 * 3600000UL)  // … danach erst wieder nach so langer Laufzeit
 
 // Display
 #define DEFAULT_BRIGHTNESS_PCT 100        // fest eingestellt, keine Nachtdimmung (die Garage ist hell, wenn jemand drin ist)

@@ -36,6 +36,20 @@ davorsteht.
 (einstellbar, 0 = immer an). Antippen weckt es, ohne eine Taste auszulösen. Beim Einstecken des Autos
 und beim Start/Ende des Ladens geht es von selbst an.
 
+**Bildschirm von außen schalten:** etwa per Bewegungs- oder Präsenzmelder aus Home Assistant oder ioBroker.
+`http://evcc-garage.local:8080/wake` wirkt wie eine Berührung: Der Bildschirm geht an und nach der
+eingestellten Zeit wieder aus. `/sleep` schaltet ihn sofort aus, auch während einer Ladung und bei
+„immer an" – bis zum nächsten Antippen, `/wake` oder bis ein Auto angesteckt wird bzw. das Laden beginnt
+oder endet. Ist ein Passwort gesetzt, gilt es auch hier (Benutzer `admin`). Beispiel für Home Assistant:
+
+```yaml
+rest_command:
+  garagendisplay_an:
+    url: "http://evcc-garage.local:8080/wake"
+  garagendisplay_aus:
+    url: "http://evcc-garage.local:8080/sleep"
+```
+
 ## Modi
 
 evcc ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bildet die drei Tasten so ab:
@@ -91,7 +105,9 @@ Die Displays halten sich selbst aktuell: Alle 6 Stunden (erstmals 2 Minuten nach
 `firmware/update.json` von der Projektseite. Gibt es eine andere Version, laden sie die Firmware über HTTPS
 (Zertifikat geprüft, MD5-Prüfsumme) – aber erst, wenn nicht geladen wird und 10 Minuten niemand das Display bedient hat.
 Startet die neue Firmware nicht sauber, kehrt der Bootloader beim nächsten Neustart zur alten zurück; sie gilt erst
-nach einer Minute Laufzeit als gut.
+nach einer Minute Laufzeit als gut. Läuft nach der Installation weiter die alte Firmware, versucht das Display
+dieselbe Version noch zweimal und danach nur noch einmal je 24 Stunden Laufzeit – `/update` zeigt das an,
+`/update?check=1&install=1` installiert trotzdem sofort.
 
 - Abschalten in den Einstellungen: „Automatische Updates“ auf `0`
 - Version: [scripts/version.py](scripts/version.py) – Commit-Datum und Kurz-Hash, lokal und in GitHub Actions gleich.
@@ -138,8 +154,9 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | `/settings` | Einstellungen ändern (wie im Portal, ohne WLAN) |
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
 | `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)); `/preview` ohne Parameter beendet |
-| `/update` | Firmware-Version und Stand der automatischen Updates; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
-| `/diag` | Laufzeit, Neustartgrund, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze, die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte Updates und der letzte gespeicherte Absturz |
+| `/update` | Firmware-Version und Stand der automatischen Updates, auch Installationen, nach denen die neue Version nicht lief; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
+| `/diag` | Laufzeit, Neustartgrund, Zustand des Bildschirms, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze (und ob der Inhalt des anderen startfähig ist), die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte und nicht gestartete Updates und der letzte gespeicherte Absturz |
+| `/wake`, `/sleep` | Bildschirm an- bzw. ausschalten, siehe „Bildschirm von außen schalten" |
 | `/wifiscan` | löst eine WLAN-Suche aus (Lasttest für die Bildausgabe) |
 
 Ohne Gerät: `./tools/sim/render.sh <Ordner> nocar charging …` rendert dieselben Beispielzustände mit der
@@ -151,6 +168,13 @@ Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
 Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktionen sind Schalter unter
 `/settings`.
 
+- **13.11.2026**
+  - Bildschirm von außen schalten: `/wake` und `/sleep`, etwa für Bewegungsmelder über Home Assistant
+    oder ioBroker.
+  - Updates: Lief nach einer Installation weiter die alte Firmware, lud das Display dieselbe Version alle
+    paar Minuten erneut und startete jedes Mal neu. Jetzt nach drei Versuchen nur noch einmal je
+    24 Stunden; `/update` und `/diag` zeigen, wie oft das passiert ist. Die alte Firmware bestätigt eine
+    nicht gestartete neue nicht mehr als gut.
 - **12.11.2026**
   - Neuer Schalter „Ladelimit" (ab Werk aus): Neben dem Fahrzeug steht das Ladelimit, antippen öffnet die
     Auswahl. Kennt evcc den Ladestand, gilt es in Prozent (50–100 %). Ohne Ladestand – etwa bei Fahrzeugen
