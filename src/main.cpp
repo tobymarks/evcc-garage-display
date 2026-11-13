@@ -9,6 +9,7 @@
 #include <WiFiManager.h>
 #include <esp_core_dump.h>
 #include <esp_heap_caps.h>
+#include <esp_image_format.h>
 #include <esp_ota_ops.h>
 #include <esp_rom_sys.h>
 #include <rom/rtc.h>
@@ -67,6 +68,9 @@ static bool dirty = true;
 
 static uint32_t lastActivity = 0;
 static int brightness = 0;
+// Bildschirm über /sleep ausgeschaltet; gilt, bis sich lastActivity wieder ändert
+static bool forcedSleep = false;
+static uint32_t forcedSleepActivity = 0;
 
 // Vorschau einzelner Zustände über http://evcc-garage.local/preview?s=…
 static EvccState previewState;
@@ -465,9 +469,12 @@ static void updateBacklight() {
   if (display::takeWakeRequest()) lastActivity = millis();
   if ((int32_t)(display::lastTouchMs() - lastActivity) > 0) lastActivity = display::lastTouchMs();
 
-  const bool keepOn = portalActive || anyCharging() ||
-                      settings::get().screenTimeoutMin == 0 ||
-                      millis() - lastActivity < settings::get().screenTimeoutMin * 60000UL;
+  // Nach /sleep bleibt der Bildschirm aus, auch beim Laden und bei "immer an" – bis ihn jemand antippt,
+  // /wake kommt oder sich am Ladepunkt etwas tut (alles setzt lastActivity neu)
+  if (forcedSleep && lastActivity != forcedSleepActivity) forcedSleep = false;
+  const bool keepOn = portalActive ||
+                      (!forcedSleep && (anyCharging() || settings::get().screenTimeoutMin == 0 ||
+                                        millis() - lastActivity < settings::get().screenTimeoutMin * 60000UL));
   display::setSleeping(!keepOn);
 
   const int target = keepOn ? settings::backlight() : 0;
@@ -605,9 +612,24 @@ static void handleDiag() {
   }
   const esp_partition_t* other = esp_ota_get_next_update_partition(nullptr);
   if (other) {
-    snprintf(buf, sizeof(buf), "Anderer Firmware-Platz %s: %s\n", other->label, otaStateName(otaState(other)));
+    snprintf(buf, sizeof(buf), "Anderer Firmware-Platz %s: %s", other->label, otaStateName(otaState(other)));
     s += buf;
+    // Dieselbe Prüfung wie im Bootloader (Aufbau, Prüfsumme, SHA-256): Lehnt er eine Firmware ab, die
+    // hier als startfähig gilt, liegt es nicht an ihrem Inhalt
+    if (updater::working()) {
+      s += ", wird vielleicht gerade beschrieben\n";  // dann schlüge die Prüfung nur deshalb fehl
+    } else {
+      const esp_partition_pos_t pos = {other->address, other->size};
+      esp_image_metadata_t image;
+      const esp_err_t err = esp_image_verify(ESP_IMAGE_VERIFY_SILENT, &pos, &image);
+      if (err == ESP_OK)
+        snprintf(buf, sizeof(buf), ", Inhalt startfähig (%lu Byte)\n", (unsigned long)image.image_len);
+      else
+        snprintf(buf, sizeof(buf), ", Inhalt nicht startfähig (leer oder beschädigt, Fehler 0x%x)\n", err);
+      s += buf;
+    }
   }
+  s += updater::failureNote();
   s += "Letzte Starts (neuester zuerst; Nr., Firmware, Platz, Zustand beim Start, Grund):\n";
   for (int i = 0; i < BOOT_LOG_SIZE && bootLog[i].version[0]; i++) {
     const BootEntry& e = bootLog[i];
@@ -781,6 +803,17 @@ static void startWebServer() {
   });
   // Laufzeit, Neustartgrund, Speicher und der zuletzt gespeicherte Absturz (Coredump im Flash)
   guarded("/diag", handleDiag);
+  // Bildschirm von außen schalten, z. B. per Bewegungsmelder aus Home Assistant oder ioBroker.
+  // /wake wirkt wie eine Berührung, /sleep schaltet aus bis zum nächsten Aufwecken.
+  guarded("/wake", []() {
+    lastActivity = millis();
+    web.send(200, "text/plain; charset=utf-8", "Bildschirm an\n");
+  });
+  guarded("/sleep", []() {
+    forcedSleep = true;
+    forcedSleepActivity = lastActivity;
+    web.send(200, "text/plain; charset=utf-8", "Bildschirm aus\n");
+  });
   // Lasttest gegen Bildstörungen: löst eine WLAN-Suche aus (wie das Einstellungsportal)
   guarded("/wifiscan", []() {
     const uint32_t start = millis();

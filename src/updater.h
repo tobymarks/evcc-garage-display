@@ -20,4 +20,6 @@ bool working();
 void confirm();
 const char* availableVersion();  // "" = aktuell
 String status();
+// Hinweis für /update und /diag, wenn eine installierte Version danach nicht lief; sonst leer
+String failureNote();
 }  // namespace updater
