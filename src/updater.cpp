@@ -48,7 +48,8 @@ static uint8_t failedAttempts() { return available[0] && !strcmp(triedVersion, a
 static void clearAttempts() {
   if (!triedCount) return;
   triedVersion[0] = '\0';
-  triedCount = triedReadback = 0;
+  triedCount = 0;
+  triedReadback = 0;
   Preferences prefs;
   prefs.begin("update", false);
   prefs.clear();
@@ -68,7 +69,8 @@ static void loadAttempts() {
 static void noteAttempt(bool readbackOk) {
   if (strcmp(triedVersion, available)) {
     strlcpy(triedVersion, available, sizeof(triedVersion));
-    triedCount = triedReadback = 0;
+    triedCount = 0;
+    triedReadback = 0;
   }
   if (triedCount < UINT8_MAX) {
     triedCount = triedCount + 1;

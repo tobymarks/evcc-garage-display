@@ -8,6 +8,7 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <esp_core_dump.h>
+#include <esp_flash.h>
 #include <esp_heap_caps.h>
 #include <esp_image_format.h>
 #include <esp_ota_ops.h>
@@ -48,6 +49,8 @@ static uint32_t restartAt = 0;
 static EvccState states[MAX_LOADPOINTS];
 static uint8_t current = 0;  // angezeigter Ladepunkt (Position in den Einstellungen)
 static EvccVehicles vehicles;  // in evcc angelegte Fahrzeuge
+static EvccSolar solar;          // Stundenwerte und Anlagen für die Solarseite
+static bool solarShown = false;  // Solarseite (letzte Seite hinter den Ladepunkten) statt eines Ladepunkts
 // Angefragte Änderung (Modus, Boost, Fahrzeug), bis evcc sie bestätigt
 struct Pending {
   bool active = false;
@@ -79,6 +82,10 @@ static int previewDark = -1;  // -1 = Einstellung verwenden
 static uint32_t previewUntil = 0;
 static bool previewLimit = false;  // Ladelimit in der Vorschau zeigen, auch wenn es ausgeschaltet ist
 static bool previewBoost = false;  // Boost-Knopf in der Vorschau zeigen, auch wenn er ausgeschaltet ist
+static bool previewSolar = false;  // Vorschau der Solarseite …
+static bool previewLive = false;   // … mit den echten Daten statt eines Beispielzustands (?s=pvlive)
+static EvccSolar previewSolarData;
+static int8_t previewHour = -1;
 
 // ---------- WLAN-Einrichtung / Einstellungen ----------
 
@@ -114,6 +121,8 @@ static bool applySettings(std::function<String(const char*)> value) {
   if (!chargeLimit.isEmpty()) s.chargeLimit = chargeLimit.toInt() != 0;
   const String vehicleSwitch = value("vehsw");
   if (!vehicleSwitch.isEmpty()) s.vehicleSwitch = vehicleSwitch.toInt() != 0;
+  const String solarPage = value("solar");
+  if (!solarPage.isEmpty()) s.solarPage = solarPage.toInt() != 0;
   // Leeres Feld = Passwort unverändert; entfernt wird es nur ausdrücklich
   const String password = value("pw");
   if (value("pwclear").toInt() != 0)
@@ -264,16 +273,24 @@ static void onLimitSelected(bool energy, float value) {
 }
 
 static void showLoadpoint(uint8_t index) {
-  if (index == current || index >= evcc::count()) return;
+  if (index >= evcc::count() || (index == current && !solarShown)) return;
   current = index;
+  solarShown = false;
   flashMsg = nullptr;  // Fehlermeldungen gehören zum vorher gezeigten Ladepunkt
   dirty = true;
 }
 
-// Wischen nach links → nächster Ladepunkt
+// Wischen nach links → nächster Ladepunkt; hinter dem letzten liegt die Solarseite (Einstellung)
 static void onSwipe(int delta) {
   lastActivity = millis();
-  showLoadpoint(current + delta);
+  const int next = (solarShown ? evcc::count() : current) + delta;
+  if (next == evcc::count() && settings::get().solarPage) {
+    solarShown = true;
+    flashMsg = nullptr;
+    dirty = true;
+  } else if (next >= 0) {
+    showLoadpoint(next);
+  }
 }
 
 static bool anyCharging() {
@@ -342,7 +359,11 @@ static void updateState() {
   static bool lastWifi = false, lastStale = true;
   static char lastClock[6] = "";
 
-  if (evcc::latest(states, vehicles)) dirty = true;
+  if (evcc::latest(states, vehicles, solar)) dirty = true;
+  if (solarShown && !settings::get().solarPage) {  // in den Einstellungen ausgeschaltet
+    solarShown = false;
+    dirty = true;
+  }
 
   const uint32_t touched = display::lastTouchMs();
   const bool inUse = touched && millis() - touched < AUTO_SWITCH_AFTER_TOUCH_MS;
@@ -438,10 +459,13 @@ static void updateState() {
   if (dirty) {
     dirty = false;
     const bool preview = previewActive();
+    const bool example = preview && !previewLive;  // Beispielzustand statt der echten Daten
     UiView v;
-    v.state = preview ? previewState : state;
-    v.wifiConnected = preview || wifi;
-    v.stale = preview ? previewStale : stale;
+    v.state = example ? previewState : state;
+    v.wifiConnected = example || wifi;
+    v.stale = example ? previewStale : stale;
+    v.solar = preview ? previewSolar : solarShown;
+    v.solarData = example && previewSolar ? previewSolarData : solar;
     v.pendingMode = pending(Command::Mode, current).active ? modeTarget[current] : ChargeMode::None;
     v.boostButton = settings::get().boostButton || (preview && previewBoost);
     v.pendingBoost = pending(Command::Boost, current).active ? boostTarget[current] : -1;
@@ -451,10 +475,19 @@ static void updateState() {
     v.limitButton = settings::get().chargeLimit || (preview && previewLimit);
     v.pendingLimit = !preview && pending(Command::Limit, current).active ? limitTarget[current] : -1;
     strlcpy(v.pendingVehicleTitle, vehicleTargetTitle[current], sizeof(v.pendingVehicleTitle));
-    v.page = current;
-    v.pageCount = evcc::count();
+    // Die Solarseite ist die letzte Seite; in der Vorschau auch, wenn sie ausgeschaltet ist
+    v.page = v.solar ? evcc::count() : current;
+    v.pageCount = evcc::count() + (settings::get().solarPage || v.solar ? 1 : 0);
     v.flash = flashMsg;
     strlcpy(v.clock, clock, sizeof(v.clock));
+    if (example && previewSolar) {
+      v.hour = previewHour;
+    } else if (timeValid()) {
+      const time_t now = time(nullptr);
+      struct tm t;
+      localtime_r(&now, &t);
+      v.hour = t.tm_hour;
+    }
     if (state.valid && timeValid()) {
       const time_t at = time(nullptr) - (millis() - state.updatedMs) / 1000;
       struct tm t;
@@ -490,11 +523,16 @@ static void updateBacklight() {
 // Beispielzustände zum Prüfen der Oberfläche ohne echtes Auto, siehe src/preview.cpp
 static void handlePreview() {
   EvccState p;
-  if (!preview::scene(web.arg("s").c_str(), p, previewStale)) {
+  const String name = web.arg("s");
+  // Solarseite: Beispielzustände "pv…" oder mit ?s=pvlive die echten Daten – auch wenn sie ausgeschaltet ist
+  previewLive = name == "pvlive";
+  previewSolar = previewLive || preview::solarScene(name.c_str(), p, previewSolarData, previewHour);
+  if (previewSolar) previewStale = false;
+  if (!previewSolar && !preview::scene(name.c_str(), p, previewStale)) {
     previewUntil = 0;
     dirty = true;
     web.send(200, "text/plain",
-             String("Vorschau beendet. Zustaende: ?s=") + preview::NAMES + " [&dark=0|1]\n");
+             String("Vorschau beendet. Zustaende: ?s=") + preview::NAMES + "|pvlive [&dark=0|1]\n");
     return;
   }
   p.updatedMs = millis();
@@ -600,6 +638,13 @@ static void handleDiag() {
            heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
   s += buf;
   snprintf(buf, sizeof(buf), "evcc-Task: Stack frei mindestens %lu Byte\n", (unsigned long)evcc::stackFree());
+  s += buf;
+  // Hersteller und Größe des Flash-Bausteins: die Boards werden mit verschiedenen bestückt
+  uint32_t flashId = 0, flashSize = 0;
+  esp_flash_read_id(nullptr, &flashId);
+  esp_flash_get_physical_size(nullptr, &flashSize);
+  snprintf(buf, sizeof(buf), "Flash-Baustein: Kennung 0x%06lx, %lu MB\n", (unsigned long)flashId,
+           (unsigned long)(flashSize >> 20));
   s += buf;
   // Startete eine neue Firmware nicht sauber, hat der Bootloader die vorherige wiederhergestellt
   esp_app_desc_t desc;
@@ -719,7 +764,7 @@ static void handleSettings() {
 
   const Settings& s = settings::get();
   String h = FPSTR(SETTINGS_HEAD);
-  h.reserve(7168);
+  h.reserve(7936);
   if (web.hasArg("saved")) h += "<p class=\"note\">Gespeichert – die Änderung ist schon am Display zu sehen.</p>";
   h += "<form method=\"post\"><h2>Verbindung</h2>";
   h += "<div class=\"row\"><div><label>evcc-Adresse</label><input name=\"host\" required value=\"" +
@@ -740,6 +785,10 @@ static void handleSettings() {
   h += "<label>Battery Boost<small>Im Modus Smart die Akku-Anzeige oben antippen, um wie in evcc den Hausakku "
        "zum Laden dazuzuschalten.</small></label><select name=\"boost\">" + option(0, s.boostButton, "Aus") +
        option(1, s.boostButton, "An") + "</select>";
+  h += "<label>Solarseite<small>Zusätzliche Seite hinter den Ladepunkten, erreichbar durch Wischen: aktuelle "
+       "Erzeugung, der Tag je Stunde (bei mehreren Anlagen die Leistung je Anlage), dazu heute, Rest und morgen. "
+       "Tagesverlauf und Tagesertrag liefert evcc ab Version 0.319.</small></label><select name=\"solar\">" +
+       option(0, s.solarPage, "Aus") + option(1, s.solarPage, "An") + "</select>";
   h += "<label>Design</label><select name=\"theme\">" + option(0, s.theme, "Automatisch nach Sonnenstand") +
        option(1, s.theme, "Immer hell") + option(2, s.theme, "Immer dunkel") + "</select>";
   char lat[12], lon[12];

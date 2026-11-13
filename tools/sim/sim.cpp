@@ -84,7 +84,17 @@ int main(int argc, char** argv) {
       ui::showMessage(ICON_SETTINGS, "Einstellungen",
                       "Mit dem WLAN \"evcc-Garage\" verbinden. Die Seite öffnet sich automatisch, "
                       "sonst 192.168.4.1 aufrufen. Antippen zum Abbrechen.");
-    else if (!preview::scene(argv[i], v.state, stale)) {
+    else if (!strncmp(argv[i], "pv", 2)) {
+      // Solarseite: letzte Seite hinter einem Ladepunkt
+      if (!preview::solarScene(argv[i], v.state, v.solarData, v.hour)) {
+        fprintf(stderr, "Unbekannter Zustand: %s\n", argv[i]);
+        return 1;
+      }
+      stale = false;
+      v.solar = true;
+      v.page = 1;
+      v.pageCount = 2;
+    } else if (!preview::scene(argv[i], v.state, stale)) {
       fprintf(stderr, "Unbekannter Zustand: %s\n", argv[i]);
       return 1;
     }
@@ -92,6 +102,7 @@ int main(int argc, char** argv) {
     v.stale = stale;
     strcpy(v.clock, "14:32");
     strcpy(v.lastUpdate, "14:29");
+    if (v.solar) snprintf(v.clock, sizeof(v.clock), "%02d:24", v.hour);
     for (bool dark : {false, true}) {
       ui::setNight(dark);
       if (!settings) {

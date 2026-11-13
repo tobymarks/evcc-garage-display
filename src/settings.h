@@ -19,6 +19,7 @@ struct Settings {
   uint8_t brightnessPct;     // Helligkeit 10–100 %
   bool vehicleSwitch;        // Fahrzeugzeile antippen wechselt das Fahrzeug
   bool chargeLimit;          // Ladelimit neben der Fahrzeugzeile anzeigen und per Antippen einstellen
+  bool solarPage;            // zusätzliche Seite hinter den Ladepunkten: Erzeugung, Tagesverlauf, Prognose
   String password;           // schützt Weboberfläche und OTA (Benutzer "admin"); leer = offen
 };
 
