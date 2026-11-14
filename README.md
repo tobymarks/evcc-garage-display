@@ -181,7 +181,7 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | `/update` | Firmware-Version und Stand der automatischen Updates, auch Installationen, nach denen die neue Version nicht lief; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
 | `/diag` | Diagnose, auch als Knopf „Diagnose herunterladen“ auf der Einstellungsseite (`/diag?download=1` liefert sie als Datei zum Anhängen an ein Issue; ohne Passwörter, WLAN-Namen, Adressen, Standort und Namen von Ladepunkten oder Fahrzeugen): Laufzeit, Neustartgrund, Zustand des Bildschirms, Flash-Baustein, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze (und ob der Inhalt des anderen startfähig ist), die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte und nicht gestartete Updates, der letzte gespeicherte Absturz, dazu Chip, Touch-Controller, Einstellungen, evcc-Version und was evcc je Ladepunkt liefert |
 | `/wake`, `/sleep` | Bildschirm an- bzw. ausschalten, siehe „Bildschirm von außen schalten" |
-| `/backlight` | Taktung der Hintergrundbeleuchtung anzeigen; `?hz=1000` stellt sie bis zum nächsten Neustart um (200 bis 40000 Hz, ab Werk 20000). Zum Ausprobieren, falls das Display unterhalb von 90 % Helligkeit dunkel bleibt |
+| `/backlight` | Taktung der Hintergrundbeleuchtung anzeigen; `?hz=1000` stellt sie bis zum nächsten Neustart um (100 bis 40000 Hz, ab Werk 20000), `?hz=150&save=1` speichert sie und startet das Display neu, sodass sie schon ab dem Start gilt (zurück mit `?hz=20000&save=1`). Zum Ausprobieren, falls das Display unterhalb von 90 % Helligkeit dunkel bleibt |
 | `/wifiscan` | löst eine WLAN-Suche aus (Lasttest für die Bildausgabe) |
 
 Ohne Gerät: `./tools/sim/render.sh <Ordner> nocar charging …` rendert dieselben Beispielzustände mit der
@@ -209,6 +209,9 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
     in der Küche (#31).
   - Einstellungsseite: Knopf „Jetzt aktualisieren“ sucht sofort nach einer neuen Version und installiert sie,
     ohne auf das automatische Update zu warten (#26).
+  - Helligkeit: Die Taktung der Hintergrundbeleuchtung lässt sich zum Ausprobieren jetzt auch speichern
+    (`/backlight?hz=150&save=1`, zurück mit `?hz=20000&save=1`). Sie gilt dann schon ab dem Start des Displays;
+    der Bereich reicht jetzt bis 100 Hz hinunter (#21).
   - Diagnose als Datei: Auf der Einstellungsseite gibt es unten „Diagnose herunterladen“, zum Anhängen an ein
     Issue. Die Datei enthält keine Passwörter, keinen WLAN-Namen, keine Netzwerkadressen, keinen Standort und
     keine Namen von Ladepunkten oder Fahrzeugen. Neu darin: Chip, Touch-Controller, Einstellungen, evcc-Version

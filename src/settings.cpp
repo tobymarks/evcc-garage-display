@@ -2,6 +2,7 @@
 
 #include <Preferences.h>
 
+#include "board.h"
 #include "config.h"
 
 static Settings s;
@@ -27,12 +28,14 @@ void settings::load() {
   s.solarPage = prefs.getBool("solar", false);
   s.solarSurplus = prefs.getBool("solarsur", false);
   s.solarFirst = prefs.getBool("solar1st", false);
+  s.backlightHz = prefs.getUInt("blhz", LCD_BACKLIGHT_HZ);
   s.password = prefs.getString("pw", "");
   prefs.end();
 
   if (s.rotation > 3) s.rotation = DEFAULT_ROTATION;
   if (s.theme > 2) s.theme = DEFAULT_THEME;
   s.brightnessPct = constrain(s.brightnessPct, MIN_BRIGHTNESS_PCT, 100);
+  s.backlightHz = constrain(s.backlightHz, (uint32_t)MIN_BACKLIGHT_HZ, (uint32_t)MAX_BACKLIGHT_HZ);
 }
 
 void settings::save() {
@@ -53,6 +56,7 @@ void settings::save() {
   prefs.putBool("solar", s.solarPage);
   prefs.putBool("solarsur", s.solarSurplus);
   prefs.putBool("solar1st", s.solarFirst);
+  prefs.putUInt("blhz", s.backlightHz);
   prefs.putString("pw", s.password);
   prefs.end();
 }

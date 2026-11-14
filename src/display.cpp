@@ -274,11 +274,32 @@ static void touchCb(lv_indev_t*, lv_indev_data_t* data) {
 
 static uint8_t backlightDuty = 0;
 static uint32_t backlightFreq = LCD_BACKLIGHT_HZ;
+static uint8_t backlightBits = 8;
 
-void display::begin(uint8_t rot) {
+// Auflösung so wählen, dass der Teiler zum 80-MHz-Takt passt (höchstens 1023). Mit 8 Bit reicht er nur bis
+// etwa 306 Hz hinunter; darunter nähme der Treiber den Quarz und unter 153 Hz den ungenauen RC-Oszillator.
+static uint8_t bitsFor(uint32_t hz) {
+  uint8_t bits = 8;
+  while (bits < 14 && 80000000UL / (hz << bits) > 1023) bits++;
+  return bits;
+}
+
+// Helligkeit 0–255 in der aktuellen Auflösung ausgeben; 255 ist dauerhaft an
+static void writeBacklight() {
+  ledcWrite(PIN_LCD_BACKLIGHT,
+            backlightDuty == 255 ? 1UL << backlightBits : (uint32_t)backlightDuty << (backlightBits - 8));
+}
+
+void display::begin(uint8_t rot, uint32_t hz) {
   rotation = rot & 3;
 
-  ledcAttach(PIN_LCD_BACKLIGHT, LCD_BACKLIGHT_HZ, 8);
+  backlightBits = bitsFor(hz);
+  if (ledcAttach(PIN_LCD_BACKLIGHT, hz, backlightBits)) {
+    backlightFreq = hz;  // ledcReadFreq() liefert 0, solange die Beleuchtung aus ist
+  } else {  // gespeicherte Taktung lässt sich nicht einstellen: Werkswert
+    backlightBits = 8;
+    ledcAttach(PIN_LCD_BACKLIGHT, LCD_BACKLIGHT_HZ, 8);
+  }
   ledcWrite(PIN_LCD_BACKLIGHT, 0);
 
   initST7701();
@@ -305,13 +326,17 @@ void display::begin(uint8_t rot) {
 
 void display::setBrightness(uint8_t value) {
   backlightDuty = value;
-  ledcWrite(PIN_LCD_BACKLIGHT, value);
+  writeBacklight();
 }
 
 uint32_t display::setBacklightHz(uint32_t hz) {
-  const uint32_t actual = ledcChangeFrequency(PIN_LCD_BACKLIGHT, hz, 8);
-  if (actual) backlightFreq = actual;
-  ledcWrite(PIN_LCD_BACKLIGHT, backlightDuty);
+  const uint8_t bits = bitsFor(hz);
+  const uint32_t actual = ledcChangeFrequency(PIN_LCD_BACKLIGHT, hz, bits);
+  if (actual) {
+    backlightFreq = actual;
+    backlightBits = bits;
+  }
+  writeBacklight();
   return actual;
 }
 
