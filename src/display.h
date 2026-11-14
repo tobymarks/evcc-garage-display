@@ -16,6 +16,9 @@ void setSleeping(bool sleeping);
 bool takeWakeRequest();
 uint32_t lastTouchMs();
 
+// Kennung, Firmware und Auflösung des Touch-Controllers (für die Diagnose)
+String touchInfo();
+
 // Sendet den aktuellen Bildschirminhalt als BMP (zum Prüfen der Oberfläche aus der Ferne)
 void sendScreenshot(WebServer& server);
 }  // namespace display

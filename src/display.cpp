@@ -304,6 +304,22 @@ void display::setBrightness(uint8_t value) { ledcWrite(PIN_LCD_BACKLIGHT, value)
 
 void display::setSleeping(bool value) { sleeping = value; }
 
+String display::touchInfo() {
+  if (!touchAddr) return "nicht gefunden";
+  char buf[128];
+  uint8_t id[11], config = 0;  // 0x8140: Kennung (4 Zeichen), Firmware, Auflösung X und Y, Hersteller
+  if (!gtRead(0x8140, id, sizeof(id))) {
+    snprintf(buf, sizeof(buf), "Adresse 0x%02X, antwortet nicht", touchAddr);
+    return buf;
+  }
+  gtRead(0x8047, &config, 1);
+  char name[5] = "";
+  for (int i = 0; i < 4; i++) name[i] = isprint(id[i]) ? id[i] : 0;
+  snprintf(buf, sizeof(buf), "GT%s, Adresse 0x%02X, Firmware 0x%04X, eingestellte Auflösung %ux%u, Hersteller 0x%02X, Konfiguration 0x%02X",
+           name, touchAddr, id[4] | id[5] << 8, id[6] | id[7] << 8, id[8] | id[9] << 8, id[10], config);
+  return buf;
+}
+
 bool display::takeWakeRequest() {
   const bool w = wakeRequested;
   wakeRequested = false;

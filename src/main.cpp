@@ -630,7 +630,8 @@ static void recordBoot() {
   prefs.end();
 }
 
-static void handleDiag() {
+// Gerät, Firmware-Plätze, letzte Starts und der letzte Absturz
+static String diagDevice() {
   const esp_reset_reason_t reason = esp_reset_reason();
   char buf[160];
   String s;
@@ -716,6 +717,102 @@ static void handleDiag() {
   } else {
     s += "Kein Absturz gespeichert\n";
   }
+  return s;
+}
+
+static const char* yesNo(bool value) { return value ? "ja" : "nein"; }
+
+// Hardware, Einstellungen und was evcc liefert – ohne Passwörter, WLAN-Name, Adressen, Standort und
+// ohne Namen von Ladepunkten und Fahrzeugen, damit die Diagnose öffentlich an ein Issue passt
+static String diagDetails() {
+  const Settings& st = settings::get();
+  char buf[240];
+  String s = "\nHardware\n";
+  snprintf(buf, sizeof(buf), "Chip: %s Revision v%u.%u, %u Kerne, %lu MHz, %.0f °C\n", ESP.getChipModel(),
+           (unsigned)ESP.getChipRevision() / 100, (unsigned)ESP.getChipRevision() % 100, (unsigned)ESP.getChipCores(),
+           (unsigned long)getCpuFrequencyMhz(), temperatureRead());
+  s += buf;
+  snprintf(buf, sizeof(buf), "Speicher gesamt: interner RAM %u, PSRAM %u\n",
+           heap_caps_get_total_size(MALLOC_CAP_INTERNAL), heap_caps_get_total_size(MALLOC_CAP_SPIRAM));
+  s += buf;
+  s += "Touch: " + display::touchInfo() + "\n";
+  snprintf(buf, sizeof(buf), "Gebaut: %s %s, ESP-IDF %s, Arduino %s\n", __DATE__, __TIME__, esp_get_idf_version(),
+           ESP_ARDUINO_VERSION_STR);
+  s += buf;
+
+  s += "\nUpdates\n";
+  const String update = updater::status();  // erste Zeile ist die Firmware, die steht schon oben
+  s += update.substring(update.indexOf('\n') + 1);
+
+  s += "\nEinstellungen\n";
+  IPAddress ip;
+  snprintf(buf, sizeof(buf), "evcc-Adresse als %s, Port %u, Ladepunkte %s\n",
+           ip.fromString(st.evccHost) ? "IP-Adresse" : "Name", st.evccPort, settings::loadpointsText(st).c_str());
+  s += buf;
+  static const char* const THEMES[] = {"automatisch", "hell", "dunkel"};
+  snprintf(buf, sizeof(buf), "Drehung %u°, Farbschema %s, Helligkeit %u %%, Bildschirm aus nach %u min%s\n",
+           st.rotation * 90, THEMES[st.theme % 3], st.brightnessPct, st.screenTimeoutMin,
+           st.screenTimeoutMin ? "" : " (immer an)");
+  s += buf;
+  snprintf(buf, sizeof(buf),
+           "Battery Boost %s, Fahrzeugwechsel %s, Ladelimit %s, Solarseite %s, Passwort gesetzt %s, Standort gesetzt %s\n",
+           yesNo(st.boostButton), yesNo(st.vehicleSwitch), yesNo(st.chargeLimit), yesNo(st.solarPage),
+           yesNo(!st.password.isEmpty()), yesNo(st.latitude != 0 || st.longitude != 0));
+  s += buf;
+  snprintf(buf, sizeof(buf), "WLAN-Kanal %d, Uhrzeit bekannt %s\n", (int)WiFi.channel(), yesNo(timeValid()));
+  s += buf;
+
+  s += "\nevcc\n";
+  const evcc::Diagnostics d = evcc::diagnostics();
+  snprintf(buf, sizeof(buf), "Version %s\nAbfragen %lu, davon ohne brauchbare Antwort %lu; letzte: Code %d, %lu ms; längste %lu ms\n",
+           d.version[0] ? d.version : "unbekannt", (unsigned long)d.polls, (unsigned long)d.failed, d.lastCode,
+           (unsigned long)d.lastDurationMs, (unsigned long)d.maxDurationMs);
+  s += buf;
+  if (d.lastOkMs)
+    snprintf(buf, sizeof(buf), "Letzte brauchbare Antwort vor %lu s\n", (unsigned long)((millis() - d.lastOkMs) / 1000));
+  else
+    snprintf(buf, sizeof(buf), "Noch keine brauchbare Antwort\n");
+  s += buf;
+  static const char* const MODES[] = {"keiner", "Smart", "Langsam", "Schnell"};
+  for (uint8_t i = 0; i < evcc::count(); i++) {
+    const EvccState& e = states[i];
+    if (!e.valid) {
+      snprintf(buf, sizeof(buf), "Ladepunkt %u: %s\n", st.loadpoints[i],
+               e.missing ? "in evcc nicht vorhanden" : "noch keine Daten");
+    } else {
+      snprintf(buf, sizeof(buf),
+               "Ladepunkt %u: Modus %s%s, angesteckt %s, lädt %s, %.0f W, Phasen %d, Heizgerät %s, Fahrzeug zugeordnet %s, "
+               "Ladestand %.0f, Limit %.0f, Limit in Prozent %s\n",
+               st.loadpoints[i], MODES[(uint8_t)e.mode % 4], e.modeOff ? " (aus)" : "", yesNo(e.connected),
+               yesNo(e.charging), e.chargePower, e.phasesActive, yesNo(e.heating), yesNo(e.vehicleName[0]),
+               e.vehicleSoc, e.limitSoc, yesNo(e.socBased));
+    }
+    s += buf;
+  }
+  const EvccState& h = states[0];
+  snprintf(buf, sizeof(buf),
+           "Haus: PV %s, Hausakku %s, Netz %s, Prognose %s, Battery Boost in evcc %s, PV-Anlagen %u, Fahrzeuge %u\n",
+           yesNo(h.pvPower >= 0), yesNo(h.batterySoc >= 0), yesNo(h.hasGrid), yesNo(h.solarToday >= 0),
+           yesNo(h.hasBoost), solar.plantTotal, vehicles.count);
+  s += buf;
+  if (st.solarPage) {
+    snprintf(buf, sizeof(buf), "Solarseite: Stundenwerte %s\n", solar.valid ? "vorhanden" : "fehlen");
+    s += buf;
+  }
+  return s;
+}
+
+// /diag zeigt die Diagnose an, /diag?download=1 liefert sie als Datei zum Anhängen an ein Issue
+static void handleDiag() {
+  String s;
+  if (web.hasArg("download")) {
+    s = "Diagnose evcc-Garagendisplay\n"
+        "Nicht enthalten: Passwörter, WLAN-Name, Netzwerkadressen, Standort, Namen von Ladepunkten und Fahrzeugen.\n"
+        "Bei einem Problem an ein Issue anhängen: " REPO_URL "/issues\n\n";
+    web.sendHeader("Content-Disposition", "attachment; filename=\"evcc-garage-diagnose-" FW_VERSION ".txt\"");
+  }
+  s += diagDevice();
+  s += diagDetails();
   web.send(200, "text/plain; charset=utf-8", s);
 }
 
@@ -751,6 +848,8 @@ input[type=checkbox]{width:auto;margin-right:.5rem}.check{font-weight:400}.note{
 background:#0fdd8d33}figure{margin:1.1rem 0 0;text-align:center}figure img{width:15rem;max-width:100%;height:auto;
 border-radius:.9rem;border:1px solid #8884;display:block;margin:0 auto .6rem}
 button.plain{margin:0;width:auto;padding:.5rem .9rem;background:none;border:1px solid #8888;color:inherit;font-weight:400}
+a.plain{display:inline-block;margin:0 .5rem .5rem 0;padding:.5rem .9rem;border:1px solid #8888;border-radius:.5rem;color:inherit;
+text-decoration:none}.hint{font-size:.85rem;opacity:.65;margin:.6rem 0 .9rem}.hint a{color:inherit}
 </style></head><body><h1>evcc-Garage</h1>)";
 
 static void handleSettings() {
@@ -835,6 +934,12 @@ static void handleSettings() {
     h += "<label class=\"check\"><input type=\"checkbox\" name=\"pwclear\" value=\"1\">Passwort entfernen</label>";
   h += "<button>Speichern</button><small>Verbindung, Drehung und Passwort starten das Display neu, alles andere "
        "wirkt sofort.</small></form>";
+  h += "<h2>Diagnose</h2><p class=\"hint\">Hilft bei der Fehlersuche: Firmware, Hardware, Einstellungen, die letzten "
+       "Starts und Abstürze. Die Datei enthält keine Passwörter, keinen WLAN-Namen, keine Netzwerkadressen, keinen "
+       "Standort und keine Namen von Ladepunkten oder Fahrzeugen. Du kannst sie so an ein "
+       "<a href=\"" REPO_URL "/issues\">Issue auf GitHub</a> anhängen.</p>"
+       "<a class=\"plain\" href=\"/diag?download=1\">Diagnose herunterladen</a>"
+       "<a class=\"plain\" href=\"/diag\">Ansehen</a>";
   h += "<script>const i=document.getElementById('shot'),b=document.getElementById('load');"
        "function l(){b.textContent='Lädt …';i.onload=()=>{i.hidden=false;b.textContent='Aktualisieren'};"
        "i.onerror=()=>{b.textContent='Erneut versuchen'};i.src='/screenshot.bmp?'+Date.now()}"
