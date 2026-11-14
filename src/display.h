@@ -7,11 +7,12 @@ class WebServer;
 namespace display {
 // Initialisiert Display, Touch und LVGL. Kalibriert den Touch beim ersten Start
 // oder wenn beim Einschalten der Bildschirm berührt wird.
-void begin(uint8_t rotation);
+// backlightHz ist die Taktung der Hintergrundbeleuchtung ab dem Start.
+void begin(uint8_t rotation, uint32_t backlightHz);
 
 void setBrightness(uint8_t value);
 
-// Taktung der Hintergrundbeleuchtung zum Ausprobieren (#21), gilt bis zum Neustart.
+// Taktung der Hintergrundbeleuchtung im laufenden Betrieb umstellen (#21), gilt bis zum Neustart.
 // Liefert die tatsächlich eingestellte Frequenz, 0 wenn sie sich nicht einstellen ließ.
 uint32_t setBacklightHz(uint32_t hz);
 uint32_t backlightHz();
