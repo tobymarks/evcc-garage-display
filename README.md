@@ -121,6 +121,10 @@ nach einer Minute Laufzeit als gut. Läuft nach der Installation weiter die alte
 dieselbe Version noch zweimal und danach nur noch einmal je 24 Stunden Laufzeit – `/update` zeigt das an,
 `/update?check=1&install=1` installiert trotzdem sofort.
 
+Bis zur Version vom 13.11.2026 konnte genau das passieren: Nach einem automatischen Update lief weiter die alte
+Firmware, auf manchen Displays jedes Mal. Solche Displays kommen so auf den aktuellen Stand: antippen oder neu
+starten und innerhalb von 10 Minuten `/update?check=1&install=1` aufrufen (oder einmal per USB neu aufspielen).
+
 - Abschalten in den Einstellungen: „Automatische Updates“ auf `0`
 - Version: [scripts/version.py](scripts/version.py) – Commit-Datum und Kurz-Hash, lokal und in GitHub Actions gleich.
   Ein lokal gebauter, sauberer Stand von `main` wird deshalb nicht erneut installiert; Builds mit ungespeicherten
@@ -180,6 +184,13 @@ Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
 Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktionen sind Schalter unter
 `/settings`.
 
+- **14.11.2026**
+  - Automatische Updates: Fehler behoben, durch den nach einem Update wieder die alte Firmware lief. Nach der
+    Installation begann das Display bis zum Neustart sofort eine zweite; bei schneller Internetverbindung
+    überschrieb sie den Anfang der neuen Firmware, und der Bootloader startete die alte. Displays, die
+    deshalb auf einer alten Version festhängen, holen die Korrektur so: Display antippen oder neu starten
+    und innerhalb von 10 Minuten `http://<IP des Displays>:8080/update?check=1&install=1` aufrufen.
+  - Diagnose: `/diag` zeigt den Zustand der Firmware-Plätze nach so einem Fall richtig an.
 - **13.11.2026**
   - Neuer Schalter „Solarseite" (ab Werk aus): zusätzliche Seite hinter den Ladepunkten mit der aktuellen
     Erzeugung, dem Tag je Stunde bzw. der Leistung je Anlage, dem Ertrag von heute und der Prognose.

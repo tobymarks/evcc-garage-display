@@ -35,6 +35,7 @@ static char lastResult[80] = "noch nicht geprüft";
 static uint32_t nextCheck = UPDATE_FIRST_CHECK_MS;
 static bool forceInstall = false;
 static bool confirmed = false;
+static bool restartPending = false;  // Update installiert, das Display startet gleich neu
 
 // Installierte Version, die danach nicht lief (bleibt über Neustarts erhalten): Auf manchen Displays
 // startet der Bootloader nach dem Update wieder die alte Firmware. Ohne Zähler lüde das Display
@@ -197,7 +198,7 @@ static void task(void*) {
 }
 
 static void start(Job j) {
-  if (busy || WiFi.status() != WL_CONNECTED) return;
+  if (busy || restartPending || WiFi.status() != WL_CONNECTED) return;
   busy = true;
   job = j;
   xTaskNotifyGive(taskHandle);
@@ -218,12 +219,19 @@ updater::Event updater::loop(bool idle) {
   if (installFinished) {
     installFinished = false;
     forceInstall = false;
-    if (installOk) return Event::Done;
+    if (installOk) {
+      // Ab hier nichts mehr anfangen. Bis zum Neustart vergeht noch eine Sekunde; bei einem automatischen
+      // Update begann in dieser Zeit sofort die nächste Installation derselben Version. Sie überschrieb den
+      // Anfang der eben installierten Firmware, der Neustart traf sie mittendrin, und der Bootloader
+      // lehnte den Platz ab und startete wieder die alte Firmware (#12).
+      restartPending = true;
+      return Event::Done;
+    }
     available[0] = '\0';  // erst nach der nächsten Prüfung erneut versuchen
     nextCheck = millis() + UPDATE_CHECK_INTERVAL_MS;
     return Event::Failed;
   }
-  if (busy) return Event::None;
+  if (busy || restartPending) return Event::None;
 
   if ((int32_t)(millis() - nextCheck) >= 0) {
     nextCheck = millis() + UPDATE_CHECK_INTERVAL_MS;
@@ -272,7 +280,8 @@ String updater::status() {
 }
 
 String updater::failureNote() {
-  if (!triedCount) return String();
+  // Bis zum Neustart nach der Installation steht der Zähler schon; ob sie läuft, zeigt erst der Start
+  if (!triedCount || restartPending) return String();
   char buf[240];
   snprintf(buf, sizeof(buf),
            "Version %s wurde %u-mal installiert, lief danach aber nicht (Flash-Inhalt nach dem Schreiben "
