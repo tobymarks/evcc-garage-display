@@ -93,8 +93,20 @@ struct CommandStatus {
   uint32_t doneMs = 0;  // Zeitpunkt, zu dem evcc geantwortet hat
 };
 
+// Verlauf der Abfragen seit dem Start (für die Diagnose)
+struct EvccDiagnostics {
+  char version[24] = "";    // evcc-Version, leer = unbekannt
+  uint32_t polls = 0;       // Abfragen des Zustands
+  uint32_t failed = 0;      // davon ohne brauchbare Antwort
+  int lastCode = 0;         // HTTP-Code der letzten Abfrage, negativ = Netzwerkfehler, 0 = noch keine
+  uint32_t lastDurationMs = 0;
+  uint32_t maxDurationMs = 0;
+  uint32_t lastOkMs = 0;    // millis() der letzten brauchbaren Antwort, 0 = noch keine
+};
+
 // Ladepunkte werden über ihre Position in den Einstellungen angesprochen (0 … count()-1)
 namespace evcc {
+using Diagnostics = EvccDiagnostics;
 void begin();
 uint8_t count();
 // Kopiert den neuesten Zustand aller Ladepunkte, die Fahrzeugliste und die Solardaten, sofern sich
@@ -111,4 +123,6 @@ uint32_t requestLimit(uint8_t index, bool energy, float value);
 CommandStatus status(Command command, uint8_t index);
 // Kleinster bisher freier Stack des Netzwerk-Tasks in Byte (für /diag)
 uint32_t stackFree();
+// Für die Diagnose: evcc-Version und wie die Abfragen laufen
+Diagnostics diagnostics();
 }  // namespace evcc
