@@ -722,6 +722,8 @@ static float surplus(const EvccState& s) {
   return LV_MAX(0.0f, s.hasGrid ? -(s.gridPower + battery) : s.pvPower - s.homePower);
 }
 
+float ui::surplusPower(const EvccState& s) { return surplus(s); }
+
 // Energiebalken wie in evcc: Netzbezug, selbst genutzte Sonne, Akku entlädt, Einspeisung – zusammen das,
 // was gerade erzeugt und bezogen wird. Werte stehen im Abschnitt, sofern sie hineinpassen.
 // false, wenn nichts darzustellen ist.
@@ -1228,24 +1230,48 @@ static void renderSolar(const UiView& v, bool live) {
   setVisible(contPower, data);
   setVisible(contIdle, !data);
   setVisible(barBlock, false);
-  // Einstellung "Überschuss": groß das, was gerade übrig ist, darunter der Energiebalken der
-  // Ladepunktseite statt der einzelnen Anlagen
-  const bool surplusMode = v.solarSurplus;
-  const bool rows = data && live && !surplusMode && d.plantCount >= 2;
+  // Bausteine aus den Einstellungen (/solar). Was evcc nicht liefert, fällt auf die Erzeugung zurück.
+  uint8_t big = v.solarBig;
+  if ((big == SOLAR_BIG_GRID && !s.hasGrid) || (big == SOLAR_BIG_BATTERY && s.batterySoc < 0)) big = SOLAR_BIG_PV;
+  uint8_t midSel = v.solarMid;
+  if (midSel == SOLAR_MID_AUTO) midSel = big == SOLAR_BIG_SURPLUS ? SOLAR_MID_FLOW : SOLAR_MID_PLANTS;
+  // Einzelne Anlagen gibt es nur bei mehreren; sonst steht dort der Tagesverlauf
+  const bool rows = data && live && midSel == SOLAR_MID_PLANTS && d.plantCount >= 2;
   if (data) {
-    if (surplusMode)
-      snprintf(buf, sizeof(buf), "Überschuss jetzt");
-    else if (rows)
+    float power = LV_MAX(0.0f, s.pvPower);
+    const char* label = "Erzeugung jetzt";
+    const char* icon = ICON_SUN;
+    switch (big) {
+      case SOLAR_BIG_SURPLUS:
+        power = surplus(s);
+        label = "Überschuss jetzt";
+        break;
+      case SOLAR_BIG_HOME:
+        power = LV_MAX(0.0f, s.homePower);
+        label = "Verbrauch jetzt";
+        icon = ICON_HOME;
+        break;
+      case SOLAR_BIG_GRID:
+        power = fabsf(s.gridPower);
+        label = s.gridPower >= 50 ? "Netzbezug jetzt" : s.gridPower <= -50 ? "Einspeisung jetzt" : "Netz jetzt";
+        icon = ICON_GRID;
+        break;
+      case SOLAR_BIG_BATTERY:
+        power = fabsf(s.batteryPower);
+        label = s.batteryPower <= -50 ? "Akku lädt mit" : s.batteryPower >= 50 ? "Akku entlädt mit" : "Hausakku";
+        icon = ICON_BATTERY;
+        break;
+    }
+    if (big == SOLAR_BIG_PV && rows)
       snprintf(buf, sizeof(buf), "Erzeugung jetzt · %u Anlagen", d.plantTotal);
     else
-      snprintf(buf, sizeof(buf), "Erzeugung jetzt");
+      snprintf(buf, sizeof(buf), "%s", label);
     setVehicleText(buf);
-    const float power = surplusMode ? surplus(s) : LV_MAX(0.0f, s.pvPower);
     const bool producing = power >= 50;
     formatDecimal(buf, sizeof(buf), power / 1000.0f);
     lv_label_set_text(lblPower, buf);
     lv_obj_set_style_text_color(lblPower, live && producing ? t.text : t.muted, 0);
-    setBigIcon(ICON_SUN);
+    setBigIcon(icon);
     lv_obj_set_style_text_opa(lblBolt, live && producing ? LV_OPA_COVER : LV_OPA_40, 0);
   } else if (!s.valid) {
     const bool starting = millis() < STALE_AFTER_MS;
@@ -1265,30 +1291,93 @@ static void renderSolar(const UiView& v, bool live) {
     lv_label_set_text(lblStatus, buf);
     lv_obj_set_style_text_color(lblStatus, color, 0);
   }
-  setVisible(barBlock, data && surplusMode && s.hasGrid && renderFlow(s, live));
+  setVisible(barBlock, data && midSel == SOLAR_MID_FLOW && s.hasGrid && renderFlow(s, live));
   setVisible(plantsBlock, rows);
   if (rows) renderPlants(d);
   const bool hours = data && live && !rows && d.valid;
   setVisible(chartBlock, hours);
   if (hours) renderChart(v);
 
-  // Heute bisher, was heute noch kommt, morgen. Kommt heute nichts mehr, entfällt die mittlere Kachel:
-  // Die Prognose für den ganzen Tag las sich dort wie etwas, das noch kommt (#37).
+  // Kacheln nach Einstellung, ab Werk: heute bisher, was heute noch kommt, morgen. Was evcc nicht liefert,
+  // entfällt – ebenso „REST HEUTE“, wenn heute nichts mehr kommt (#37).
   int n = 0;
+  int shown = 0;
+  for (uint8_t tile : v.solarTile) shown += tile != SOLAR_TILE_NONE;
   // Bei drei Kacheln bleibt wenig Breite: stößt ein Wert an den Rand, fällt seine Nachkommastelle weg
-  const int tileRoom = (CONTENT_W - 2 * TILE_GAP) / 3 - 14 - 10;
-  auto add = [&](const char* label, float kwh) {
-    lv_label_set_text(tileLabel[n], label);
+  const int tileRoom = (CONTENT_W - (LV_MAX(shown, 1) - 1) * TILE_GAP) / LV_MAX(shown, 1) - 14 - 10;
+  // Beschriftungen erst sammeln: Passt eine nicht, bekommen alle die kleinere Schrift; reicht auch die nicht,
+  // steht die Kurzform (shortLabel)
+  const char* labels[3];
+  const char* shortLabels[3];
+  auto labelWidth = [](const char* text, const lv_font_t* font) {
+    lv_point_t size;
+    lv_text_get_size(&size, text, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    return (int)size.x;
+  };
+  auto addText = [&](const char* label, const char* value, const char* shortLabel = nullptr) {
+    labels[n] = label;
+    shortLabels[n] = shortLabel;
+    lv_label_set_text(tileValue[n], value);
+    n++;
+  };
+  auto addEnergy = [&](const char* label, float kwh) {
     formatTileEnergy(buf, sizeof(buf), kwh);
     lv_point_t size;
     lv_text_get_size(&size, buf, &font_24, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     if (size.x > tileRoom) snprintf(buf, sizeof(buf), "%d kWh", (int)lroundf(kwh));
-    lv_label_set_text(tileValue[n], buf);
-    n++;
+    addText(label, buf);
   };
-  if (data && d.valid) add("HEUTE", d.today);
-  if (data && s.solarToday >= 0 && (s.solarToday >= 100 || !d.valid)) add("REST HEUTE", s.solarToday / 1000.0f);
-  if (data && s.solarTomorrow >= 0) add("MORGEN", s.solarTomorrow / 1000.0f);
+  auto addPower = [&](const char* label, float watts, const char* shortLabel = nullptr) {
+    char num[16];
+    formatDecimal(num, sizeof(num), watts / 1000.0f);
+    snprintf(buf, sizeof(buf), "%s kW", num);
+    addText(label, buf, shortLabel);
+  };
+  for (uint8_t tile : v.solarTile) {
+    if (!data) break;
+    switch (tile) {
+      case SOLAR_TILE_TODAY:
+        if (d.valid) addEnergy("HEUTE", d.today);
+        break;
+      case SOLAR_TILE_REST:
+        if (s.solarToday >= 0 && (s.solarToday >= 100 || !d.valid)) addEnergy("REST HEUTE", s.solarToday / 1000.0f);
+        break;
+      case SOLAR_TILE_TOMORROW:
+        if (s.solarTomorrow >= 0) addEnergy("MORGEN", s.solarTomorrow / 1000.0f);
+        break;
+      case SOLAR_TILE_FORECAST:
+        if (d.valid) addEnergy("PROGNOSE", d.forecastToday);
+        break;
+      case SOLAR_TILE_PV:
+        addPower("ERZEUGUNG", LV_MAX(0.0f, s.pvPower));
+        break;
+      case SOLAR_TILE_SURPLUS:
+        addPower("ÜBERSCHUSS", surplus(s), "ÜBRIG");
+        break;
+      case SOLAR_TILE_HOME:
+        addPower("VERBRAUCH", LV_MAX(0.0f, s.homePower));
+        break;
+      case SOLAR_TILE_GRID:
+        if (s.hasGrid) addPower(s.gridPower > 0 ? "AUS NETZ" : "INS NETZ", fabsf(s.gridPower));
+        break;
+      case SOLAR_TILE_BATTERY:
+        if (s.batterySoc >= 0) {
+          snprintf(buf, sizeof(buf), "%d %%", (int)lroundf(s.batterySoc));
+          addText("AKKU", buf);
+        }
+        break;
+    }
+  }
+  // Zur Breite zählen die Kacheln, die wirklich zu sehen sind
+  const int labelRoom = (CONTENT_W - (LV_MAX(n, 1) - 1) * TILE_GAP) / LV_MAX(n, 1) - 14 - 10;
+  bool smallLabels = false;
+  for (int i = 0; i < n; i++) smallLabels |= labelWidth(labels[i], &font_18) > labelRoom;
+  const lv_font_t* labelFont = smallLabels ? &font_16 : &font_18;
+  for (int i = 0; i < n; i++) {
+    const bool tooWide = shortLabels[i] && labelWidth(labels[i], labelFont) > labelRoom;
+    lv_label_set_text(tileLabel[i], tooWide ? shortLabels[i] : labels[i]);
+  }
+  for (int i = 0; i < 3; i++) lv_obj_set_style_text_font(tileLabel[i], labelFont, 0);
   setVisible(tiles, n > 0);
   for (int i = 0; i < 3; i++) {
     setVisible(tile[i], i < n);
@@ -1328,6 +1417,7 @@ void ui::render(const UiView& v) {
     renderSolar(v, live);
     return;
   }
+  for (int i = 0; i < 3; i++) lv_obj_set_style_text_font(tileLabel[i], &font_18, 0);
   setVisible(chartBlock, false);
   setVisible(plantsBlock, false);
   setVisible(lblStatus, true);

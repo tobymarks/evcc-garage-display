@@ -90,7 +90,8 @@ static bool previewSolar = false;  // Vorschau der Solarseite …
 static bool previewLive = false;   // … mit den echten Daten statt eines Beispielzustands (?s=pvlive)
 static EvccSolar previewSolarData;
 static int8_t previewHour = -1;
-static int8_t previewSurplus = -1;  // Solarseite in der Vorschau mit (1) oder ohne (0) Überschuss, -1 = Einstellung
+// Bausteine der Solarseite in der Vorschau (?cfg=groß,mitte,k1,k2,k3 oder ?surplus=0|1), -1 = Einstellung
+static int8_t previewSolarCfg[5] = {-1, -1, -1, -1, -1};
 
 // ---------- WLAN-Einrichtung / Einstellungen ----------
 
@@ -129,8 +130,6 @@ static bool applySettings(std::function<String(const char*)> value) {
   if (!vehicleSwitch.isEmpty()) s.vehicleSwitch = vehicleSwitch.toInt() != 0;
   const String solarPage = value("solar");
   if (!solarPage.isEmpty()) s.solarPage = solarPage.toInt() != 0;
-  const String solarSurplus = value("solarsur");
-  if (!solarSurplus.isEmpty()) s.solarSurplus = solarSurplus.toInt() != 0;
   const String solarFirst = value("solar1st");
   if (!solarFirst.isEmpty()) s.solarFirst = solarFirst.toInt() != 0;
   // Leeres Feld = Passwort unverändert; entfernt wird es nur ausdrücklich
@@ -487,7 +486,15 @@ static void updateState() {
     v.stale = example ? previewStale : stale;
     v.solar = preview ? previewSolar : solarShown;
     v.solarData = example && previewSolar ? previewSolarData : solar;
-    v.solarSurplus = preview && previewSurplus >= 0 ? previewSurplus : settings::get().solarSurplus;
+    {
+      const Settings& st = settings::get();
+      const uint8_t saved[5] = {st.solarBig, st.solarMid, st.solarTile[0], st.solarTile[1], st.solarTile[2]};
+      uint8_t cfg[5];
+      for (int i = 0; i < 5; i++) cfg[i] = preview && previewSolarCfg[i] >= 0 ? previewSolarCfg[i] : saved[i];
+      v.solarBig = cfg[0];
+      v.solarMid = cfg[1];
+      memcpy(v.solarTile, cfg + 2, 3);
+    }
     v.pendingMode = pending(Command::Mode, current).active ? modeTarget[current] : ChargeMode::None;
     v.boostButton = settings::get().boostButton || (preview && previewBoost);
     v.pendingBoost = pending(Command::Boost, current).active ? boostTarget[current] : -1;
@@ -565,7 +572,24 @@ static void handlePreview() {
   previewBoost = !strncmp(web.arg("s").c_str(), "boost", 5);
   previewLimit = web.arg("s") == "limitsoc" || web.arg("s") == "limitkwh";
   previewDark = web.hasArg("dark") ? web.arg("dark").toInt() != 0 : -1;
-  previewSurplus = web.hasArg("surplus") ? web.arg("surplus").toInt() != 0 : -1;
+  for (int8_t& c : previewSolarCfg) c = -1;
+  if (web.hasArg("cfg")) {
+    // wie die Felder von /solar: große Zahl, Mitte, drei Kacheln
+    static const uint8_t LIMIT[5] = {SOLAR_BIG_COUNT, SOLAR_MID_COUNT, SOLAR_TILE_COUNT, SOLAR_TILE_COUNT, SOLAR_TILE_COUNT};
+    const String cfg = web.arg("cfg");
+    int pos = 0;
+    for (int i = 0; i < 5 && pos <= (int)cfg.length(); i++) {
+      const int comma = cfg.indexOf(',', pos);
+      const int value = cfg.substring(pos, comma < 0 ? cfg.length() : comma).toInt();
+      previewSolarCfg[i] = constrain(value, 0, LIMIT[i] - 1);
+      if (comma < 0) break;
+      pos = comma + 1;
+    }
+  } else if (web.hasArg("surplus")) {
+    const bool on = web.arg("surplus").toInt() != 0;
+    previewSolarCfg[0] = on ? SOLAR_BIG_SURPLUS : SOLAR_BIG_PV;
+    previewSolarCfg[1] = on ? SOLAR_MID_FLOW : SOLAR_MID_PLANTS;
+  }
   previewUntil = millis() + PREVIEW_DURATION_MS;
   lastActivity = millis();
   dirty = true;
@@ -778,10 +802,10 @@ static String diagDetails() {
            st.screenTimeoutMin ? "" : " (immer an)");
   s += buf;
   snprintf(buf, sizeof(buf),
-           "Battery Boost %s, Fahrzeugwechsel %s, Ladelimit %s, Solarseite %s (Überschuss %s, zuerst %s), "
+           "Battery Boost %s, Fahrzeugwechsel %s, Ladelimit %s, Solarseite %s (Bausteine %u/%u/%u-%u-%u, zuerst %s), "
            "Passwort gesetzt %s, Standort gesetzt %s\n",
            yesNo(st.boostButton), yesNo(st.vehicleSwitch), yesNo(st.chargeLimit), yesNo(st.solarPage),
-           yesNo(st.solarSurplus), yesNo(st.solarFirst),
+           st.solarBig, st.solarMid, st.solarTile[0], st.solarTile[1], st.solarTile[2], yesNo(st.solarFirst),
            yesNo(!st.password.isEmpty()), yesNo(st.latitude != 0 || st.longitude != 0));
   s += buf;
   snprintf(buf, sizeof(buf), "WLAN-Kanal %d, Uhrzeit bekannt %s\n", (int)WiFi.channel(), yesNo(timeValid()));
@@ -942,16 +966,18 @@ static void handleSettings() {
       }
     }
     updater::confirm();  // wer hier speichert, erreicht das Display – die Firmware läuft also
+    // „Solarseite einrichten“ mit offenen Änderungen: erst speichern, dann weiter zur Seite
+    const bool toSolar = web.arg("next") == "solar";
     if (!applySettings([](const char* key) { return web.arg(key); })) {
       // Wirkt sofort: neu zeichnen und zurück zur Seite, die dann die neue Anzeige lädt
       lastActivity = millis();
       dirty = true;
-      web.sendHeader("Location", "/settings?saved=1");
+      web.sendHeader("Location", toSolar ? "/solar?saved=2" : "/settings?saved=1");
       web.send(303);
       return;
     }
     restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
-    web.sendHeader("Refresh", "15; url=/settings");
+    web.sendHeader("Refresh", toSolar ? "15; url=/solar" : "15; url=/settings");
     web.send(200, "text/html; charset=utf-8",
              String(FPSTR(SETTINGS_HEAD)) +
                  "<p class=\"note\">Gespeichert. Das Display startet neu, die Seite lädt in einigen Sekunden wieder.</p></body></html>");
@@ -962,7 +988,8 @@ static void handleSettings() {
   String h = FPSTR(SETTINGS_HEAD);
   h.reserve(10240);
   if (web.hasArg("saved")) h += "<p class=\"note\">Gespeichert – die Änderung ist schon am Display zu sehen.</p>";
-  h += "<form method=\"post\"><h2>Verbindung</h2>";
+  // autocomplete=off: Nach „Zurück“ im Browser steht der gespeicherte Stand da, nicht eine verworfene Eingabe
+  h += "<form method=\"post\" autocomplete=\"off\"><h2>Verbindung</h2>";
   // Steht die Verbindung? Das zeigt sofort, ob Adresse und Port stimmen.
   const evcc::Diagnostics d = evcc::diagnostics();
   const uint32_t age = d.lastOkMs ? (millis() - d.lastOkMs) / 1000 : 0;
@@ -1000,9 +1027,8 @@ static void handleSettings() {
               "Eigene Seite mit Erzeugung, Tagesverlauf und Prognose, erreichbar durch Wischen. Den Tagesverlauf "
               "liefert evcc ab Version 0.319.");
   h += "<fieldset id=\"solarsub\">";
-  h += field("solarsur", "Große Zahl", "„Überschuss“ zeigt, was gerade übrig ist, und darunter den Energiebalken.") +
-       "<select id=\"solarsur\" name=\"solarsur\">" + option(0, s.solarSurplus, "Erzeugung") +
-       option(1, s.solarSurplus, "Überschuss") + "</select>";
+  h += "<label>Inhalt<small>Große Zahl, Diagramm und Kacheln selbst auswählen.</small></label>"
+       "<a class=\"plain\" href=\"/solar\" id=\"tosolar\">Solarseite einrichten</a>";
   h += toggle("solar1st", s.solarFirst, "Als Startseite",
               "Etwa für ein Display im Haus: Es bleibt auf der Solarseite, auch wenn ein Auto angesteckt wird, und "
               "kehrt zwei Minuten nach der letzten Berührung zu ihr zurück.");
@@ -1064,9 +1090,9 @@ static void handleSettings() {
        "<p class=\"hint\" id=\"updmsg\" hidden></p>";
   h += "<h2>Diagnose</h2><p class=\"hint\">Für die Fehlersuche. Die Datei enthält keine Passwörter, WLAN-Namen, "
        "Netzwerkadressen, Standorte oder Namen von Ladepunkten und Fahrzeugen und kann so an ein "
-       "<a href=\"" REPO_URL "/issues\">Issue auf GitHub</a> angehängt werden.</p>"
+       "<a href=\"" REPO_URL "/issues\" target=\"_blank\" rel=\"noopener\">Issue auf GitHub</a> angehängt werden.</p>"
        "<a class=\"plain\" href=\"/diag?download=1\" download>Diagnose herunterladen</a>"
-       "<a class=\"plain\" href=\"/diag\">Ansehen</a>";
+       "<a class=\"plain\" href=\"/diag\" target=\"_blank\">Ansehen</a>";
   h += "<script>const i=document.getElementById('shot'),b=document.getElementById('load');"
        "function l(){b.textContent='Lädt …';i.onload=()=>{i.hidden=false;b.textContent='Aktualisieren'};"
        "i.onerror=()=>{b.textContent='Erneut versuchen'};i.src='/screenshot.bmp?'+Date.now()}"
@@ -1075,13 +1101,18 @@ static void handleSettings() {
   h += "<script>{const f=document.forms[0],$=s=>document.querySelector(s),bt=$('.bar button'),dn=$('#dirty');"
        "const sync=()=>{$('#solarsub').disabled=!$('input[name=solar]').checked;$('#loc').hidden=$('#theme').value!='0'};"
        "const snap=()=>new URLSearchParams(new FormData(f)).toString();sync();const s0=snap(),f0=new FormData(f);let sub=0;"
+       "const ts=$('#tosolar');"
        "const upd=()=>{sync();const fd=new FormData(f);dn.hidden=snap()==s0;"
+       "ts.textContent=dn.hidden?'Solarseite einrichten':'Speichern und Solarseite einrichten';"
        "bt.textContent=['host','port','lp','rot','pw','pwclear'].some(k=>(fd.get(k)||'')!=(f0.get(k)||''))"
        "?'Speichern und neu starten':'Speichern'};"
        "f.addEventListener('input',upd);f.addEventListener('change',upd);"
        "$('#undo').onclick=e=>{e.preventDefault();f.reset();$('#pw').type='password';upd()};"
        "$('#pwshow').onchange=e=>{$('#pw').type=e.target.checked?'text':'password'};"
        "f.onsubmit=()=>{sub=1};"
+       // Wechsel zum Editor mit offenen Änderungen: speichern und weiter, ohne Rückfrage des Browsers
+       "ts.onclick=e=>{if(dn.hidden)return;e.preventDefault();const n=document.createElement('input');"
+       "n.type='hidden';n.name='next';n.value='solar';f.append(n);if(f.reportValidity()){sub=1;f.submit()}else n.remove()};"
        "addEventListener('beforeunload',e=>{if(!dn.hidden&&!sub){e.preventDefault();e.returnValue=''}});"
        "if(location.search.includes('saved'))history.replaceState(null,'','/settings')}</script>";
   // "Jetzt aktualisieren": Prüfung und Installation anstoßen, dann /update abfragen, bis das Ergebnis feststeht.
@@ -1099,7 +1130,227 @@ static void handleSettings() {
        "else if(r.startsWith('Installation')||r.startsWith('neue Version')||r.includes('installiert'))"
        "say('Neue Version wird installiert, danach startet das Display neu …');"
        "else end(r=='aktuell'?'Die Firmware ist aktuell.':r)},2000)}}</script>";
-  h += "<footer><a href=\"" PROJECT_URL "\">Projektseite und Anleitung</a> · <a href=\"" REPO_URL "\">GitHub</a></footer></body></html>";
+  h += "<footer><a href=\"" PROJECT_URL "\" target=\"_blank\" rel=\"noopener\">Projektseite und Anleitung</a> · <a href=\"" REPO_URL "\" target=\"_blank\" rel=\"noopener\">GitHub</a></footer></body></html>";
+  web.send(200, "text/html; charset=utf-8", h);
+}
+
+// ---------- Solarseite einrichten (/solar) ----------
+// Die Vorschau ist eine nachgebaute Solarseite und reagiert sofort; das echte Bild vom Display lädt ein Knopf.
+// Das Skript bekommt den Stand als Objekt C: Auswahl, was evcc liefert, und die aktuellen Werte.
+static const char SOLAR_EDITOR_HEAD[] PROGMEM = R"HTML(<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Solarseite einrichten · evcc-Garage</title><style>
+:root{color-scheme:light dark;--a:#0fdd8d}[hidden]{display:none!important}
+body{font:16px/1.4 system-ui,sans-serif;max-width:46rem;margin:0 auto;padding:1.5rem 1rem}
+.back{display:inline-block;font-size:.9rem;opacity:.65;color:inherit;text-decoration:none;padding:.4rem 0;margin-bottom:.2rem}
+h1{font-size:1.4rem;margin:0 0 .3rem}.lead{margin:0 0 1.3rem;opacity:.65}
+.note{padding:.6rem .8rem;border-radius:.5rem;background:#0fdd8d33;margin:0 0 1.2rem}.note a{color:inherit}
+.wrap{display:grid;grid-template-columns:minmax(0,19rem) minmax(0,1fr);gap:1.75rem;align-items:start}
+.left{position:sticky;top:.75rem}
+@media(max-width:620px){.wrap{grid-template-columns:1fr;gap:1.2rem}.left{position:static;max-width:22rem;margin:0 auto;width:100%}}
+.screen{position:relative;aspect-ratio:1;border-radius:1.1rem;background:#010322;overflow:hidden;border:1px solid #8886}
+.screen img{position:absolute;inset:0;width:100%;height:100%}
+.s480{position:absolute;left:0;top:0;width:480px;height:480px;transform-origin:0 0;font-family:Montserrat,system-ui,sans-serif;color:#fff}
+.hd{position:absolute;left:28px;right:28px;top:20px;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:26px}
+.hd .r{color:#B5B6C3}
+.bd{position:absolute;left:24px;right:24px;top:62px;bottom:40px;display:flex;flex-direction:column}
+.area{all:unset;box-sizing:border-box;cursor:pointer;border-radius:16px;outline:3px solid transparent;outline-offset:3px}
+.area:hover{outline-color:#ffffff3d}.area.sel{outline-color:var(--a)}.area:focus-visible{outline-color:#fff}
+.big{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0}
+.big .lb{font-size:22px;font-weight:500;color:#B5B6C3;margin-bottom:10px}
+.big .nr{display:flex;align-items:baseline;gap:14px}
+.big .v{font-size:122px;font-weight:700;line-height:.8;letter-spacing:-2px}
+.big .u{font-size:36px;font-weight:700;color:#B5B6C3}
+.big svg{align-self:center;width:62px;height:62px;color:#0FDE41;margin-left:2px}
+.mid{display:flex;flex-direction:column;margin-top:8px}
+.flow{height:40px;border-radius:20px;display:flex;overflow:hidden;margin-bottom:16px}
+.flow .g{flex:93;background:#0FDE41}.flow .y{flex:7;background:#FAF000}
+.chart{display:flex;align-items:flex-end;gap:7px}.chart .c{flex:1;position:relative;height:100%}
+.chart .f,.chart .e{position:absolute;left:0;right:0;bottom:0;border-radius:6px}
+.chart .f{background:#33354F}.chart .e{background:#0FDE41}
+.chart .z{position:absolute;left:0;right:0;bottom:0;height:4px;border-radius:2px;background:#2A2C4C}
+.axis{display:flex;gap:7px;margin-top:6px;height:20px;font-size:15px;font-weight:500;color:#B5B6C3}
+.axis span{flex:1;text-align:center;white-space:nowrap}
+.plants{display:flex;flex-direction:column;gap:14px;padding:6px 4px 12px}
+.plants .p{display:grid;grid-template-columns:1fr auto;row-gap:7px;font-size:22px;font-weight:500}.plants .p b{font-weight:700}
+.plants .t{grid-column:1/3;height:10px;border-radius:5px;background:#2A2C4C;overflow:hidden}
+.plants .t i{display:block;height:100%;border-radius:5px;background:#0FDE41}
+.tiles{display:flex;gap:12px;margin-top:12px}
+.tile{flex:1;min-width:0;background:#151630;border-radius:14px;padding:9px 14px 10px;text-align:left}
+.tile .l{display:block;font-size:15px;font-weight:500;color:#B5B6C3;white-space:nowrap}
+.tile .w{display:block;font-size:22px;font-weight:700;white-space:nowrap;margin-top:1px}
+.tile.empty{flex:0 0 46px;background:none;border:2px dashed #33354F;display:flex;align-items:center;justify-content:center;color:#93949E;font-size:26px;padding:0}
+.dots{position:absolute;left:0;right:0;bottom:13px;display:flex;justify-content:center;gap:12px}
+.dots i{width:10px;height:10px;border-radius:50%;background:#55576F}.dots i.on{background:#fff}
+.cap{font-size:.85rem;opacity:.65;margin:.6rem 0 .5rem;text-align:center}.cen{text-align:center}
+.slot{border:1px solid #8886;border-radius:.6rem;margin-bottom:.6rem;overflow:hidden}.slot.open{border-color:var(--a)}
+.sh{all:unset;box-sizing:border-box;cursor:pointer;display:flex;width:100%;min-height:2.75rem;justify-content:space-between;align-items:center;gap:.75rem;padding:.7rem .9rem}
+.sh:focus-visible{outline:2px solid var(--a);outline-offset:-2px;border-radius:.6rem}
+.sh b{font-weight:600}.sh span{opacity:.65;text-align:right}
+.sh span::after{content:"›";display:inline-block;margin-left:.6rem;transform:rotate(90deg)}
+.slot.open .sh span::after{transform:rotate(-90deg)}
+.opts{display:none;padding:0 .5rem .5rem}.slot.open .opts{display:block}
+.opt{display:flex;align-items:center;gap:.7rem;min-height:2.75rem;box-sizing:border-box;padding:.5rem .55rem;border-radius:.45rem;cursor:pointer}
+.opt:hover{background:#8881}.opt.off{opacity:.45;cursor:default}
+.opt input{appearance:none;flex:none;width:1.15rem;height:1.15rem;margin:0;border-radius:50%;border:2px solid #8889;display:grid;place-content:center}
+.opt input:checked{border-color:var(--a);background:var(--a)}
+.opt input:checked::after{content:"";width:.42rem;height:.42rem;border-radius:50%;background:#000}
+.opt input:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+.opt .n{flex:1;min-width:0}.opt small{display:block;opacity:.65;font-size:.85rem}
+.opt .x{opacity:.65;font-size:.9rem;white-space:nowrap}.opt:has(input:checked){background:#0fdd8d24}
+.bar{position:sticky;bottom:0;margin-top:1.1rem;padding:.75rem 0;background:Canvas}
+.bar small{display:block;margin-bottom:.5rem;font-weight:600;font-size:.85rem}.bar a{color:inherit;font-weight:400}
+.act{display:flex;gap:.6rem;flex-wrap:wrap}
+button{font:inherit;font-weight:600;min-height:2.75rem;padding:.75rem 1.2rem;border:0;border-radius:.5rem;background:var(--a);color:#000;cursor:pointer;flex:1}
+button.plain{flex:none;background:none;border:1px solid #8888;color:inherit;font-weight:400;padding:.5rem .9rem}
+</style></head><body>
+<a class="back" href="/settings" id="back">‹ Einstellungen</a>
+<p class="note" id="leave" hidden>Die Änderungen an der Solarseite sind noch nicht gespeichert.
+<span class="act" style="margin-top:.6rem"><button type="button" id="lsave">Speichern und zurück</button>
+<button type="button" class="plain" id="ldrop">Verwerfen und zurück</button></span></p>
+<h1>Solarseite einrichten</h1>
+<p class="lead">Im Bild einen Bereich antippen und auswählen, was dort stehen soll.</p>
+<p class="note" id="saved" hidden>Gespeichert – die Solarseite sieht am Display jetzt so aus.</p>
+<p class="note" id="off" hidden>Die Solarseite ist ausgeschaltet. Einschalten lässt sie sich in den <a href="/settings">Einstellungen</a> unter „Solarseite“.</p>
+<form method="post" class="wrap" autocomplete="off">
+<div class="left"><div class="screen" id="screen"><div class="s480" id="s480">
+<div class="hd"><span>Solar</span><span class="r" id="clock"></span></div>
+<div class="bd"><button type="button" class="area big" data-slot="big" id="aBig"></button>
+<button type="button" class="area mid" data-slot="mid" id="aMid"></button><div class="tiles" id="aTiles"></div></div>
+<div class="dots"><i></i><i class="on"></i></div></div><img id="shot" alt="Echtes Bild vom Display" hidden></div>
+<p class="cap" id="cap"></p><p class="cen"><button type="button" class="plain" id="real">Echtes Bild vom Display laden</button></p></div>
+<div><div id="slots"></div>
+<div class="bar"><small id="dirty" hidden>Ungespeicherte Änderungen · <a href="#" id="undo">Verwerfen</a></small>
+<div class="act"><button>Speichern</button><button type="button" class="plain" id="reset">Zurück auf Standard</button></div></div>
+<input type="hidden" name="big"><input type="hidden" name="mid"><input type="hidden" name="t1"><input type="hidden" name="t2"><input type="hidden" name="t3">
+</div></form>
+<script>const C=)HTML";
+
+static const char SOLAR_EDITOR_TAIL[] PROGMEM = R"HTML(;
+{const $=i=>document.getElementById(i),f=document.forms[0];
+const I=p=>'<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">'+p+'</svg>';
+const SUN=I('<circle cx="32" cy="32" r="11"/><circle cx="32" cy="32" r="25" stroke-width="8" stroke-dasharray="6.2 6.9" stroke-linecap="butt"/>'),
+HOUSE=I('<path d="M8 30 32 9l24 21"/><path d="M15 26v28h34V26"/><path d="M27 54V38h10v16"/>'),
+GRID=I('<path d="M24 58 29 8h6l5 50"/><path d="M12 22h40M17 34h30"/>'),
+BAT=I('<rect x="8" y="20" width="42" height="26" rx="6"/><path d="M57 29v8"/><path d="M17 29h18v8H17z" fill="currentColor"/>');
+// Werte von jetzt; ohne Daten von evcc Beispielwerte
+const V=C.v||{pv:4400,sur:3500,home:900,grid:-3000,batp:-500,soc:78,today:18.2,rest:4.3,tom:19,fc:22.5};
+const kw=w=>(Math.abs(w)/1000).toFixed(1).replace('.',','),kwh=e=>e.toFixed(1).replace('.',',')+' kWh';
+const no={bat:'evcc meldet keinen Hausakku',grid:'evcc meldet keine Netzleistung',plants:'nur bei mehreren PV-Anlagen in evcc',
+hist:'braucht evcc ab Version 0.319',fc:'evcc hat keine Solarprognose'};
+const BIG=[{n:'Erzeugung',d:'Was die PV-Anlage gerade liefert',lb:'Erzeugung jetzt',v:kw(V.pv),ic:SUN},
+{n:'Überschuss',d:'Was gerade übrig ist, etwa fürs Auto',lb:'Überschuss jetzt',v:kw(V.sur),ic:SUN},
+{n:'Verbrauch',d:'Verbrauch im Haus ohne Ladepunkte',lb:'Verbrauch jetzt',v:kw(V.home),ic:HOUSE},
+{n:'Netz',d:'Einspeisung oder Netzbezug, je nach Richtung',lb:V.grid>0?'Netzbezug jetzt':'Einspeisung jetzt',v:kw(V.grid),ic:GRID,need:'grid'},
+{n:'Hausakku',d:'Leistung, mit der der Akku lädt oder entlädt',lb:V.batp>0?'Akku entlädt mit':'Akku lädt mit',v:kw(V.batp),ic:BAT,need:'bat'}];
+const MID=[null,{n:'Tagesverlauf',d:'Erzeugung je Stunde, dahinter die Prognose'},
+{n:'Energiebalken und Tagesverlauf',d:'Balken wie auf der Ladepunktseite: Netz, Sonne, Akku',need:'grid'},
+{n:'Anlagen einzeln',d:'Leistung je PV-Anlage',need:'plants'}];
+const TILE=[{n:'Heute erzeugt',l:'HEUTE',w:kwh(V.today),need:'hist'},
+{n:'Rest heute',d:'Prognose für den Rest des Tages; entfällt abends',l:'REST HEUTE',w:kwh(V.rest),need:'fc'},
+{n:'Morgen',d:'Prognose für morgen',l:'MORGEN',w:kwh(V.tom),need:'fc'},
+{n:'Prognose heute',d:'Prognose für den ganzen Tag',l:'PROGNOSE',w:kwh(V.fc),need:'hist'},
+{n:'Erzeugung',d:'jetzt',l:'ERZEUGUNG',w:kw(V.pv)+' kW'},{n:'Überschuss',d:'jetzt',l:'ÜBERSCHUSS',w:kw(V.sur)+' kW'},
+{n:'Verbrauch',d:'jetzt, im Haus',l:'VERBRAUCH',w:kw(V.home)+' kW'},
+{n:'Netz',d:'jetzt, Einspeisung oder Bezug',l:V.grid>0?'AUS NETZ':'INS NETZ',w:kw(V.grid)+' kW',need:'grid'},
+{n:'Hausakku',d:'Ladestand',l:'AKKU',w:Math.round(V.soc)+' %',need:'bat'},
+{n:'Keine Kachel',d:'Die anderen Kacheln werden breiter',l:'',w:'–'}];
+const SLOTS=[{id:'big',t:'Große Zahl',o:BIG},{id:'mid',t:'Diagramm',o:MID},{id:'t1',t:'Kachel links',o:TILE},
+{id:'t2',t:'Kachel Mitte',o:TILE},{id:'t3',t:'Kachel rechts',o:TILE}];
+const DEF={big:0,mid:C.has.plants?3:1,t1:0,t2:1,t3:2},S0={big:C.big,mid:C.mid,t1:C.t[0],t2:C.t[1],t3:C.t[2]};
+let st={...S0},cur='big',sub=0;
+const E=[0,0,.14,.52,.78,.93,.9,.2,0,0,0,0,0,0,0],F=[0,0,0,0,0,0,0,.6,.42,.2,.05,0,0,0,0];
+const ok=o=>!o.need||C.has[o.need];
+function draw(){$('shot').hidden=true;
+const b=BIG[st.big];$('aBig').innerHTML='<span class="lb">'+b.lb+'</span><span class="nr"><span class="v">'+b.v+'</span><span class="u">kW</span>'+b.ic+'</span>';
+let m='';
+if(st.mid==3)m='<div class="plants"><div class="p"><span>Anlage 1</span><b>'+kw(V.pv*.66)+' kW</b><span class="t"><i style="width:66%"></i></span></div>'+
+'<div class="p"><span>Anlage 2</span><b>'+kw(V.pv*.34)+' kW</b><span class="t"><i style="width:34%"></i></span></div></div>';
+else{if(st.mid==2)m+='<div class="flow"><span class="g"></span><span class="y"></span></div>';
+m+='<div class="chart" style="height:'+(st.mid==2?78:108)+'px">'+E.map((e,i)=>'<span class="c">'+(e||F[i]?'':'<span class="z"></span>')+
+(F[i]?'<span class="f" style="height:'+F[i]*100+'%"></span>':'')+(e?'<span class="e" style="height:'+e*100+'%"></span>':'')+'</span>').join('')+
+'</div><div class="axis">'+E.map((e,i)=>'<span>'+(i%3?'':i+6)+'</span>').join('')+'</div>'}
+$('aMid').innerHTML=m;
+const three=![st.t1,st.t2,st.t3].includes(9);
+$('aTiles').innerHTML=['t1','t2','t3'].map(k=>{const t={...TILE[st[k]]};if(three&&st[k]==5)t.l='ÜBRIG';return st[k]==9
+?'<button type="button" class="area tile empty" data-slot="'+k+'" aria-label="Leere Kachel">+</button>'
+:'<button type="button" class="area tile" data-slot="'+k+'"><span class="l">'+t.l+'</span><span class="w">'+t.w+'</span></button>'}).join('');
+document.querySelectorAll('.area').forEach(a=>{a.classList.toggle('sel',a.dataset.slot==cur);a.onclick=()=>pick(a.dataset.slot,1)});
+for(const k in st)f.elements[k].value=st[k];
+const d=Object.keys(st).some(k=>st[k]!=S0[k]);$('dirty').hidden=!d;if(!d)$('leave').hidden=true}
+function list(){$('slots').innerHTML=SLOTS.map(s=>'<section class="slot'+(s.id==cur?' open':'')+'" id="s_'+s.id+'"><button type="button" class="sh" data-slot="'+s.id+
+'" aria-expanded="'+(s.id==cur)+'"><b>'+s.t+'</b><span>'+s.o[st[s.id]].n+'</span></button><div class="opts">'+s.o.map((o,k)=>!o?'':
+'<label class="opt'+(ok(o)?'':' off')+'"><input type="radio" name="r_'+s.id+'" value="'+k+'"'+(st[s.id]==k?' checked':'')+(ok(o)||st[s.id]==k?'':' disabled')+
+'><span class="n">'+o.n+'<small>'+(ok(o)?o.d||'':'Nicht verfügbar: '+no[o.need])+'</small></span>'+(o.w||o.v?'<span class="x">'+(o.w||o.v+' kW')+'</span>':'')+'</label>').join('')+
+'</div></section>').join('');
+document.querySelectorAll('.sh').forEach(b=>b.onclick=()=>pick(b.dataset.slot==cur?'':b.dataset.slot));
+document.querySelectorAll('.opt input').forEach(i=>i.onchange=()=>{const k=i.name.slice(2);st[k]=+i.value;draw();
+i.closest('.slot').querySelector('.sh span').textContent=SLOTS.find(s=>s.id==k).o[st[k]].n})}
+function pick(id,scroll){cur=id;list();draw();
+if(scroll&&id&&matchMedia('(max-width:620px)').matches)$('s_'+id).scrollIntoView({behavior:'smooth',block:'nearest'})}
+$('reset').onclick=()=>{st={...DEF};list();draw()};
+$('undo').onclick=e=>{e.preventDefault();st={...S0};list();draw()};
+f.onsubmit=()=>{sub=1};
+// Zurück mit offenen Änderungen: auf der Seite fragen statt mit der Meldung des Browsers
+document.querySelectorAll('a[href="/settings"]').forEach(a=>a.onclick=e=>{if($('dirty').hidden)return;e.preventDefault();$('leave').hidden=false;$('lsave').focus();$('leave').scrollIntoView({block:'nearest'})});
+$('lsave').onclick=()=>{const n=document.createElement('input');n.type='hidden';n.name='next';n.value='settings';f.append(n);sub=1;f.submit()};
+$('ldrop').onclick=()=>{sub=1;location.href='/settings'};
+addEventListener('beforeunload',e=>{if(!$('dirty').hidden&&!sub){e.preventDefault();e.returnValue=''}});
+// Das Display zeigt die Auswahl eine Minute lang mit den echten Daten, dann holt die Seite sein Bild
+$('real').onclick=async()=>{const b=$('real'),i=$('shot');b.disabled=true;b.textContent='Lädt …';
+const done=t=>{b.disabled=false;b.textContent=t};
+try{await fetch('/preview?s=pvlive&cfg='+[st.big,st.mid,st.t1,st.t2,st.t3].join(','));await new Promise(r=>setTimeout(r,1500));
+i.onload=()=>{i.hidden=false;done('Echtes Bild neu laden')};i.onerror=()=>done('Erneut versuchen');i.src='/screenshot.bmp?'+Date.now()}
+catch(e){done('Erneut versuchen')}};
+$('clock').textContent=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+$('cap').textContent=C.v?'Vorschau mit den Werten von jetzt, Diagramm als Beispiel':'Vorschau mit Beispielwerten';
+$('saved').hidden=!C.saved;if(C.saved==2)$('saved').textContent='Einstellungen gespeichert.';$('off').hidden=C.on;if(C.saved)history.replaceState(null,'','/solar');
+new ResizeObserver(()=>{$('s480').style.transform='scale('+$('screen').clientWidth/480+')'}).observe($('screen'));
+list();draw()}
+</script></body></html>)HTML";
+
+static void handleSolarEditor() {
+  Settings& st = settings::get();
+  if (web.method() == HTTP_POST) {
+    st.solarBig = constrain(web.arg("big").toInt(), 0L, (long)SOLAR_BIG_COUNT - 1);
+    st.solarMid = constrain(web.arg("mid").toInt(), 1L, (long)SOLAR_MID_COUNT - 1);
+    for (int i = 0; i < 3; i++)
+      st.solarTile[i] = constrain(web.arg(String("t") + (i + 1)).toInt(), 0L, (long)SOLAR_TILE_COUNT - 1);
+    settings::save();
+    updater::confirm();  // wer hier speichert, erreicht das Display – die Firmware läuft also
+    lastActivity = millis();
+    dirty = true;
+    web.sendHeader("Location", web.arg("next") == "settings" ? "/settings?saved=1" : "/solar?saved=1");
+    web.send(303);
+    return;
+  }
+
+  const EvccState& s = states[0];  // die Hausdaten stehen in jedem Ladepunkt
+  const bool data = s.valid && s.pvPower >= 0;
+  // "Wie früher" zeigt die Seite als das, was das Display daraus macht
+  uint8_t mid = st.solarMid;
+  if (mid == SOLAR_MID_AUTO)
+    mid = st.solarBig == SOLAR_BIG_SURPLUS ? SOLAR_MID_FLOW : solar.plantCount >= 2 ? SOLAR_MID_PLANTS : SOLAR_MID_CHART;
+  char values[200] = "null";
+  if (data)
+    snprintf(values, sizeof(values),
+             "{\"pv\":%.0f,\"sur\":%.0f,\"home\":%.0f,\"grid\":%.0f,\"batp\":%.0f,\"soc\":%.0f,\"today\":%.1f,\"rest\":%.1f,"
+             "\"tom\":%.1f,\"fc\":%.1f}",
+             fmaxf(0.0f, s.pvPower), ui::surplusPower(s), fmaxf(0.0f, s.homePower), s.gridPower, s.batteryPower,
+             fmaxf(0.0f, s.batterySoc), solar.today, fmaxf(0.0f, s.solarToday) / 1000.0f,
+             fmaxf(0.0f, s.solarTomorrow) / 1000.0f, solar.forecastToday);
+  char json[420];
+  // Ohne Daten von evcc ist unbekannt, was es liefert: dann bleibt alles wählbar. Verlauf und Anlagen
+  // fragt das Display nur ab, solange die Solarseite eingeschaltet ist.
+  snprintf(json, sizeof(json),
+           "{\"big\":%u,\"mid\":%u,\"t\":[%u,%u,%u],\"on\":%d,\"saved\":%d,\"has\":{\"bat\":%d,\"grid\":%d,\"plants\":%d,"
+           "\"hist\":%d,\"fc\":%d},\"v\":%s}",
+           st.solarBig, mid, st.solarTile[0], st.solarTile[1], st.solarTile[2], st.solarPage, (int)web.arg("saved").toInt(),
+           !data || s.batterySoc >= 0, !data || s.hasGrid, !data || !st.solarPage || solar.plantCount >= 2,
+           !data || !st.solarPage || solar.valid, !data || s.solarToday >= 0, values);
+  String h = FPSTR(SOLAR_EDITOR_HEAD);
+  h.reserve(15360);
+  h += json;
+  h += FPSTR(SOLAR_EDITOR_TAIL);
   web.send(200, "text/html; charset=utf-8", h);
 }
 
@@ -1121,6 +1372,7 @@ static void startWebServer() {
     web.send(302);
   });
   guarded("/settings", handleSettings);
+  guarded("/solar", handleSolarEditor);
   guarded("/screenshot.bmp", []() { display::sendScreenshot(web); });
   guarded("/preview", handlePreview);
   // Update-Status; ?check=1 prüft sofort, ?install=1 installiert eine gefundene neue Version sofort

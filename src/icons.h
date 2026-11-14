@@ -12,3 +12,5 @@
 #define ICON_WIFI_OFF "\xEE\x80\x87"
 #define ICON_CLOUD_OFF "\xEE\x80\x88"
 #define ICON_BATTERY "\xEE\x80\x89"  // Hausakku
+#define ICON_HOME "\xEE\x80\x8A"     // Verbrauch im Haus
+#define ICON_GRID "\xEE\x80\x8B"     // Netz (Strommast)

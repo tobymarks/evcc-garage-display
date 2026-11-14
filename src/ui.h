@@ -22,7 +22,9 @@ struct UiView {
   float pendingLimit = -1;              // angefragtes Ladelimit (% bzw. kWh), bis evcc es bestätigt; -1 = keins
   // Solarseite hinter den Ladepunkten (Einstellung): state liefert dann nur die Hausdaten
   bool solar = false;
-  bool solarSurplus = false;            // Solarseite zeigt den Überschuss statt der Erzeugung (Einstellung)
+  uint8_t solarBig = 0;                 // Bausteine der Solarseite (Einstellung): SOLAR_BIG_…, SOLAR_MID_…, SOLAR_TILE_…
+  uint8_t solarMid = 0;
+  uint8_t solarTile[3] = {0, 1, 2};
   EvccSolar solarData;
   int8_t hour = -1;                     // aktuelle Stunde in Ortszeit, -1 = Uhrzeit unbekannt
 };
@@ -46,4 +48,6 @@ void showMessage(const char* icon, const char* title, const char* text);
 void showMain();
 // Antippen des Hinweisbildschirms (z. B. um die Einstellungen abzubrechen)
 void onMessageTap(Callback cb);
+// Überschuss in W, so gerechnet wie auf Ladepunkt- und Solarseite
+float surplusPower(const EvccState& s);
 }  // namespace ui

@@ -20,7 +20,10 @@ struct Settings {
   bool vehicleSwitch;        // Fahrzeugzeile antippen wechselt das Fahrzeug
   bool chargeLimit;          // Ladelimit neben der Fahrzeugzeile anzeigen und per Antippen einstellen
   bool solarPage;            // zusätzliche Seite hinter den Ladepunkten: Erzeugung, Tagesverlauf, Prognose
-  bool solarSurplus;         // Solarseite zeigt groß den Überschuss statt der Erzeugung, darunter den Energiebalken
+  bool solarSurplus;         // alte Einstellung (vor dem Editor), nur noch Startwert für solarBig
+  uint8_t solarBig;          // Solarseite, große Zahl: SOLAR_BIG_…
+  uint8_t solarMid;          // Solarseite, Mitte: SOLAR_MID_…
+  uint8_t solarTile[3];      // Solarseite, Kacheln von links: SOLAR_TILE_…
   bool solarFirst;           // Solarseite ist die erste Seite und bleibt stehen (z. B. Display in der Küche)
   uint32_t backlightHz;      // Taktung der Hintergrundbeleuchtung ab dem Start; nur über /backlight?hz=…&save=1 (#21)
   String password;           // schützt Weboberfläche und OTA (Benutzer "admin"); leer = offen

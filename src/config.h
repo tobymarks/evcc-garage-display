@@ -49,6 +49,14 @@
 // Display
 #define DEFAULT_BRIGHTNESS_PCT 100        // fest eingestellt, keine Nachtdimmung (die Garage ist hell, wenn jemand drin ist)
 #define MIN_BRIGHTNESS_PCT 10
+// Bausteine der Solarseite (Einstellungsseite /solar). Die Zahlen stehen so im Speicher: nicht umsortieren.
+enum : uint8_t { SOLAR_BIG_PV, SOLAR_BIG_SURPLUS, SOLAR_BIG_HOME, SOLAR_BIG_GRID, SOLAR_BIG_BATTERY, SOLAR_BIG_COUNT };
+// AUTO = wie vor dem Editor: bei mehreren Anlagen die Anlagen, sonst der Tagesverlauf; mit Überschuss der Energiebalken
+enum : uint8_t { SOLAR_MID_AUTO, SOLAR_MID_CHART, SOLAR_MID_FLOW, SOLAR_MID_PLANTS, SOLAR_MID_COUNT };
+enum : uint8_t {
+  SOLAR_TILE_TODAY, SOLAR_TILE_REST, SOLAR_TILE_TOMORROW, SOLAR_TILE_FORECAST, SOLAR_TILE_PV,
+  SOLAR_TILE_SURPLUS, SOLAR_TILE_HOME, SOLAR_TILE_GRID, SOLAR_TILE_BATTERY, SOLAR_TILE_NONE, SOLAR_TILE_COUNT
+};
 #define MIN_BACKLIGHT_HZ 100   // einstellbarer Bereich für die Taktung der Hintergrundbeleuchtung (/backlight)
 #define MAX_BACKLIGHT_HZ 40000
 #define DEFAULT_SCREEN_TIMEOUT_MIN 2              // aus, wenn nicht geladen und nicht bedient wird; 0 = immer an
