@@ -27,6 +27,7 @@
 #define PIN_LCD_SPI_MOSI 47
 
 #define PIN_LCD_BACKLIGHT 38
+#define LCD_BACKLIGHT_HZ 20000  // PWM-Taktung der Hintergrundbeleuchtung
 
 #define PIN_TOUCH_SDA 19
 #define PIN_TOUCH_SCL 45

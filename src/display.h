@@ -11,10 +11,18 @@ void begin(uint8_t rotation);
 
 void setBrightness(uint8_t value);
 
+// Taktung der Hintergrundbeleuchtung zum Ausprobieren (#21), gilt bis zum Neustart.
+// Liefert die tatsächlich eingestellte Frequenz, 0 wenn sie sich nicht einstellen ließ.
+uint32_t setBacklightHz(uint32_t hz);
+uint32_t backlightHz();
+
 // Bei ausgeschaltetem Bildschirm weckt die erste Berührung nur auf und löst nichts aus.
 void setSleeping(bool sleeping);
 bool takeWakeRequest();
 uint32_t lastTouchMs();
+
+// Kennung, Firmware und Auflösung des Touch-Controllers (für die Diagnose)
+String touchInfo();
 
 // Sendet den aktuellen Bildschirminhalt als BMP (zum Prüfen der Oberfläche aus der Ferne)
 void sendScreenshot(WebServer& server);

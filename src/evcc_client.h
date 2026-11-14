@@ -57,6 +57,7 @@ struct EvccState {
   float minChargePower = 0;   // W, ab diesem Überschuss startet Smart (Mindeststrom × Phasen × 230 V)
   float solarToday = -1;      // Wh, Solarprognose für den Rest des Tages (-1 = keine Prognose)
   float solarTomorrow = -1;   // Wh, Solarprognose für morgen
+  float solarScale = 1;       // Faktor, mit dem evcc die Prognose an die echte Erzeugung anpasst; schon eingerechnet
 };
 
 // Solarseite: Erzeugung je Stunde und je Anlage. Die Stundenwerte liefert evcc unter
@@ -93,8 +94,20 @@ struct CommandStatus {
   uint32_t doneMs = 0;  // Zeitpunkt, zu dem evcc geantwortet hat
 };
 
+// Verlauf der Abfragen seit dem Start (für die Diagnose)
+struct EvccDiagnostics {
+  char version[24] = "";    // evcc-Version, leer = unbekannt
+  uint32_t polls = 0;       // Abfragen des Zustands
+  uint32_t failed = 0;      // davon ohne brauchbare Antwort
+  int lastCode = 0;         // HTTP-Code der letzten Abfrage, negativ = Netzwerkfehler, 0 = noch keine
+  uint32_t lastDurationMs = 0;
+  uint32_t maxDurationMs = 0;
+  uint32_t lastOkMs = 0;    // millis() der letzten brauchbaren Antwort, 0 = noch keine
+};
+
 // Ladepunkte werden über ihre Position in den Einstellungen angesprochen (0 … count()-1)
 namespace evcc {
+using Diagnostics = EvccDiagnostics;
 void begin();
 uint8_t count();
 // Kopiert den neuesten Zustand aller Ladepunkte, die Fahrzeugliste und die Solardaten, sofern sich
@@ -111,4 +124,6 @@ uint32_t requestLimit(uint8_t index, bool energy, float value);
 CommandStatus status(Command command, uint8_t index);
 // Kleinster bisher freier Stack des Netzwerk-Tasks in Byte (für /diag)
 uint32_t stackFree();
+// Für die Diagnose: evcc-Version und wie die Abfragen laufen
+Diagnostics diagnostics();
 }  // namespace evcc

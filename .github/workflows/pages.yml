@@ -44,6 +44,15 @@ jobs:
       - name: Firmware bauen
         run: pio run -e panel
 
+      # Abstürze stehen in der Diagnose als Adressen (Backtrace). Entschlüsseln lassen sie sich nur mit der
+      # ELF-Datei genau dieses Builds; ein Fehler hier soll die Veröffentlichung nicht aufhalten.
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: firmware-elf-${{ github.sha }}
+          path: .pio/build/panel/firmware.elf
+          retention-days: 90
+
       - name: Website zusammenstellen
         # Version aus Git wie im Firmware-Build (scripts/version.py)
         run: python scripts/assemble_web_installer.py --build-dir .pio/build/panel --site-dir site

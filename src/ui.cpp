@@ -17,6 +17,8 @@ LV_FONT_DECLARE(font_32);
 LV_FONT_DECLARE(font_big);
 LV_FONT_DECLARE(font_icon_big);
 
+static const lv_font_t* const TITLE_FONT = &font_26;  // Titel in der Kopfzeile
+
 // Farben angelehnt an die evcc-Weboberfläche
 struct Theme {
   lv_color_t bg, box, text, muted, activeBg, activeFg, pressed, solar,
@@ -69,6 +71,8 @@ static ui::LimitCallback limitCb;
 // Raster für 480x480
 static constexpr int MARGIN = 24;
 static constexpr int HEADER_H = 64;
+static constexpr int HEADER_MIN_W = 300;  // Mindestbreite der Titelfläche zum Drücken
+static constexpr int TITLE_GAP = 16;      // Abstand des Titels zum nächsten Element rechts
 static constexpr int SEG_H = 84;
 static constexpr int SEG_Y = 480 - MARGIN - SEG_H; // Modusumschalter unten
 static constexpr int CONTENT_W = 480 - 2 * MARGIN;
@@ -945,10 +949,37 @@ static bool boostShown(const UiView &v) {
   return v.pendingBoost >= 0 ? v.pendingBoost : v.state.batteryBoost;
 }
 
-// Akku-Anzeige oben neben der Uhr; als Boost-Knopf mit Rahmen, bei aktivem
-// Boost grün gefüllt
-static void renderBattery(const UiView &v, bool live) {
-  const Theme &t = *theme;
+// Titel: darf bis vor das nächste Element rechts reichen (Warnsymbol, Akku-Anzeige oder Uhr).
+// Ein längerer Name endet mit "…", statt unter die Akku-Anzeige zu laufen (#24).
+static int titleWidth(const char* text) {
+  lv_point_t size;
+  lv_text_get_size(&size, text, TITLE_FONT, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+  return size.x;
+}
+
+static void setTitle(const char* text, lv_obj_t* neighbour) {
+  const int LEFT = MARGIN + 4;
+  lv_obj_update_layout(scrMain);
+  const int maxW = lv_obj_get_x(neighbour) - TITLE_GAP - LEFT;
+  lv_obj_set_width(header, LV_MAX(HEADER_MIN_W, LEFT + maxW));
+
+  // Selbst kürzen statt LV_LABEL_LONG_DOT: ganze Zeichen (UTF-8), kein Leerzeichen vor dem "…"
+  static const char ELLIPSIS[] = "…";
+  char buf[sizeof(((EvccState*)nullptr)->title) + sizeof(ELLIPSIS)];
+  strlcpy(buf, text, sizeof(buf) - sizeof(ELLIPSIS) + 1);
+  size_t len = strlen(buf);
+  while (len && titleWidth(buf) > maxW) {
+    do len--;
+    while (len && ((uint8_t)buf[len] & 0xC0) == 0x80);
+    while (len && buf[len - 1] == ' ') len--;
+    strcpy(buf + len, ELLIPSIS);
+  }
+  lv_label_set_text(lblTitle, buf);
+}
+
+// Akku-Anzeige oben neben der Uhr; als Boost-Knopf mit Rahmen, bei aktivem Boost grün gefüllt
+static void renderBattery(const UiView& v, bool live) {
+  const Theme& t = *theme;
   const bool button = boostable(v);
   const bool on = button && boostShown(v);
   const bool pending = v.pendingBoost >= 0;
@@ -1441,9 +1472,6 @@ void ui::render(const UiView &v) {
   char buf[64];
 
   renderDots(v);
-  lv_label_set_text(lblTitle, v.solar                ? "Solar"
-                              : s.valid || s.missing ? s.title
-                                                     : "evcc");
   lv_label_set_text(lblClock, v.clock);
   lv_label_set_text(lblIcons, !v.wifiConnected ? ICON_WIFI_OFF
                               : v.stale        ? ICON_ALERT
@@ -1458,11 +1486,11 @@ void ui::render(const UiView &v) {
   // Kachel
   const bool battery = s.valid && s.batterySoc >= 0;
   setVisible(btnBattery, battery);
-  if (battery)
-    renderBattery(v, live);
-  lv_obj_align_to(lblIcons, battery ? btnBattery : lblClock,
-                  LV_ALIGN_OUT_LEFT_BOTTOM, -10,
-                  battery && boostable(v) ? -BOOST_PAD_V : 0);
+  if (battery) renderBattery(v, live);
+  lv_obj_align_to(lblIcons, battery ? btnBattery : lblClock, LV_ALIGN_OUT_LEFT_BOTTOM, -10, battery && boostable(v) ? -BOOST_PAD_V : 0);
+  const bool icons = lv_label_get_text(lblIcons)[0];
+  setTitle(v.solar ? "Solar" : s.valid || s.missing ? s.title : "evcc",
+           icons ? lblIcons : battery ? btnBattery : lblClock);
 
   if (v.solar) {
     renderSolar(v, live);

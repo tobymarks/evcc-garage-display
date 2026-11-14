@@ -12,6 +12,7 @@ static uint8_t lpCount = 1;
 static uint8_t lpNumber[MAX_LOADPOINTS];  // Nummer in evcc, 1-basiert
 static EvccState shared[MAX_LOADPOINTS];
 static uint32_t sharedVersion = 0;
+static EvccDiagnostics diag;  // geschützt durch lock
 static uint32_t readVersion = 0;
 static EvccVehicles sharedVehicles;
 static EvccSolar sharedSolar;
@@ -109,8 +110,11 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   s.prioritySoc = root["prio"] | 0.0f;
   s.hasGrid = root["grid"].is<float>();
   s.gridPower = root["grid"] | 0.0f;
-  if (root["fc"][0].is<float>()) s.solarToday = root["fc"][0];
-  if (root["fc"][1].is<float>()) s.solarTomorrow = root["fc"][1];
+  // Passt evcc die Prognose an die echte Erzeugung an, zeigt es die Werte mit diesem Faktor
+  const float scale = root["fc"][2] | 1.0f;
+  s.solarScale = scale > 0 ? scale : 1.0f;
+  if (root["fc"][0].is<float>()) s.solarToday = root["fc"][0].as<float>() * s.solarScale;
+  if (root["fc"][1].is<float>()) s.solarTomorrow = root["fc"][1].as<float>() * s.solarScale;
   // Phasen, mit denen Smart startet: fest eingestellt oder bei Umschaltung (0 = automatisch) einphasig
   const int phasesConfigured = lp["phasesConfigured"] | 0;
   const int phases = phasesConfigured == 1 || phasesConfigured == 3 ? phasesConfigured
@@ -224,11 +228,13 @@ static bool fetchSolar() {
     }
   }
 
-  // Kommende Stunden: Viertelstundenwerte der Prognose (W), von evcc je Stunde zu Wh zusammengefasst
-  char jq[224];
+  // Kommende Stunden: Viertelstundenwerte der Prognose (W), von evcc je Stunde zu Wh zusammengefasst –
+  // wie in evcc mit dem Anpassungsfaktor, wenn die Anpassung an die echte Erzeugung eingeschaltet ist
+  char jq[320];
   snprintf(jq, sizeof(jq),
-           "try ([.forecast.solar.timeseries[]|select(.[0]>=%lld and .[0]<%lld)]|group_by((.[0]-%lld)/3600|floor)|"
-           "map([((.[0][0]-%lld)/3600|floor),((map(.[1])|add)/4)])) catch []",
+           "try ((if .solarAdjusted then .forecast.solar.scale//1 else 1 end) as $k|"
+           "[.forecast.solar.timeseries[]|select(.[0]>=%lld and .[0]<%lld)]|group_by((.[0]-%lld)/3600|floor)|"
+           "map([((.[0][0]-%lld)/3600|floor),((map(.[1])|add)/4*$k)])) catch []",
            (long long)dayStart, (long long)dayEnd, (long long)dayStart, (long long)dayStart);
   String body;
   if (httpRequest(serverUrl + "/api/state?jq=" + urlEncode(jq), "GET", &body) == HTTP_CODE_OK) {
@@ -265,15 +271,30 @@ static bool fetchSolar() {
 static void poll() {
   const uint32_t started = millis();
   String body;
-  if (httpRequest(stateUrl, "GET", &body) != HTTP_CODE_OK) return;
+  const int code = httpRequest(stateUrl, "GET", &body);
+  // Für die Diagnose mitzählen: Code, Dauer und ob die Antwort brauchbar war
+  const auto record = [&](bool ok, const char* version) {
+    const uint32_t duration = millis() - started;
+    xSemaphoreTake(lock, portMAX_DELAY);
+    diag.polls++;
+    if (!ok) diag.failed++;
+    diag.lastCode = code;
+    diag.lastDurationMs = duration;
+    if (duration > diag.maxDurationMs) diag.maxDurationMs = duration;
+    if (ok) diag.lastOkMs = millis() | 1;
+    if (version) strlcpy(diag.version, version, sizeof(diag.version));
+    xSemaphoreGive(lock);
+  };
+  if (code != HTTP_CODE_OK) return record(false, nullptr);
 
   JsonDocument doc;
-  if (deserializeJson(doc, body)) return;
+  if (deserializeJson(doc, body)) return record(false, nullptr);
   // Ältere evcc-Versionen verpacken die Antwort in {"result": ...}
   JsonObject root = doc["result"].is<JsonObject>() ? doc["result"].as<JsonObject>()
                                                    : doc.as<JsonObject>();
   JsonArray lps = root["lps"];
-  if (lps.isNull()) return;
+  if (lps.isNull()) return record(false, nullptr);
+  record(true, root["ver"] | "");
 
   // static: nur dieser Task ruft poll() auf, und der Stack bleibt für HTTP und JSON frei
   static EvccState all[MAX_LOADPOINTS];
@@ -438,9 +459,11 @@ void evcc::begin() {
            "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc),"
            "batp:((try (if (.battery.devices|length)>0 then .battery.power else null end) catch null) // .batteryPower),"
            "grid:((try .grid.power catch null) // .gridPower),prio:.prioritySoc,"
-           "fc:(try [.forecast.solar.today.energy,.forecast.solar.tomorrow.energy] catch null),"
+           "fc:(try [.forecast.solar.today.energy,.forecast.solar.tomorrow.energy,"
+           "(if .solarAdjusted then .forecast.solar.scale else null end)] catch null),"
            "pvs:(try [.pv[]|{t:.title,p:.power}] catch null),"
-           "veh:(try [.vehicles|to_entries[]|{n:.key,t:.value.title,o:any(.value.features[]?;.==\"Offline\")}] catch [])}",
+           "veh:(try [.vehicles|to_entries[]|{n:.key,t:.value.title,o:any(.value.features[]?;.==\"Offline\")}] catch []),"
+           "ver:.version}",
            lps.c_str());
   if (jqLen >= (int)sizeof(jq)) log_e("jq-Filter abgeschnitten (%d Zeichen)", jqLen);
   stateUrl = server + "/api/state?jq=" + urlEncode(jq);
@@ -514,3 +537,11 @@ CommandStatus evcc::status(Command command, uint8_t index) {
 }
 
 uint32_t evcc::stackFree() { return taskHandle ? uxTaskGetStackHighWaterMark(taskHandle) : 0; }
+
+evcc::Diagnostics evcc::diagnostics() {
+  if (!lock) return Diagnostics();
+  xSemaphoreTake(lock, portMAX_DELAY);
+  const Diagnostics d = diag;
+  xSemaphoreGive(lock);
+  return d;
+}
