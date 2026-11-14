@@ -272,10 +272,13 @@ static void touchCb(lv_indev_t*, lv_indev_data_t* data) {
 
 // ---------- öffentliche Funktionen ----------
 
+static uint8_t backlightDuty = 0;
+static uint32_t backlightFreq = LCD_BACKLIGHT_HZ;
+
 void display::begin(uint8_t rot) {
   rotation = rot & 3;
 
-  ledcAttach(PIN_LCD_BACKLIGHT, 20000, 8);
+  ledcAttach(PIN_LCD_BACKLIGHT, LCD_BACKLIGHT_HZ, 8);
   ledcWrite(PIN_LCD_BACKLIGHT, 0);
 
   initST7701();
@@ -300,7 +303,19 @@ void display::begin(uint8_t rot) {
   lv_indev_set_long_press_time(indev, SETTINGS_LONG_PRESS_MS);
 }
 
-void display::setBrightness(uint8_t value) { ledcWrite(PIN_LCD_BACKLIGHT, value); }
+void display::setBrightness(uint8_t value) {
+  backlightDuty = value;
+  ledcWrite(PIN_LCD_BACKLIGHT, value);
+}
+
+uint32_t display::setBacklightHz(uint32_t hz) {
+  const uint32_t actual = ledcChangeFrequency(PIN_LCD_BACKLIGHT, hz, 8);
+  if (actual) backlightFreq = actual;
+  ledcWrite(PIN_LCD_BACKLIGHT, backlightDuty);
+  return actual;
+}
+
+uint32_t display::backlightHz() { return backlightFreq; }
 
 void display::setSleeping(bool value) { sleeping = value; }
 
