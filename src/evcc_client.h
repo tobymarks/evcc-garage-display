@@ -57,6 +57,7 @@ struct EvccState {
   float minChargePower = 0;   // W, ab diesem Überschuss startet Smart (Mindeststrom × Phasen × 230 V)
   float solarToday = -1;      // Wh, Solarprognose für den Rest des Tages (-1 = keine Prognose)
   float solarTomorrow = -1;   // Wh, Solarprognose für morgen
+  float solarScale = 1;       // Faktor, mit dem evcc die Prognose an die echte Erzeugung anpasst; schon eingerechnet
 };
 
 // Solarseite: Erzeugung je Stunde und je Anlage. Die Stundenwerte liefert evcc unter

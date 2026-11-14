@@ -193,6 +193,9 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
     und innerhalb von 10 Minuten `http://<IP des Displays>:8080/update?check=1&install=1` aufrufen.
   - Diagnose: `/diag` zeigt den Zustand der Firmware-Plätze nach so einem Fall richtig an.
   - Kopfzeile: Zu lange Ladepunktnamen enden mit „…“, statt unter die Akku-Anzeige zu laufen.
+  - Solarprognose: Ist in evcc „PV-Vorhersage anhand der realen Erzeugungsdaten anpassen“ eingeschaltet,
+    rechnet das Display „REST HEUTE“, „MORGEN“ und die kommenden Stunden im Tagesverlauf jetzt mit demselben
+    Faktor wie evcc. Vorher wichen die Werte von evcc ab.
   - Diagnose als Datei: Auf der Einstellungsseite gibt es unten „Diagnose herunterladen“, zum Anhängen an ein
     Issue. Die Datei enthält keine Passwörter, keinen WLAN-Namen, keine Netzwerkadressen, keinen Standort und
     keine Namen von Ladepunkten oder Fahrzeugen. Neu darin: Chip, Touch-Controller, Einstellungen, evcc-Version
