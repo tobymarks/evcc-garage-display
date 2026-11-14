@@ -111,8 +111,9 @@ static bool applySettings(std::function<String(const char*)> value) {
   if (slash >= 0) s.evccHost.remove(slash);
   s.evccPort = constrain(value("port").toInt(), 1, 65535);
   settings::parseLoadpoints(value("lp").c_str(), s);
-  s.latitude = value("lat").toFloat();
-  s.longitude = value("lon").toFloat();
+  // Leer gelassen bleibt der Standort, wie er ist
+  if (!value("lat").isEmpty()) s.latitude = value("lat").toFloat();
+  if (!value("lon").isEmpty()) s.longitude = value("lon").toFloat();
   s.rotation = constrain(value("rot").toInt(), 0, 3);
   s.theme = constrain(value("theme").toInt(), 0, 2);
   s.screenTimeoutMin = constrain(value("timeout").toInt(), 0, 240);
@@ -867,29 +868,76 @@ static String option(int value, int selected, const char* label) {
 }
 
 static const char SETTINGS_HEAD[] PROGMEM = R"(<!doctype html><html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>evcc-Garage</title><style>
-:root{color-scheme:light dark;--a:#0fdd8d}
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Einstellungen · evcc-Garage</title><style>
+:root{color-scheme:light dark;--a:#0fdd8d}[hidden]{display:none!important}
 body{font:16px/1.4 system-ui,sans-serif;max-width:30rem;margin:0 auto;padding:1.5rem 1rem}
-h1{font-size:1.4rem;margin:0 0 1.5rem}label{display:block;font-weight:600;margin:1.1rem 0 .3rem}
-small{display:block;font-weight:400;opacity:.65}input,select{box-sizing:border-box;width:100%;font:inherit;
-padding:.6rem;border:1px solid #8888;border-radius:.5rem;background:Field;color:FieldText}
-.row{display:flex;gap:.75rem}.row>div{flex:1;min-width:0}button{margin-top:1.8rem;width:100%;font:inherit;font-weight:600;
-padding:.8rem;border:0;border-radius:.5rem;background:var(--a);color:#000}footer{margin-top:2rem;opacity:.65;font-size:.85rem}
-footer a{color:inherit}h2{font-size:1.05rem;margin:2.2rem 0 0;padding-top:1.1rem;border-top:1px solid #8884}
-input[type=checkbox]{width:auto;margin-right:.5rem}.check{font-weight:400}.note{padding:.6rem .8rem;border-radius:.5rem;
-background:#0fdd8d33}figure{margin:1.1rem 0 0;text-align:center}figure img{width:15rem;max-width:100%;height:auto;
-border-radius:.9rem;border:1px solid #8884;display:block;margin:0 auto .6rem}
-button:disabled{opacity:.5}button.plain{margin:0;width:auto;padding:.5rem .9rem;background:none;border:1px solid #8888;color:inherit;font-weight:400}
-a.plain{display:inline-block;margin:0 .5rem .5rem 0;padding:.5rem .9rem;border:1px solid #8888;border-radius:.5rem;color:inherit;
-text-decoration:none}.hint{font-size:.85rem;opacity:.65;margin:.6rem 0 .9rem}.hint a{color:inherit}
-</style></head><body><h1>evcc-Garage</h1>)";
+h1{font-size:1.4rem;margin:0 0 1.5rem}h1 span{font-weight:400;opacity:.65;margin-left:.5rem}
+label{display:block;font-weight:600;margin:1.1rem 0 .3rem}small{display:block;font-weight:400;opacity:.65}
+input,select{box-sizing:border-box;width:100%;min-height:2.75rem;font:inherit;padding:.6rem;border:1px solid #8888;
+border-radius:.5rem;background:Field;color:FieldText}
+.row{display:flex;gap:.75rem}.row>div{flex:1;min-width:0}.row{margin-top:1.1rem}.row label{margin-top:0}label.mini{font-weight:400;font-size:.85rem;margin:0 0 .2rem}
+button{width:100%;min-height:2.75rem;font:inherit;font-weight:600;padding:.8rem;border:0;border-radius:.5rem;
+background:var(--a);color:#000}button:disabled{opacity:.5}
+h2{font-size:1.05rem;margin:2.2rem 0 0;padding-top:1.1rem;border-top:1px solid #8884}
+.sw{display:flex;align-items:center;gap:1rem;cursor:pointer}.sw span{flex:1}
+.sw input{appearance:none;flex:none;width:3rem;min-height:0;height:1.75rem;padding:0;border:0;border-radius:1rem;
+background:#8889;position:relative;cursor:pointer;transition:background .15s}
+.sw input::after{content:"";position:absolute;top:.2rem;left:.2rem;width:1.35rem;height:1.35rem;border-radius:50%;
+background:#fff;box-shadow:0 1px 2px #0006;transition:transform .15s}
+.sw input:checked{background:var(--a)}.sw input:checked::after{transform:translateX(1.25rem)}
+.sw input:focus-visible{outline:2px solid;outline-offset:2px}
+fieldset{border:0;margin:0;padding:0 0 0 1rem;border-left:2px solid #8884;min-width:0}fieldset:disabled{opacity:.45}
+.check{font-weight:400;display:flex;align-items:center;gap:.5rem;margin:.6rem 0 0}
+.check input{width:1.15rem;min-height:0;height:1.15rem;margin:0}
+.note{padding:.6rem .8rem;border-radius:.5rem;background:#0fdd8d33}
+.st{margin:.9rem 0 0;font-size:.9rem}.st::before{content:"";display:inline-block;width:.6rem;height:.6rem;
+border-radius:50%;margin-right:.5rem;background:#0bb866}.st.bad::before{background:#e8590c}
+figure{margin:1.1rem 0 0;text-align:center}figure img{width:15rem;max-width:100%;height:auto;border-radius:.9rem;
+border:1px solid #8884;display:block;margin:0 auto .6rem}
+.plain{display:inline-flex;align-items:center;box-sizing:border-box;width:auto;min-height:2.75rem;margin:0 .5rem .5rem 0;
+padding:.5rem .9rem;background:none;border:1px solid #8888;border-radius:.5rem;color:inherit;font-weight:400;text-decoration:none}
+.hint{font-size:.85rem;opacity:.65;margin:.6rem 0 .9rem}.hint a{color:inherit}
+.bar{position:sticky;bottom:0;margin:1.8rem -1rem 0;padding:.75rem 1rem;background:Canvas;border-top:1px solid #8884}
+.bar small{margin-bottom:.5rem;opacity:1;font-weight:600}.bar a{color:inherit;font-weight:400}
+footer{margin-top:2rem;opacity:.65;font-size:.85rem}footer a{color:inherit}
+</style></head><body><h1>evcc-Garage<span>Einstellungen</span></h1>)";
+
+// Beschriftung eines Felds, mit ihm verbunden (Antippen setzt den Cursor, Vorleseprogramme nennen den Namen)
+static String field(const char* id, const char* label, const char* hint = nullptr) {
+  String out = String("<label for=\"") + id + "\">" + label;
+  if (hint) out += String("<small>") + hint + "</small>";
+  return out + "</label>";
+}
+
+// Schalter. Ein Kästchen ohne Haken schickt der Browser gar nicht mit, deshalb folgt ein verstecktes Feld
+// mit 0: web.arg() liefert den ersten Wert – also 1, wenn der Haken gesetzt ist.
+static String toggle(const char* name, bool on, const char* label, const char* hint) {
+  return String("<label class=\"sw\"><span>") + label + "<small>" + hint + "</small></span><input type=\"checkbox\" "
+         "role=\"switch\" name=\"" + name + "\" value=\"1\"" + (on ? " checked" : "") + "><input type=\"hidden\" name=\"" +
+         name + "\" value=\"0\"></label>";
+}
+
+static String timeoutLabel(int minutes) {
+  if (!minutes) return "Nie";
+  if (minutes == 1) return "Nach 1 Minute";
+  if (minutes % 60 == 0) return String("Nach ") + minutes / 60 + (minutes == 60 ? " Stunde" : " Stunden");
+  return String("Nach ") + minutes + " Minuten";
+}
 
 static void handleSettings() {
   if (web.method() == HTTP_POST) {
     // Nur vollständige Formulare übernehmen, sonst stünden leere Felder als 0 in den Einstellungen
-    for (const char* key : {"host", "port", "lp", "lat", "lon", "rot", "theme", "timeout", "autoupd"}) {
-      if (web.arg(key).isEmpty()) {
-        web.send(400, "text/plain; charset=utf-8", String("Feld fehlt: ") + key + "\n");
+    static const struct {
+      const char* key;
+      const char* label;
+    } REQUIRED[] = {{"host", "evcc-Adresse"}, {"port", "Port"},  {"lp", "Ladepunkte"},
+                    {"rot", "Drehung"},       {"theme", "Design"}, {"timeout", "Bildschirm ausschalten"},
+                    {"autoupd", "Automatische Updates"}};
+    for (const auto& r : REQUIRED) {
+      if (web.arg(r.key).isEmpty()) {
+        web.send(400, "text/html; charset=utf-8",
+                 String(FPSTR(SETTINGS_HEAD)) + "<p class=\"note\">Nicht gespeichert: Das Feld „" + r.label +
+                     "“ ist leer.</p><a class=\"plain\" href=\"javascript:history.back()\">Zurück zum Formular</a></body></html>");
         return;
       }
     }
@@ -906,108 +954,152 @@ static void handleSettings() {
     web.sendHeader("Refresh", "15; url=/settings");
     web.send(200, "text/html; charset=utf-8",
              String(FPSTR(SETTINGS_HEAD)) +
-                 "<p>Gespeichert. Das Display startet neu, die Seite lädt in einigen Sekunden wieder.</p></body></html>");
+                 "<p class=\"note\">Gespeichert. Das Display startet neu, die Seite lädt in einigen Sekunden wieder.</p></body></html>");
     return;
   }
 
   const Settings& s = settings::get();
   String h = FPSTR(SETTINGS_HEAD);
-  h.reserve(7936);
+  h.reserve(10240);
   if (web.hasArg("saved")) h += "<p class=\"note\">Gespeichert – die Änderung ist schon am Display zu sehen.</p>";
   h += "<form method=\"post\"><h2>Verbindung</h2>";
-  h += "<div class=\"row\"><div><label>evcc-Adresse</label><input name=\"host\" required value=\"" +
-       htmlEscape(s.evccHost) + "\"></div>";
-  h += "<div style=\"flex:.45\"><label>Port</label><input name=\"port\" type=\"number\" min=\"1\" max=\"65535\" value=\"" +
-       String(s.evccPort) + "\"></div></div>";
-  h += "<label>Ladepunkte<small>Nummer wie in evcc (1 = erster). Mehrere mit Komma, z. B. 1,2,3 – dann wischen "
-       "zum Wechseln.</small></label><input name=\"lp\" inputmode=\"numeric\" pattern=\"[0-9 ,]*\" value=\"" +
+  // Steht die Verbindung? Das zeigt sofort, ob Adresse und Port stimmen.
+  const evcc::Diagnostics d = evcc::diagnostics();
+  const uint32_t age = d.lastOkMs ? (millis() - d.lastOkMs) / 1000 : 0;
+  if (d.lastOkMs && age < 60) {
+    h += String("<p class=\"st\">Verbunden mit evcc") + (d.version[0] ? String(" ") + d.version : String()) + "</p>";
+  } else if (d.lastOkMs) {
+    h += String("<p class=\"st bad\">evcc antwortet nicht mehr, zuletzt vor ") +
+         (age < 120 ? String(age) + " Sekunden" : String(age / 60) + " Minuten") + ". Läuft evcc, stimmen Adresse und Port?</p>";
+  } else {
+    h += "<p class=\"st bad\">Noch keine Antwort von evcc. Stimmen Adresse und Port?</p>";
+  }
+  h += "<div class=\"row\"><div><label for=\"host\">evcc-Adresse</label><input id=\"host\" name=\"host\" required "
+       "autocapitalize=\"none\" autocorrect=\"off\" spellcheck=\"false\" value=\"" + htmlEscape(s.evccHost) + "\"></div>";
+  h += "<div style=\"flex:.45\"><label for=\"port\">Port</label><input id=\"port\" name=\"port\" type=\"number\" required "
+       "min=\"1\" max=\"65535\" value=\"" + String(s.evccPort) + "\"></div></div>";
+  h += field("lp", "Ladepunkte", "Nummer wie in evcc, 1 ist der erste. Mehrere mit Komma: 1,2,3 – am Display wechselt Wischen.") +
+       "<input id=\"lp\" name=\"lp\" required inputmode=\"numeric\" pattern=\"[0-9 ,]*\" value=\"" +
        settings::loadpointsText(s) + "\">";
-  h += "<h2>Anzeige</h2><figure><img id=\"shot\" alt=\"Aktuelle Anzeige des Displays\" width=\"480\" height=\"480\" hidden>"
+  for (uint8_t i = 0; i < evcc::count(); i++) {
+    if (!states[i].valid && states[i].missing)
+      h += String("<p class=\"st bad\">Ladepunkt ") + s.loadpoints[i] + " gibt es in evcc nicht.</p>";
+  }
+  h += "<p class=\"hint\">WLAN wechseln: am Display den Titel 3 Sekunden gedrückt halten.</p>";
+
+  h += "<h2>Ladepunktseite</h2>";
+  h += toggle("vehsw", s.vehicleSwitch, "Fahrzeug wechseln",
+              "Die Fahrzeugzeile antippen schaltet durch die Fahrzeuge aus evcc.");
+  h += toggle("limit", s.chargeLimit, "Ladelimit",
+              "Steht neben dem Fahrzeug; antippen stellt es für diese Ladung ein.");
+  h += toggle("boost", s.boostButton, "Battery Boost",
+              "Im Modus Smart die Akku-Anzeige antippen, um den Hausakku dazuzuschalten.");
+
+  h += "<h2>Solarseite</h2>";
+  h += toggle("solar", s.solarPage, "Solarseite anzeigen",
+              "Eigene Seite mit Erzeugung, Tagesverlauf und Prognose, erreichbar durch Wischen. Den Tagesverlauf "
+              "liefert evcc ab Version 0.319.");
+  h += "<fieldset id=\"solarsub\">";
+  h += field("solarsur", "Große Zahl", "„Überschuss“ zeigt, was gerade übrig ist, und darunter den Energiebalken.") +
+       "<select id=\"solarsur\" name=\"solarsur\">" + option(0, s.solarSurplus, "Erzeugung") +
+       option(1, s.solarSurplus, "Überschuss") + "</select>";
+  h += toggle("solar1st", s.solarFirst, "Als Startseite",
+              "Etwa für ein Display im Haus: Es bleibt auf der Solarseite, auch wenn ein Auto angesteckt wird, und "
+              "kehrt zwei Minuten nach der letzten Berührung zu ihr zurück.");
+  h += "</fieldset>";
+
+  h += "<h2>Bildschirm</h2><figure><img id=\"shot\" alt=\"Aktuelle Anzeige des Displays\" width=\"480\" height=\"480\" hidden>"
        "<button type=\"button\" class=\"plain\" id=\"load\">Aktuelle Anzeige laden</button></figure>";
-  h += "<label>Fahrzeug wechseln<small>Die Fahrzeugzeile über der Leistung antippen, um durch die in evcc angelegten "
-       "Fahrzeuge zu schalten.</small></label><select name=\"vehsw\">" + option(1, s.vehicleSwitch, "An") +
-       option(0, s.vehicleSwitch, "Aus") + "</select>";
-  h += "<label>Ladelimit<small>Zeigt neben dem Fahrzeug das Ladelimit; antippen stellt es für diese Ladung ein. "
-       "In Prozent, wenn evcc den Ladestand kennt, sonst als Energie in kWh.</small></label><select name=\"limit\">" +
-       option(0, s.chargeLimit, "Aus") + option(1, s.chargeLimit, "An") + "</select>";
-  h += "<label>Battery Boost<small>Im Modus Smart die Akku-Anzeige oben antippen, um wie in evcc den Hausakku "
-       "zum Laden dazuzuschalten.</small></label><select name=\"boost\">" + option(0, s.boostButton, "Aus") +
-       option(1, s.boostButton, "An") + "</select>";
-  h += "<label>Solarseite<small>Zusätzliche Seite hinter den Ladepunkten, erreichbar durch Wischen: aktuelle "
-       "Erzeugung, der Tag je Stunde (bei mehreren Anlagen die Leistung je Anlage), dazu heute, Rest und morgen. "
-       "Tagesverlauf und Tagesertrag liefert evcc ab Version 0.319.</small></label><select name=\"solar\">" +
-       option(0, s.solarPage, "Aus") + option(1, s.solarPage, "An") + "</select>";
-  h += "<label>Solarseite: große Zahl<small>„Überschuss“ zeigt statt der Erzeugung, was gerade übrig ist – so "
-       "gerechnet wie auf der Ladepunktseite ohne Fahrzeug – und darunter den Energiebalken statt der einzelnen "
-       "Anlagen. Gedacht für ein Display im Haus: Lohnt es sich gerade, die Spülmaschine einzuschalten?</small></label>"
-       "<select name=\"solarsur\">" +
-       option(0, s.solarSurplus, "Erzeugung") + option(1, s.solarSurplus, "Überschuss") + "</select>";
-  h += "<label>Solarseite zuerst<small>Die Solarseite ist die erste Seite, die Ladepunkte folgen beim Wischen. "
-       "Das Display bleibt dann auf ihr stehen, auch wenn ein Fahrzeug angesteckt wird oder zu laden beginnt, "
-       "und kehrt zwei Minuten nach der letzten Berührung zu ihr zurück.</small></label><select name=\"solar1st\">" +
-       option(0, s.solarFirst, "Aus") + option(1, s.solarFirst, "An") + "</select>";
-  h += "<label>Design</label><select name=\"theme\">" + option(0, s.theme, "Automatisch nach Sonnenstand") +
-       option(1, s.theme, "Immer hell") + option(2, s.theme, "Immer dunkel") + "</select>";
-  char lat[12], lon[12];
-  snprintf(lat, sizeof(lat), "%.4f", s.latitude);
-  snprintf(lon, sizeof(lon), "%.4f", s.longitude);
-  h += "<label>Standort<small>Breiten- und Längengrad, für die automatische Tag/Nacht-Umschaltung.</small></label><div class=\"row\">"
-       "<div><input name=\"lat\" type=\"number\" step=\"any\" min=\"-90\" max=\"90\" aria-label=\"Breitengrad\" "
-       "placeholder=\"Breitengrad\" value=\"" + String(lat) + "\"></div>"
-       "<div><input name=\"lon\" type=\"number\" step=\"any\" min=\"-180\" max=\"180\" aria-label=\"Längengrad\" "
-       "placeholder=\"Längengrad\" value=\"" + String(lon) + "\"></div></div>";
-  h += "<label>Bildschirm aus nach<small>Minuten ohne Ladung und Bedienung, 0 = immer an.</small></label>"
-       "<input name=\"timeout\" type=\"number\" min=\"0\" max=\"240\" value=\"" + String(s.screenTimeoutMin) + "\">";
-  h += "<label>Helligkeit</label><select name=\"bright\">";
+  h += field("bright", "Helligkeit") + "<select id=\"bright\" name=\"bright\">";
   for (int pct = 100; pct >= MIN_BRIGHTNESS_PCT; pct -= 10)
     h += option(pct, s.brightnessPct, (String(pct) + " %").c_str());
   h += "</select>";
-  h += "<label>Drehung</label><select name=\"rot\">" + option(0, s.rotation, "0°") +
+  h += field("timeout", "Bildschirm ausschalten", "Solange kein Auto lädt und niemand das Display bedient.") +
+       "<select id=\"timeout\" name=\"timeout\">";
+  bool listed = false;
+  for (int minutes : {0, 1, 2, 5, 10, 15, 30, 60, 120, 240}) {
+    // Ein früher frei eingegebener Wert bleibt wählbar und steht an seinem Platz in der Reihe
+    if (!listed && s.screenTimeoutMin < minutes)
+      h += option(s.screenTimeoutMin, s.screenTimeoutMin, timeoutLabel(s.screenTimeoutMin).c_str());
+    if (s.screenTimeoutMin <= minutes) listed = true;
+    h += option(minutes, s.screenTimeoutMin, timeoutLabel(minutes).c_str());
+  }
+  h += "</select>";
+  h += field("theme", "Design") + "<select id=\"theme\" name=\"theme\">" +
+       option(0, s.theme, "Automatisch: tagsüber hell, nachts dunkel") + option(1, s.theme, "Immer hell") +
+       option(2, s.theme, "Immer dunkel") + "</select>";
+  char lat[12], lon[12];
+  snprintf(lat, sizeof(lat), "%.4f", s.latitude);
+  snprintf(lon, sizeof(lon), "%.4f", s.longitude);
+  h += "<div id=\"loc\"><label>Standort<small>Für Sonnenauf- und -untergang, grob genügt.</small></label><div class=\"row\" style=\"margin-top:.5rem\">"
+       "<div><label class=\"mini\" for=\"lat\">Breitengrad</label><input id=\"lat\" name=\"lat\" type=\"number\" step=\"any\" min=\"-90\" "
+       "max=\"90\" value=\"" + String(lat) + "\"></div>"
+       "<div><label class=\"mini\" for=\"lon\">Längengrad</label><input id=\"lon\" name=\"lon\" type=\"number\" step=\"any\" min=\"-180\" "
+       "max=\"180\" value=\"" + String(lon) + "\"></div></div></div>";
+  h += field("rot", "Drehung") + "<select id=\"rot\" name=\"rot\">" + option(0, s.rotation, "0°") +
        option(1, s.rotation, "90° im Uhrzeigersinn") + option(2, s.rotation, "180°") +
        option(3, s.rotation, "270° im Uhrzeigersinn") + "</select>";
-  h += "<h2>System</h2><label>Automatische Updates</label><select name=\"autoupd\">" + option(1, s.autoUpdate, "An") +
-       option(0, s.autoUpdate, "Aus") + "</select>";
-  h += String("<label>Passwort<small>Schützt diese Seite und Firmware-Uploads im Heimnetz, Benutzername „admin“. ") +
-       (s.password.isEmpty() ? "Aktuell ist keines gesetzt." : "Aktuell ist eines gesetzt; leer lassen, um es zu behalten.") +
-       "</small></label><input name=\"pw\" type=\"password\" autocomplete=\"new-password\" maxlength=\"" +
-       String(MAX_PASSWORD_LEN) + "\" placeholder=\"" + (s.password.isEmpty() ? "Kein Passwort" : "Unverändert") + "\">";
+
+  h += "<h2>System</h2>";
+  h += toggle("autoupd", s.autoUpdate, "Automatische Updates",
+              "Installiert neue Versionen, sobald das Display zehn Minuten nicht gebraucht wird und kein Auto lädt.");
+  h += field("pw", "Passwort",
+             (String("Schützt diese Seite und Firmware-Uploads im Heimnetz, Benutzername „" WEB_USER "“. ") +
+              (s.password.isEmpty() ? "Aktuell ist keines gesetzt."
+                                    : "Aktuell ist eines gesetzt; leer lassen, um es zu behalten.") +
+              " Vergessen? Speichern im WLAN-Portal am Display löscht es.")
+                 .c_str()) +
+       "<input id=\"pw\" name=\"pw\" type=\"password\" autocomplete=\"new-password\" maxlength=\"" + String(MAX_PASSWORD_LEN) +
+       "\" placeholder=\"" + (s.password.isEmpty() ? "Kein Passwort" : "Unverändert") + "\">"
+       "<label class=\"check\"><input type=\"checkbox\" id=\"pwshow\">Passwort anzeigen</label>";
   if (!s.password.isEmpty())
     h += "<label class=\"check\"><input type=\"checkbox\" name=\"pwclear\" value=\"1\">Passwort entfernen</label>";
-  h += "<button>Speichern</button><small>Verbindung, Drehung und Passwort starten das Display neu, alles andere "
-       "wirkt sofort.</small></form>";
-  h += "<h2>Firmware</h2><p class=\"hint\">Installiert ist Version <span id=\"fwv\">" FW_VERSION "</span>. Neue Versionen holt das Display "
-       "von selbst, wenn automatische Updates an sind – sobald es zehn Minuten nicht gebraucht wird und kein Auto "
-       "lädt. Hier geht es sofort; das Display startet dabei neu, eine laufende Ladung läuft weiter.</p>"
+  // Die Leiste bleibt am unteren Rand stehen, solange das Formular zu sehen ist
+  h += "<div class=\"bar\"><small id=\"dirty\" hidden>Ungespeicherte Änderungen · <a href=\"#\" id=\"undo\">Verwerfen</a></small>"
+       "<button>Speichern</button></div></form>";
+
+  h += "<h2>Firmware</h2><p class=\"hint\">Installiert ist Version <span id=\"fwv\">" FW_VERSION "</span>. Beim Aktualisieren "
+       "startet das Display neu, eine laufende Ladung läuft weiter.</p>"
        "<button type=\"button\" class=\"plain\" id=\"upd\">Jetzt aktualisieren</button>"
        "<p class=\"hint\" id=\"updmsg\" hidden></p>";
-  h += "<h2>Diagnose</h2><p class=\"hint\">Hilft bei der Fehlersuche: Firmware, Hardware, Einstellungen, die letzten "
-       "Starts und Abstürze. Die Datei enthält keine Passwörter, keinen WLAN-Namen, keine Netzwerkadressen, keinen "
-       "Standort und keine Namen von Ladepunkten oder Fahrzeugen. Du kannst sie so an ein "
-       "<a href=\"" REPO_URL "/issues\">Issue auf GitHub</a> anhängen.</p>"
-       "<a class=\"plain\" href=\"/diag?download=1\">Diagnose herunterladen</a>"
+  h += "<h2>Diagnose</h2><p class=\"hint\">Für die Fehlersuche. Die Datei enthält keine Passwörter, WLAN-Namen, "
+       "Netzwerkadressen, Standorte oder Namen von Ladepunkten und Fahrzeugen und kann so an ein "
+       "<a href=\"" REPO_URL "/issues\">Issue auf GitHub</a> angehängt werden.</p>"
+       "<a class=\"plain\" href=\"/diag?download=1\" download>Diagnose herunterladen</a>"
        "<a class=\"plain\" href=\"/diag\">Ansehen</a>";
   h += "<script>const i=document.getElementById('shot'),b=document.getElementById('load');"
        "function l(){b.textContent='Lädt …';i.onload=()=>{i.hidden=false;b.textContent='Aktualisieren'};"
        "i.onerror=()=>{b.textContent='Erneut versuchen'};i.src='/screenshot.bmp?'+Date.now()}"
        "b.onclick=l;if(location.search.includes('saved'))setTimeout(l,800)</script>";
+  // Abhängige Felder, ungespeicherte Änderungen und der Hinweis auf den Neustart
+  h += "<script>{const f=document.forms[0],$=s=>document.querySelector(s),bt=$('.bar button'),dn=$('#dirty');"
+       "const sync=()=>{$('#solarsub').disabled=!$('input[name=solar]').checked;$('#loc').hidden=$('#theme').value!='0'};"
+       "const snap=()=>new URLSearchParams(new FormData(f)).toString();sync();const s0=snap(),f0=new FormData(f);let sub=0;"
+       "const upd=()=>{sync();const fd=new FormData(f);dn.hidden=snap()==s0;"
+       "bt.textContent=['host','port','lp','rot','pw','pwclear'].some(k=>(fd.get(k)||'')!=(f0.get(k)||''))"
+       "?'Speichern und neu starten':'Speichern'};"
+       "f.addEventListener('input',upd);f.addEventListener('change',upd);"
+       "$('#undo').onclick=e=>{e.preventDefault();f.reset();$('#pw').type='password';upd()};"
+       "$('#pwshow').onchange=e=>{$('#pw').type=e.target.checked?'text':'password'};"
+       "f.onsubmit=()=>{sub=1};"
+       "addEventListener('beforeunload',e=>{if(!dn.hidden&&!sub){e.preventDefault();e.returnValue=''}});"
+       "if(location.search.includes('saved'))history.replaceState(null,'','/settings')}</script>";
   // "Jetzt aktualisieren": Prüfung und Installation anstoßen, dann /update abfragen, bis das Ergebnis feststeht.
   // Während des Neustarts antwortet das Display nicht; läuft danach eine andere Version, ist es geschafft.
   h += "<script>{const u=document.getElementById('upd'),m=document.getElementById('updmsg'),v0='" FW_VERSION "';"
        "const say=t=>{m.hidden=false;m.textContent=t};"
-       "u.onclick=async()=>{u.disabled=true;let n=0;say('Suche nach einer neuen Version\u00a0…');"
+       "u.onclick=async()=>{u.disabled=true;let n=0;say('Suche nach einer neuen Version …');"
        "try{await fetch('/update?check=1&install=1')}catch(e){}"
        "const t=setInterval(async()=>{const end=x=>{clearInterval(t);u.disabled=false;if(x)say(x)};"
        "if(++n>120)return end('Keine Antwort vom Display. Bitte Seite neu laden.');"
-       "let x;try{x=await(await fetch('/update')).text()}catch(e){return say('Das Display startet neu\u00a0…')}"
+       "let x;try{x=await(await fetch('/update')).text()}catch(e){return say('Das Display startet neu …')}"
        "const v=(x.match(/^Firmware (.*)$/m)||[])[1],r=(x.match(/^Letzte Prüfung: (.*)$/m)||[])[1]||'';"
        "if(v&&v!=v0){document.getElementById('fwv').textContent=v;return end('Aktualisiert auf Version '+v+'.')}"
-       "if(r=='läuft …'||r=='noch nicht geprüft')say('Suche nach einer neuen Version\u00a0…');"
+       "if(r=='läuft …'||r=='noch nicht geprüft')say('Suche nach einer neuen Version …');"
        "else if(r.startsWith('Installation')||r.startsWith('neue Version')||r.includes('installiert'))"
-       "say('Neue Version wird installiert, danach startet das Display neu\u00a0…');"
+       "say('Neue Version wird installiert, danach startet das Display neu …');"
        "else end(r=='aktuell'?'Die Firmware ist aktuell.':r)},2000)}}</script>";
-  h += "<footer>Firmware " FW_VERSION
-       " · WLAN ändern: Titel am Display 3 s gedrückt halten<br><a href=\"" PROJECT_URL "\">Projektseite und Anleitung</a>"
-       " · <a href=\"" REPO_URL "\">GitHub</a></footer></body></html>";
+  h += "<footer><a href=\"" PROJECT_URL "\">Projektseite und Anleitung</a> · <a href=\"" REPO_URL "\">GitHub</a></footer></body></html>";
   web.send(200, "text/html; charset=utf-8", h);
 }
 
