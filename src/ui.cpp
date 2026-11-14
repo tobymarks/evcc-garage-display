@@ -1,5 +1,6 @@
 #include "ui.h"
 
+#include <cstring>
 #include <lvgl.h>
 #include <stdarg.h>
 
@@ -1341,15 +1342,25 @@ static void renderPowerSources(const EvccState &s) {
   float max = 1;
   max = LV_MAX(max, s.pvPower);
   max = LV_MAX(max, s.gridPower);
-  plantModel.count = 2;
+  plantModel.count = 3;
   char num[16];
-  for (int i = 0; i < 2; i++) {
-    float power = LV_MAX(0.0f, i == 0 ? s.pvPower : s.gridPower);
-    // Zu lange Namen kürzen, bis sie mit "…" in die Zeile passen (ganze
-    // UTF-8-Zeichen)
+  float power;
+  for (int i = 0; i < 3; i++) {
     char *name = plantModel.name[i];
-    const char *title = i == 0 ? "PV Erzeugung" : "Netzbezug    ";
-    strlcpy(name, title, 13);
+    switch (i) {
+    case 0:
+      strlcpy(name, "PV Erzeugung", 13);
+      power = LV_MAX(0.0f, s.pvPower);
+      break;
+    case 1:
+      strlcpy(name, "Netzbezug   ", 13);
+      power = LV_MAX(0.0f, s.gridPower);
+      break;
+    case 2:
+      strlcpy(name, "Verbrauch   ", 13);
+      power = LV_MAX(0.0f, s.homePower);
+      break;
+    }
     size_t len = strlen(name);
     lv_point_t size;
     lv_text_get_size(&size, name, &font_22, 0, 0, LV_COORD_MAX,
@@ -1357,56 +1368,11 @@ static void renderPowerSources(const EvccState &s) {
     formatDecimal(num, sizeof(num), power / 1000.0f);
     snprintf(plantModel.value[i], sizeof(plantModel.value[0]), "%s kW", num);
     plantModel.filled[i] = 0;
-    //    const int width = (int)lroundf(power / max * CONTENT_W);
-    //    plantModel.filled[i] =
-    //        width >= PLANT_TRACK_H
-    //            ? width
-    //            : 0; // schmaler ließe sich die Rundung nicht zeichnen
   }
-  lv_obj_set_height(plantsBlock, 16 + 2 * plantRowH() + PLANT_GAP);
+  lv_obj_set_height(plantsBlock, 16 + 3 * plantRowH() + 2 * PLANT_GAP);
   lv_obj_invalidate(plantsBlock);
 }
 
-static void renderPlants(const EvccSolar &d) {
-  static constexpr int NAME_W = CONTENT_W - 130; // Platz für "12,4 kW" rechts
-  float max = 1;
-  for (int i = 0; i < d.plantCount; i++)
-    max = LV_MAX(max, d.plantPower[i]);
-  plantModel.count = d.plantCount;
-  char num[16];
-  for (int i = 0; i < d.plantCount; i++) {
-    const float power = LV_MAX(0.0f, d.plantPower[i]);
-    // Zu lange Namen kürzen, bis sie mit "…" in die Zeile passen (ganze
-    // UTF-8-Zeichen)
-    char *name = plantModel.name[i];
-    strlcpy(name, d.plantTitle[i], sizeof(d.plantTitle[0]));
-    size_t len = strlen(name);
-    lv_point_t size;
-    lv_text_get_size(&size, name, &font_22, 0, 0, LV_COORD_MAX,
-                     LV_TEXT_FLAG_NONE);
-    while (size.x > NAME_W && len > 1) {
-      do
-        len--;
-      while (len > 0 && ((uint8_t)name[len] & 0xC0) == 0x80);
-      strcpy(name + len, "…");
-      lv_text_get_size(&size, name, &font_22, 0, 0, LV_COORD_MAX,
-                       LV_TEXT_FLAG_NONE);
-    }
-    formatDecimal(num, sizeof(num), power / 1000.0f);
-    snprintf(plantModel.value[i], sizeof(plantModel.value[0]), "%s kW", num);
-    const int width = (int)lroundf(power / max * CONTENT_W);
-    plantModel.filled[i] =
-        width >= PLANT_TRACK_H
-            ? width
-            : 0; // schmaler ließe sich die Rundung nicht zeichnen
-  }
-  lv_obj_set_height(plantsBlock, 16 + d.plantCount * plantRowH() +
-                                     (d.plantCount - 1) * PLANT_GAP);
-  lv_obj_invalidate(plantsBlock);
-}
-
-// Solarseite hinter den Ladepunkten: was die Sonne gerade bringt, der Tag je
-// Stunde bzw. die Leistung je Anlage, darunter heute, Rest und morgen. Keine
 // Tasten – hier gibt es nichts zu schalten.
 static void renderSolar(const UiView &v, bool live) {
   const EvccState &s = v.state;
