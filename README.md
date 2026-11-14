@@ -33,13 +33,18 @@ zusammengefasst). Tasten gibt es dort keine; wird ein Auto angesteckt oder begin
 wie sonst zum Ladepunkt. Tagesverlauf und Tagesertrag kommen aus dem Verlauf von evcc
 (`/api/history/energy`, getestet mit 0.319); ältere Versionen zeigen nur Erzeugung und Prognose.
 
-Für ein Display im Haus – lohnt es sich gerade, die Spülmaschine einzuschalten? – gibt es dazu zwei weitere
-Schalter, beide ab Werk aus: **„Solarseite: große Zahl“ = Überschuss** zeigt statt der Erzeugung, was gerade übrig
-ist (Einspeisung und, sobald der Hausakku seinen Vorrang erreicht hat, auch seine Ladeleistung – wie auf der
-Ladepunktseite ohne Fahrzeug), darunter den Energiebalken statt der einzelnen Anlagen und den Tagesverlauf.
-**„Solarseite zuerst“** macht sie zur ersten Seite: Das Display startet dort, springt nicht zum Ladepunkt und
-kehrt zwei Minuten nach der letzten Berührung zu ihr zurück. Die Balken unter den einzelnen Anlagen zeigen deren
-Leistung im Verhältnis zur gerade stärksten Anlage.
+Was die Solarseite zeigt, lässt sich unter `/settings` → „Solarseite einrichten“ aus festen Bausteinen wählen; ab
+Werk bleibt sie wie beschrieben. Zur Wahl stehen die **große Zahl** (Erzeugung, Überschuss, Verbrauch, Netz,
+Hausakku), das **Diagramm** (Tagesverlauf, Energiebalken mit Tagesverlauf, Anlagen einzeln) und die **drei
+Kacheln** (heute erzeugt, Rest heute, morgen, Prognose heute, Erzeugung, Überschuss, Verbrauch, Netz, Ladestand
+des Hausakkus oder keine Kachel). Die Seite zeigt eine Vorschau, die sofort reagiert, und lädt auf Wunsch das
+echte Bild vom Display. Was evcc nicht liefert, ist dort nicht wählbar. Der Überschuss ist gerechnet wie auf der
+Ladepunktseite ohne Fahrzeug: Einspeisung und, sobald der Hausakku seinen Vorrang erreicht hat, auch seine
+Ladeleistung – für ein Display im Haus: Lohnt es sich gerade, die Spülmaschine einzuschalten?
+
+Der Schalter **„Als Startseite“** macht die Solarseite zur ersten Seite: Das Display startet dort, springt nicht
+zum Ladepunkt und kehrt zwei Minuten nach der letzten Berührung zu ihr zurück. Die Balken unter den einzelnen
+Anlagen zeigen deren Leistung im Verhältnis zur gerade stärksten Anlage.
 
 **Design:** angelehnt an die evcc-Weboberfläche (ab 0.317): gleiche Farben, Schrift (Montserrat) und Icons –
 hell, dunkel oder automatisch nach Sonnenstand. Die Helligkeit ist fest (ab Werk 100 %, unter
@@ -178,7 +183,7 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | --- | --- |
 | `/settings` | Einstellungen ändern (wie im Portal, ohne WLAN) |
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
-| `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)), die Solarseite mit `pv`, `pvmulti`, `pvnight`, `pvsummer` oder mit den echten Daten `pvlive` (`&surplus=1` zeigt sie mit Überschuss); `&title=…` setzt dazu einen anderen Namen in die Kopfzeile; `/preview` ohne Parameter beendet |
+| `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)), die Solarseite mit `pv`, `pvmulti`, `pvnight`, `pvsummer` oder mit den echten Daten `pvlive` (`&cfg=1,2,0,9,2` zeigt sie mit anderen Bausteinen: große Zahl, Diagramm, drei Kacheln – die Nummern wie in [src/config.h](src/config.h)); `&title=…` setzt dazu einen anderen Namen in die Kopfzeile; `/preview` ohne Parameter beendet |
 | `/update` | Firmware-Version und Stand der automatischen Updates, auch Installationen, nach denen die neue Version nicht lief; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
 | `/diag` | Diagnose, auch als Knopf „Diagnose herunterladen“ auf der Einstellungsseite (`/diag?download=1` liefert sie als Datei zum Anhängen an ein Issue; ohne Passwörter, WLAN-Namen, Adressen, Standort und Namen von Ladepunkten oder Fahrzeugen): Laufzeit, Neustartgrund, Zustand des Bildschirms, Flash-Baustein, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze (und ob der Inhalt des anderen startfähig ist), die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte und nicht gestartete Updates, der letzte gespeicherte Absturz, dazu Chip, Touch-Controller, Einstellungen, evcc-Version und was evcc je Ladepunkt liefert |
 | `/wake`, `/sleep` | Bildschirm an- bzw. ausschalten, siehe „Bildschirm von außen schalten" |
@@ -199,6 +204,11 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
     (Verbindung, Ladepunktseite, Solarseite, Bildschirm, System). „Speichern“ bleibt am unteren Rand sichtbar und
     meldet ungespeicherte Änderungen; oben steht, ob das Display evcc erreicht. Die Einstellungen selbst bleiben
     unverändert.
+  - Solarseite einrichten: Unter „Solarseite“ führt ein neuer Knopf zu einer Seite, auf der sich große Zahl,
+    Diagramm und Kacheln aus festen Bausteinen wählen lassen, mit Vorschau und echtem Bild vom Display (#36).
+    Neu wählbar sind Verbrauch, Netz und Hausakku. Ab Werk bleibt die Seite wie bisher; die Einstellung
+    „Große Zahl“ ist in der neuen Seite aufgegangen und wird übernommen. Bei drei Kacheln ist die Beschriftung
+    etwas kleiner als bisher, damit nichts an den Rand stößt; „ÜBERSCHUSS“ heißt dort „ÜBRIG“.
   - Solarseite: Abends, wenn heute nichts mehr kommt, stehen nur noch „HEUTE“ und „MORGEN“. Die Kachel
     „PROGNOSE“ mit der Vorhersage für den ganzen Tag entfällt, sie las sich wie etwas, das noch kommt (#37).
 - **14.11.2026**
