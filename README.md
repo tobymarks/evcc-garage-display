@@ -191,6 +191,14 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
     deshalb auf einer alten Version festhängen, holen die Korrektur so: Display antippen oder neu starten
     und innerhalb von 10 Minuten `http://<IP des Displays>:8080/update?check=1&install=1` aufrufen.
   - Diagnose: `/diag` zeigt den Zustand der Firmware-Plätze nach so einem Fall richtig an.
+  - Kopfzeile: Zu lange Ladepunktnamen enden mit „…“, statt unter die Akku-Anzeige zu laufen.
+  - Diagnose als Datei: Auf der Einstellungsseite gibt es unten „Diagnose herunterladen“, zum Anhängen an ein
+    Issue. Die Datei enthält keine Passwörter, keinen WLAN-Namen, keine Netzwerkadressen, keinen Standort und
+    keine Namen von Ladepunkten oder Fahrzeugen. Neu darin: Chip, Touch-Controller, Einstellungen, evcc-Version
+    und was evcc je Ladepunkt liefert.
+  - Helligkeit: Bleibt das Display unterhalb von 90 % dunkel, lässt sich mit
+    `http://<IP des Displays>:8080/backlight?hz=1000` eine andere Taktung der Hintergrundbeleuchtung
+    ausprobieren (200 bis 40000 Hz, gilt bis zum Neustart).
 - **13.11.2026**
   - Neuer Schalter „Solarseite" (ab Werk aus): zusätzliche Seite hinter den Ladepunkten mit der aktuellen
     Erzeugung, dem Tag je Stunde bzw. der Leistung je Anlage, dem Ertrag von heute und der Prognose.
