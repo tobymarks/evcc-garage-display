@@ -1272,8 +1272,8 @@ static void renderSolar(const UiView& v, bool live) {
   setVisible(chartBlock, hours);
   if (hours) renderChart(v);
 
-  // Heute bisher, was heute noch kommt, morgen. Kommt heute nichts mehr, steht statt des Rests
-  // die Prognose für den ganzen Tag – zum Vergleich mit dem Erzeugten.
+  // Heute bisher, was heute noch kommt, morgen. Kommt heute nichts mehr, entfällt die mittlere Kachel:
+  // Die Prognose für den ganzen Tag las sich dort wie etwas, das noch kommt (#37).
   int n = 0;
   // Bei drei Kacheln bleibt wenig Breite: stößt ein Wert an den Rand, fällt seine Nachkommastelle weg
   const int tileRoom = (CONTENT_W - 2 * TILE_GAP) / 3 - 14 - 10;
@@ -1287,12 +1287,7 @@ static void renderSolar(const UiView& v, bool live) {
     n++;
   };
   if (data && d.valid) add("HEUTE", d.today);
-  if (data && s.solarToday >= 0) {
-    if (s.solarToday >= 100 || !d.valid)
-      add("REST HEUTE", s.solarToday / 1000.0f);
-    else
-      add("PROGNOSE", d.forecastToday);
-  }
+  if (data && s.solarToday >= 0 && (s.solarToday >= 100 || !d.valid)) add("REST HEUTE", s.solarToday / 1000.0f);
   if (data && s.solarTomorrow >= 0) add("MORGEN", s.solarTomorrow / 1000.0f);
   setVisible(tiles, n > 0);
   for (int i = 0; i < 3; i++) {
