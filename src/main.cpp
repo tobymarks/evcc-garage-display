@@ -646,8 +646,9 @@ static void handleDiag() {
   }
   s += "\n";
   // Hintergrundbeleuchtung als PWM-Wert: zeigt, ob /wake, /sleep und der Timeout gegriffen haben
-  snprintf(buf, sizeof(buf), "Bildschirm %s, Helligkeit %d von 255\n",
-           brightness == 0 ? (forcedSleep ? "aus (per /sleep)" : "aus") : "an", brightness);
+  snprintf(buf, sizeof(buf), "Bildschirm %s, Helligkeit %d von 255, Taktung %lu Hz\n",
+           brightness == 0 ? (forcedSleep ? "aus (per /sleep)" : "aus") : "an", brightness,
+           (unsigned long)display::backlightHz());
   s += buf;
   snprintf(buf, sizeof(buf), "Interner RAM frei %u, minimal %u, größter Block %u\nPSRAM frei %u\n",
            heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
@@ -883,6 +884,19 @@ static void startWebServer() {
     forcedSleep = true;
     forcedSleepActivity = lastActivity;
     web.send(200, "text/plain; charset=utf-8", "Bildschirm aus\n");
+  });
+  // Taktung der Hintergrundbeleuchtung ausprobieren (#21): manche Boards bleiben mit der schnellen Taktung
+  // unter 90 % Helligkeit dunkel. ?hz=… (200 bis 40000) gilt bis zum Neustart und schaltet den Bildschirm an.
+  guarded("/backlight", []() {
+    String s;
+    if (web.hasArg("hz")) {
+      const uint32_t hz = constrain(web.arg("hz").toInt(), 200L, 40000L);
+      if (!display::setBacklightHz(hz)) s = String(hz) + " Hz lässt sich nicht einstellen.\n";
+      lastActivity = millis();
+    }
+    s += "Hintergrundbeleuchtung: Taktung " + String(display::backlightHz()) + " Hz, Helligkeit " +
+         String(settings::get().brightnessPct) + " %\n";
+    web.send(200, "text/plain; charset=utf-8", s);
   });
   // Lasttest gegen Bildstörungen: löst eine WLAN-Suche aus (wie das Einstellungsportal)
   guarded("/wifiscan", []() {
