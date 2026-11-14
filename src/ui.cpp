@@ -1228,15 +1228,21 @@ static void renderSolar(const UiView& v, bool live) {
   setVisible(contPower, data);
   setVisible(contIdle, !data);
   setVisible(barBlock, false);
-  const bool rows = data && live && d.plantCount >= 2;
+  // Einstellung "Überschuss": groß das, was gerade übrig ist, darunter der Energiebalken der
+  // Ladepunktseite statt der einzelnen Anlagen
+  const bool surplusMode = v.solarSurplus;
+  const bool rows = data && live && !surplusMode && d.plantCount >= 2;
   if (data) {
-    if (rows)
+    if (surplusMode)
+      snprintf(buf, sizeof(buf), "Überschuss jetzt");
+    else if (rows)
       snprintf(buf, sizeof(buf), "Erzeugung jetzt · %u Anlagen", d.plantTotal);
     else
       snprintf(buf, sizeof(buf), "Erzeugung jetzt");
     setVehicleText(buf);
-    const bool producing = s.pvPower >= 50;
-    formatDecimal(buf, sizeof(buf), LV_MAX(0.0f, s.pvPower) / 1000.0f);
+    const float power = surplusMode ? surplus(s) : LV_MAX(0.0f, s.pvPower);
+    const bool producing = power >= 50;
+    formatDecimal(buf, sizeof(buf), power / 1000.0f);
     lv_label_set_text(lblPower, buf);
     lv_obj_set_style_text_color(lblPower, live && producing ? t.text : t.muted, 0);
     setBigIcon(ICON_SUN);
@@ -1259,6 +1265,7 @@ static void renderSolar(const UiView& v, bool live) {
     lv_label_set_text(lblStatus, buf);
     lv_obj_set_style_text_color(lblStatus, color, 0);
   }
+  setVisible(barBlock, data && surplusMode && s.hasGrid && renderFlow(s, live));
   setVisible(plantsBlock, rows);
   if (rows) renderPlants(d);
   const bool hours = data && live && !rows && d.valid;

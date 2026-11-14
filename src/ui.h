@@ -22,6 +22,7 @@ struct UiView {
   float pendingLimit = -1;              // angefragtes Ladelimit (% bzw. kWh), bis evcc es bestätigt; -1 = keins
   // Solarseite hinter den Ladepunkten (Einstellung): state liefert dann nur die Hausdaten
   bool solar = false;
+  bool solarSurplus = false;            // Solarseite zeigt den Überschuss statt der Erzeugung (Einstellung)
   EvccSolar solarData;
   int8_t hour = -1;                     // aktuelle Stunde in Ortszeit, -1 = Uhrzeit unbekannt
 };

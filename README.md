@@ -33,6 +33,14 @@ zusammengefasst). Tasten gibt es dort keine; wird ein Auto angesteckt oder begin
 wie sonst zum Ladepunkt. Tagesverlauf und Tagesertrag kommen aus dem Verlauf von evcc
 (`/api/history/energy`, getestet mit 0.319); ältere Versionen zeigen nur Erzeugung und Prognose.
 
+Für ein Display im Haus – lohnt es sich gerade, die Spülmaschine einzuschalten? – gibt es dazu zwei weitere
+Schalter, beide ab Werk aus: **„Solarseite: große Zahl“ = Überschuss** zeigt statt der Erzeugung, was gerade übrig
+ist (Einspeisung und, sobald der Hausakku seinen Vorrang erreicht hat, auch seine Ladeleistung – wie auf der
+Ladepunktseite ohne Fahrzeug), darunter den Energiebalken statt der einzelnen Anlagen und den Tagesverlauf.
+**„Solarseite zuerst“** macht sie zur ersten Seite: Das Display startet dort, springt nicht zum Ladepunkt und
+kehrt zwei Minuten nach der letzten Berührung zu ihr zurück. Die Balken unter den einzelnen Anlagen zeigen deren
+Leistung im Verhältnis zur gerade stärksten Anlage.
+
 **Design:** angelehnt an die evcc-Weboberfläche (ab 0.317): gleiche Farben, Schrift (Montserrat) und Icons –
 hell, dunkel oder automatisch nach Sonnenstand. Die Helligkeit ist fest (ab Werk 100 %, unter
 `/settings` in 10-%-Schritten einstellbar) – es gibt keine Nachtdimmung, in der Garage ist Licht, wenn jemand
@@ -169,7 +177,7 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | --- | --- |
 | `/settings` | Einstellungen ändern (wie im Portal, ohne WLAN) |
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
-| `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)), die Solarseite mit `pv`, `pvmulti`, `pvnight`, `pvsummer` oder mit den echten Daten `pvlive`; `&title=…` setzt dazu einen anderen Namen in die Kopfzeile; `/preview` ohne Parameter beendet |
+| `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)), die Solarseite mit `pv`, `pvmulti`, `pvnight`, `pvsummer` oder mit den echten Daten `pvlive` (`&surplus=1` zeigt sie mit Überschuss); `&title=…` setzt dazu einen anderen Namen in die Kopfzeile; `/preview` ohne Parameter beendet |
 | `/update` | Firmware-Version und Stand der automatischen Updates, auch Installationen, nach denen die neue Version nicht lief; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
 | `/diag` | Diagnose, auch als Knopf „Diagnose herunterladen“ auf der Einstellungsseite (`/diag?download=1` liefert sie als Datei zum Anhängen an ein Issue; ohne Passwörter, WLAN-Namen, Adressen, Standort und Namen von Ladepunkten oder Fahrzeugen): Laufzeit, Neustartgrund, Zustand des Bildschirms, Flash-Baustein, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze (und ob der Inhalt des anderen startfähig ist), die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte und nicht gestartete Updates, der letzte gespeicherte Absturz, dazu Chip, Touch-Controller, Einstellungen, evcc-Version und was evcc je Ladepunkt liefert |
 | `/wake`, `/sleep` | Bildschirm an- bzw. ausschalten, siehe „Bildschirm von außen schalten" |
@@ -196,6 +204,9 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
   - Solarprognose: Ist in evcc „PV-Vorhersage anhand der realen Erzeugungsdaten anpassen“ eingeschaltet,
     rechnet das Display „REST HEUTE“, „MORGEN“ und die kommenden Stunden im Tagesverlauf jetzt mit demselben
     Faktor wie evcc. Vorher wichen die Werte von evcc ab.
+  - Solarseite, zwei neue Schalter (ab Werk aus): „Solarseite: große Zahl“ zeigt auf Wunsch den Überschuss statt
+    der Erzeugung, darunter den Energiebalken; „Solarseite zuerst“ macht sie zur Startseite, etwa für ein Display
+    in der Küche (#31).
   - Einstellungsseite: Knopf „Jetzt aktualisieren“ sucht sofort nach einer neuen Version und installiert sie,
     ohne auf das automatische Update zu warten (#26).
   - Diagnose als Datei: Auf der Einstellungsseite gibt es unten „Diagnose herunterladen“, zum Anhängen an ein

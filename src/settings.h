@@ -20,6 +20,8 @@ struct Settings {
   bool vehicleSwitch;        // Fahrzeugzeile antippen wechselt das Fahrzeug
   bool chargeLimit;          // Ladelimit neben der Fahrzeugzeile anzeigen und per Antippen einstellen
   bool solarPage;            // zusätzliche Seite hinter den Ladepunkten: Erzeugung, Tagesverlauf, Prognose
+  bool solarSurplus;         // Solarseite zeigt groß den Überschuss statt der Erzeugung, darunter den Energiebalken
+  bool solarFirst;           // Solarseite ist die erste Seite und bleibt stehen (z. B. Display in der Küche)
   String password;           // schützt Weboberfläche und OTA (Benutzer "admin"); leer = offen
 };
 
