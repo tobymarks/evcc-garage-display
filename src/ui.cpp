@@ -16,6 +16,8 @@ LV_FONT_DECLARE(font_32);
 LV_FONT_DECLARE(font_big);
 LV_FONT_DECLARE(font_icon_big);
 
+static const lv_font_t* const TITLE_FONT = &font_26;  // Titel in der Kopfzeile
+
 // Farben angelehnt an die evcc-Weboberfläche
 struct Theme {
   lv_color_t bg, box, text, muted, activeBg, activeFg, pressed, solar, solarText, grid, warn, error, border, battery, feedIn;
@@ -54,6 +56,8 @@ static ui::LimitCallback limitCb;
 // Raster für 480x480
 static constexpr int MARGIN = 24;
 static constexpr int HEADER_H = 64;
+static constexpr int HEADER_MIN_W = 300;  // Mindestbreite der Titelfläche zum Drücken
+static constexpr int TITLE_GAP = 16;      // Abstand des Titels zum nächsten Element rechts
 static constexpr int SEG_H = 84;
 static constexpr int SEG_Y = 480 - MARGIN - SEG_H;  // Modusumschalter unten
 static constexpr int CONTENT_W = 480 - 2 * MARGIN;
@@ -81,6 +85,7 @@ static int plantRowH() { return font_24.line_height + 5 + PLANT_TRACK_H; }  // N
 
 // Hauptbildschirm
 static lv_obj_t* scrMain;
+static lv_obj_t* header;  // Fläche um den Titel (lange drücken → Einstellungen)
 static lv_obj_t* lblTitle;
 static lv_obj_t* mid;
 static lv_obj_t* dots;
@@ -381,11 +386,11 @@ static void buildMain() {
   lv_obj_remove_flag(scrMain, LV_OBJ_FLAG_SCROLLABLE);
 
   // Kopfzeile (Titel lange drücken → Einstellungen)
-  lv_obj_t* header = makeBox(scrMain);
-  lv_obj_set_size(header, 300, HEADER_H);
+  header = makeBox(scrMain);
+  lv_obj_set_size(header, HEADER_MIN_W, HEADER_H);
   lv_obj_add_flag(header, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(header, onHeaderLongPress, LV_EVENT_LONG_PRESSED, nullptr);
-  lblTitle = makeLabel(header, &font_26);
+  lblTitle = makeLabel(header, TITLE_FONT);
   lv_obj_align(lblTitle, LV_ALIGN_LEFT_MID, MARGIN + 4, 4);
 
   lblClock = makeLabel(scrMain, &font_26);
@@ -820,6 +825,34 @@ static bool boostable(const UiView& v) {
 }
 
 static bool boostShown(const UiView& v) { return v.pendingBoost >= 0 ? v.pendingBoost : v.state.batteryBoost; }
+
+// Titel: darf bis vor das nächste Element rechts reichen (Warnsymbol, Akku-Anzeige oder Uhr).
+// Ein längerer Name endet mit "…", statt unter die Akku-Anzeige zu laufen (#24).
+static int titleWidth(const char* text) {
+  lv_point_t size;
+  lv_text_get_size(&size, text, TITLE_FONT, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+  return size.x;
+}
+
+static void setTitle(const char* text, lv_obj_t* neighbour) {
+  const int LEFT = MARGIN + 4;
+  lv_obj_update_layout(scrMain);
+  const int maxW = lv_obj_get_x(neighbour) - TITLE_GAP - LEFT;
+  lv_obj_set_width(header, LV_MAX(HEADER_MIN_W, LEFT + maxW));
+
+  // Selbst kürzen statt LV_LABEL_LONG_DOT: ganze Zeichen (UTF-8), kein Leerzeichen vor dem "…"
+  static const char ELLIPSIS[] = "…";
+  char buf[sizeof(((EvccState*)nullptr)->title) + sizeof(ELLIPSIS)];
+  strlcpy(buf, text, sizeof(buf) - sizeof(ELLIPSIS) + 1);
+  size_t len = strlen(buf);
+  while (len && titleWidth(buf) > maxW) {
+    do len--;
+    while (len && ((uint8_t)buf[len] & 0xC0) == 0x80);
+    while (len && buf[len - 1] == ' ') len--;
+    strcpy(buf + len, ELLIPSIS);
+  }
+  lv_label_set_text(lblTitle, buf);
+}
 
 // Akku-Anzeige oben neben der Uhr; als Boost-Knopf mit Rahmen, bei aktivem Boost grün gefüllt
 static void renderBattery(const UiView& v, bool live) {
@@ -1272,7 +1305,6 @@ void ui::render(const UiView& v) {
   char buf[64];
 
   renderDots(v);
-  lv_label_set_text(lblTitle, v.solar ? "Solar" : s.valid || s.missing ? s.title : "evcc");
   lv_label_set_text(lblClock, v.clock);
   lv_label_set_text(lblIcons, !v.wifiConnected ? ICON_WIFI_OFF : v.stale ? ICON_ALERT : "");
   lv_obj_set_style_text_color(lblIcons, t.error, 0);
@@ -1286,6 +1318,9 @@ void ui::render(const UiView& v) {
   setVisible(btnBattery, battery);
   if (battery) renderBattery(v, live);
   lv_obj_align_to(lblIcons, battery ? btnBattery : lblClock, LV_ALIGN_OUT_LEFT_BOTTOM, -10, battery && boostable(v) ? -BOOST_PAD_V : 0);
+  const bool icons = lv_label_get_text(lblIcons)[0];
+  setTitle(v.solar ? "Solar" : s.valid || s.missing ? s.title : "evcc",
+           icons ? lblIcons : battery ? btnBattery : lblClock);
 
   if (v.solar) {
     renderSolar(v, live);
