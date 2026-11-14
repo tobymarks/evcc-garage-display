@@ -1337,42 +1337,6 @@ static void renderChart(const UiView &v) {
   lv_obj_invalidate(chartBlock);
 }
 
-static void renderPowerSources(const EvccState &s) {
-  static constexpr int NAME_W = CONTENT_W - 130; // Platz für "12,4 kW" rechts
-  float max = 1;
-  max = LV_MAX(max, s.pvPower);
-  max = LV_MAX(max, s.gridPower);
-  plantModel.count = 3;
-  char num[16];
-  float power;
-  for (int i = 0; i < 3; i++) {
-    char *name = plantModel.name[i];
-    switch (i) {
-    case 0:
-      strlcpy(name, "PV Erzeugung", 13);
-      power = LV_MAX(0.0f, s.pvPower);
-      break;
-    case 1:
-      strlcpy(name, "Netzbezug   ", 13);
-      power = LV_MAX(0.0f, s.gridPower);
-      break;
-    case 2:
-      strlcpy(name, "Verbrauch   ", 13);
-      power = LV_MAX(0.0f, s.homePower);
-      break;
-    }
-    size_t len = strlen(name);
-    lv_point_t size;
-    lv_text_get_size(&size, name, &font_22, 0, 0, LV_COORD_MAX,
-                     LV_TEXT_FLAG_NONE);
-    formatDecimal(num, sizeof(num), power / 1000.0f);
-    snprintf(plantModel.value[i], sizeof(plantModel.value[0]), "%s kW", num);
-    plantModel.filled[i] = 0;
-  }
-  lv_obj_set_height(plantsBlock, 16 + 3 * plantRowH() + 2 * PLANT_GAP);
-  lv_obj_invalidate(plantsBlock);
-}
-
 // Tasten – hier gibt es nichts zu schalten.
 static void renderSolar(const UiView &v, bool live) {
   const EvccState &s = v.state;
@@ -1393,13 +1357,9 @@ static void renderSolar(const UiView &v, bool live) {
   const bool rows = data && live && d.plantCount >= 2;
   const float ueberschuss = s.pvPower - s.homePower;
   if (data) {
-    if (rows)
-      //      snprintf(buf, sizeof(buf), "Überschuss aktuell · %u Anlagen",
-      //               d.plantTotal);
-      //    else
-      snprintf(buf, sizeof(buf), "Überschuss aktuell");
+    snprintf(buf, sizeof(buf), "Überschuss aktuell");
     setVehicleText(buf);
-    const bool producing = s.pvPower >= 50;
+    const bool producing = ueberschuss >= 50;
     formatDecimal(buf, sizeof(buf), LV_MAX(0.0f, ueberschuss) / 1000.0f);
     lv_label_set_text(lblPower, buf);
     lv_obj_set_style_text_color(lblPower, live && producing ? t.text : t.muted,
@@ -1429,9 +1389,6 @@ static void renderSolar(const UiView &v, bool live) {
     lv_label_set_text(lblStatus, buf);
     lv_obj_set_style_text_color(lblStatus, color, 0);
   }
-  setVisible(plantsBlock, rows);
-  if (rows)
-    renderPowerSources(s);
   const bool hours = data && live && !rows && d.valid;
   setVisible(chartBlock, hours);
   if (hours)
@@ -1509,6 +1466,11 @@ void ui::render(const UiView &v) {
 
   if (v.solar) {
     renderSolar(v, live);
+    const bool chargeBar =
+        showPower &&
+        (s.hasGrid ? s.pvPower >= 0 : s.charging && s.greenShare >= 0);
+    setVisible(barBlock,
+               ((house && s.hasGrid) || chargeBar) && renderFlow(s, live));
     return;
   }
   setVisible(chartBlock, false);
