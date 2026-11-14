@@ -25,6 +25,8 @@ void settings::load() {
   s.vehicleSwitch = prefs.getBool("vehsw", true);
   s.chargeLimit = prefs.getBool("limit", false);
   s.solarPage = prefs.getBool("solar", false);
+  s.solarSurplus = prefs.getBool("solarsur", false);
+  s.solarFirst = prefs.getBool("solar1st", false);
   s.password = prefs.getString("pw", "");
   prefs.end();
 
@@ -49,6 +51,8 @@ void settings::save() {
   prefs.putBool("vehsw", s.vehicleSwitch);
   prefs.putBool("limit", s.chargeLimit);
   prefs.putBool("solar", s.solarPage);
+  prefs.putBool("solarsur", s.solarSurplus);
+  prefs.putBool("solar1st", s.solarFirst);
   prefs.putString("pw", s.password);
   prefs.end();
 }
