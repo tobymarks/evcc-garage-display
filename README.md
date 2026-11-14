@@ -27,7 +27,7 @@ einer einzigen Abfrage.
 **Solarseite (Schalter unter `/settings`, ab Werk aus):** eine zusätzliche Seite hinter den Ladepunkten, erreichbar
 durch Wischen. Sie zeigt die aktuelle Erzeugung, darunter den Tag je Stunde – grün, was erzeugt wurde, grau die
 Prognose für die kommenden Stunden – und in Kacheln den Ertrag von heute, was heute noch kommt und die Prognose
-für morgen. Kommt heute nichts mehr, steht statt des Rests die Prognose für den ganzen Tag zum Vergleich. Kennt
+für morgen. Kommt heute nichts mehr, entfällt die mittlere Kachel. Kennt
 evcc mehrere PV-Anlagen, stehen statt der Stundenbalken die Leistungen je Anlage (höchstens drei Zeilen, weitere
 zusammengefasst). Tasten gibt es dort keine; wird ein Auto angesteckt oder beginnt das Laden, springt das Display
 wie sonst zum Ladepunkt. Tagesverlauf und Tagesertrag kommen aus dem Verlauf von evcc
@@ -193,6 +193,9 @@ Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
 Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktionen sind Schalter unter
 `/settings`.
 
+- **15.11.2026**
+  - Solarseite: Abends, wenn heute nichts mehr kommt, stehen nur noch „HEUTE“ und „MORGEN“. Die Kachel
+    „PROGNOSE“ mit der Vorhersage für den ganzen Tag entfällt, sie las sich wie etwas, das noch kommt (#37).
 - **14.11.2026**
   - Automatische Updates: Fehler behoben, durch den nach einem Update wieder die alte Firmware lief. Nach der
     Installation begann das Display bis zum Neustart sofort eine zweite; bei schneller Internetverbindung
