@@ -156,10 +156,11 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
 ## Später ändern
 
 - **Einstellungen im Heimnetz:** im Browser `http://evcc-garage.local:8080` aufrufen (leitet auf `/settings`).
-  Unter „Anzeige" lässt sich ein- und ausschalten, was das Display zeigt und was sich antippen lässt
-  (Fahrzeug wechseln, Ladelimit, Battery Boost, Solarseite); die Seite kann dazu die aktuelle Anzeige des Displays laden.
-  Diese Schalter sowie Design, Helligkeit und Bildschirm-Timeout wirken sofort. Nur Änderungen an
-  evcc-Adresse, Port, Ladepunkten, Drehung oder Passwort starten das Display neu. Das WLAN bleibt unverändert.
+  Unter „Ladepunktseite" und „Solarseite" lässt sich ein- und ausschalten, was das Display zeigt und was sich
+  antippen lässt (Fahrzeug wechseln, Ladelimit, Battery Boost, Solarseite); unter „Bildschirm" kann die Seite die
+  aktuelle Anzeige des Displays laden. Diese Schalter sowie Design, Helligkeit und Bildschirm-Timeout wirken sofort.
+  Nur Änderungen an evcc-Adresse, Port, Ladepunkten, Drehung oder Passwort starten das Display neu – der Knopf heißt
+  dann „Speichern und neu starten". Oben steht, ob das Display evcc erreicht. Das WLAN bleibt unverändert.
 - **Passwort (optional):** unter „System" setzen. Danach verlangen alle Seiten des Displays die Anmeldung als
   `admin`, und Firmware-Uploads im Heimnetz brauchen dasselbe Passwort (`--auth=…` bei `espota`,
   in PlatformIO `upload_flags = --auth=…`). Es wird unverschlüsselt im Heimnetz übertragen – also kein Passwort
@@ -194,6 +195,10 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
 `/settings`.
 
 - **15.11.2026**
+  - Einstellungsseite überarbeitet: Schalter statt Auswahllisten für An/Aus, kürzere Erklärungen, neue Abschnitte
+    (Verbindung, Ladepunktseite, Solarseite, Bildschirm, System). „Speichern“ bleibt am unteren Rand sichtbar und
+    meldet ungespeicherte Änderungen; oben steht, ob das Display evcc erreicht. Die Einstellungen selbst bleiben
+    unverändert.
   - Solarseite: Abends, wenn heute nichts mehr kommt, stehen nur noch „HEUTE“ und „MORGEN“. Die Kachel
     „PROGNOSE“ mit der Vorhersage für den ganzen Tag entfällt, sie las sich wie etwas, das noch kommt (#37).
 - **14.11.2026**
