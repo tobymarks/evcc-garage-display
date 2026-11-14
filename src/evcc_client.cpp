@@ -110,8 +110,11 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   s.prioritySoc = root["prio"] | 0.0f;
   s.hasGrid = root["grid"].is<float>();
   s.gridPower = root["grid"] | 0.0f;
-  if (root["fc"][0].is<float>()) s.solarToday = root["fc"][0];
-  if (root["fc"][1].is<float>()) s.solarTomorrow = root["fc"][1];
+  // Passt evcc die Prognose an die echte Erzeugung an, zeigt es die Werte mit diesem Faktor
+  const float scale = root["fc"][2] | 1.0f;
+  s.solarScale = scale > 0 ? scale : 1.0f;
+  if (root["fc"][0].is<float>()) s.solarToday = root["fc"][0].as<float>() * s.solarScale;
+  if (root["fc"][1].is<float>()) s.solarTomorrow = root["fc"][1].as<float>() * s.solarScale;
   // Phasen, mit denen Smart startet: fest eingestellt oder bei Umschaltung (0 = automatisch) einphasig
   const int phasesConfigured = lp["phasesConfigured"] | 0;
   const int phases = phasesConfigured == 1 || phasesConfigured == 3 ? phasesConfigured
@@ -225,11 +228,13 @@ static bool fetchSolar() {
     }
   }
 
-  // Kommende Stunden: Viertelstundenwerte der Prognose (W), von evcc je Stunde zu Wh zusammengefasst
-  char jq[224];
+  // Kommende Stunden: Viertelstundenwerte der Prognose (W), von evcc je Stunde zu Wh zusammengefasst –
+  // wie in evcc mit dem Anpassungsfaktor, wenn die Anpassung an die echte Erzeugung eingeschaltet ist
+  char jq[320];
   snprintf(jq, sizeof(jq),
-           "try ([.forecast.solar.timeseries[]|select(.[0]>=%lld and .[0]<%lld)]|group_by((.[0]-%lld)/3600|floor)|"
-           "map([((.[0][0]-%lld)/3600|floor),((map(.[1])|add)/4)])) catch []",
+           "try ((if .solarAdjusted then .forecast.solar.scale//1 else 1 end) as $k|"
+           "[.forecast.solar.timeseries[]|select(.[0]>=%lld and .[0]<%lld)]|group_by((.[0]-%lld)/3600|floor)|"
+           "map([((.[0][0]-%lld)/3600|floor),((map(.[1])|add)/4*$k)])) catch []",
            (long long)dayStart, (long long)dayEnd, (long long)dayStart, (long long)dayStart);
   String body;
   if (httpRequest(serverUrl + "/api/state?jq=" + urlEncode(jq), "GET", &body) == HTTP_CODE_OK) {
@@ -454,7 +459,8 @@ void evcc::begin() {
            "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc),"
            "batp:((try (if (.battery.devices|length)>0 then .battery.power else null end) catch null) // .batteryPower),"
            "grid:((try .grid.power catch null) // .gridPower),prio:.prioritySoc,"
-           "fc:(try [.forecast.solar.today.energy,.forecast.solar.tomorrow.energy] catch null),"
+           "fc:(try [.forecast.solar.today.energy,.forecast.solar.tomorrow.energy,"
+           "(if .solarAdjusted then .forecast.solar.scale else null end)] catch null),"
            "pvs:(try [.pv[]|{t:.title,p:.power}] catch null),"
            "veh:(try [.vehicles|to_entries[]|{n:.key,t:.value.title,o:any(.value.features[]?;.==\"Offline\")}] catch []),"
            "ver:.version}",

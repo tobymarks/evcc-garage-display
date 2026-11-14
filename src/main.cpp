@@ -797,8 +797,16 @@ static String diagDetails() {
            yesNo(h.pvPower >= 0), yesNo(h.batterySoc >= 0), yesNo(h.hasGrid), yesNo(h.solarToday >= 0),
            yesNo(h.hasBoost), solar.plantTotal, vehicles.count);
   s += buf;
+  if (h.solarToday >= 0) {
+    char scale[24] = "aus";
+    if (h.solarScale != 1.0f) snprintf(scale, sizeof(scale), "Faktor %.2f", h.solarScale);
+    snprintf(buf, sizeof(buf), "Prognose: Rest heute %.1f kWh, morgen %.1f kWh; Anpassung an die echte Erzeugung in evcc: %s\n",
+             h.solarToday / 1000.0f, h.solarTomorrow / 1000.0f, scale);
+    s += buf;
+  }
   if (st.solarPage) {
-    snprintf(buf, sizeof(buf), "Solarseite: Stundenwerte %s\n", solar.valid ? "vorhanden" : "fehlen");
+    snprintf(buf, sizeof(buf), "Solarseite: Stundenwerte %s, heute erzeugt %.1f kWh, Prognose für den ganzen Tag %.1f kWh\n",
+             solar.valid ? "vorhanden" : "fehlen", solar.today, solar.forecastToday);
     s += buf;
   }
   return s;
