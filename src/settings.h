@@ -22,6 +22,7 @@ struct Settings {
   bool solarPage;            // zusätzliche Seite hinter den Ladepunkten: Erzeugung, Tagesverlauf, Prognose
   bool solarSurplus;         // Solarseite zeigt groß den Überschuss statt der Erzeugung, darunter den Energiebalken
   bool solarFirst;           // Solarseite ist die erste Seite und bleibt stehen (z. B. Display in der Küche)
+  uint32_t backlightHz;      // Taktung der Hintergrundbeleuchtung ab dem Start; nur über /backlight?hz=…&save=1 (#21)
   String password;           // schützt Weboberfläche und OTA (Benutzer "admin"); leer = offen
 };
 

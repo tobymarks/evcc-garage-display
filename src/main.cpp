@@ -668,9 +668,9 @@ static String diagDevice() {
   }
   s += "\n";
   // Hintergrundbeleuchtung als PWM-Wert: zeigt, ob /wake, /sleep und der Timeout gegriffen haben
-  snprintf(buf, sizeof(buf), "Bildschirm %s, Helligkeit %d von 255, Taktung %lu Hz\n",
+  snprintf(buf, sizeof(buf), "Bildschirm %s, Helligkeit %d von 255, Taktung %lu Hz (gespeichert für den Start: %lu Hz)\n",
            brightness == 0 ? (forcedSleep ? "aus (per /sleep)" : "aus") : "an", brightness,
-           (unsigned long)display::backlightHz());
+           (unsigned long)display::backlightHz(), (unsigned long)settings::get().backlightHz);
   s += buf;
   snprintf(buf, sizeof(buf), "Interner RAM frei %u, minimal %u, größter Block %u\nPSRAM frei %u\n",
            heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
@@ -1051,16 +1051,26 @@ static void startWebServer() {
     web.send(200, "text/plain; charset=utf-8", "Bildschirm aus\n");
   });
   // Taktung der Hintergrundbeleuchtung ausprobieren (#21): manche Boards bleiben mit der schnellen Taktung
-  // unter 90 % Helligkeit dunkel. ?hz=… (200 bis 40000) gilt bis zum Neustart und schaltet den Bildschirm an.
+  // unter 90 % Helligkeit dunkel. ?hz=… (100 bis 40000) gilt bis zum Neustart und schaltet den Bildschirm an.
+  // Mit &save=1 wird der Wert gespeichert und das Display startet neu: Dann gilt die Taktung schon ab dem
+  // Start, ohne Umschalten im laufenden Betrieb.
   guarded("/backlight", []() {
     String s;
     if (web.hasArg("hz")) {
-      const uint32_t hz = constrain(web.arg("hz").toInt(), 200L, 40000L);
+      const uint32_t hz = constrain(web.arg("hz").toInt(), (long)MIN_BACKLIGHT_HZ, (long)MAX_BACKLIGHT_HZ);
+      if (web.arg("save") == "1") {
+        settings::get().backlightHz = hz;
+        settings::save();
+        restartAt = millis() + 2000;  // Antwort noch ausliefern, dann neu starten
+        web.send(200, "text/plain; charset=utf-8",
+                 "Gespeichert: Taktung " + String(hz) + " Hz. Das Display startet jetzt neu und nutzt sie ab dem Start.\n");
+        return;
+      }
       if (!display::setBacklightHz(hz)) s = String(hz) + " Hz lässt sich nicht einstellen.\n";
       lastActivity = millis();
     }
-    s += "Hintergrundbeleuchtung: Taktung " + String(display::backlightHz()) + " Hz, Helligkeit " +
-         String(settings::get().brightnessPct) + " %\n";
+    s += "Hintergrundbeleuchtung: Taktung " + String(display::backlightHz()) + " Hz (gespeichert für den Start: " +
+         String(settings::get().backlightHz) + " Hz), Helligkeit " + String(settings::get().brightnessPct) + " %\n";
     web.send(200, "text/plain; charset=utf-8", s);
   });
   // Lasttest gegen Bildstörungen: löst eine WLAN-Suche aus (wie das Einstellungsportal)
@@ -1117,7 +1127,7 @@ void setup() {
   recordBoot();
   settings::load();
   solarShown = settings::get().solarPage && settings::get().solarFirst;
-  display::begin(settings::get().rotation);
+  display::begin(settings::get().rotation, settings::get().backlightHz);
   brightness = settings::backlight();
   lastActivity = millis();
 
