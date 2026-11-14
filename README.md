@@ -169,7 +169,7 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | --- | --- |
 | `/settings` | Einstellungen ändern (wie im Portal, ohne WLAN) |
 | `/screenshot.bmp` | aktueller Bildschirminhalt |
-| `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)), die Solarseite mit `pv`, `pvmulti`, `pvnight`, `pvsummer` oder mit den echten Daten `pvlive`; `/preview` ohne Parameter beendet |
+| `/preview?s=charging\|solar\|fast\|nocar\|nocarlow\|nocarfull\|night\|waiting\|start\|off\|stale&dark=0\|1` | zeigt 60 s lang einen Beispielzustand ([src/preview.cpp](src/preview.cpp)), die Solarseite mit `pv`, `pvmulti`, `pvnight`, `pvsummer` oder mit den echten Daten `pvlive`; `&title=…` setzt dazu einen anderen Namen in die Kopfzeile; `/preview` ohne Parameter beendet |
 | `/update` | Firmware-Version und Stand der automatischen Updates, auch Installationen, nach denen die neue Version nicht lief; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
 | `/diag` | Laufzeit, Neustartgrund, Zustand des Bildschirms, Flash-Baustein, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze (und ob der Inhalt des anderen startfähig ist), die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte und nicht gestartete Updates und der letzte gespeicherte Absturz |
 | `/wake`, `/sleep` | Bildschirm an- bzw. ausschalten, siehe „Bildschirm von außen schalten" |

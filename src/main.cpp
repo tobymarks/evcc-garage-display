@@ -539,6 +539,7 @@ static void handlePreview() {
   }
   p.updatedMs = millis();
   if (states[current].valid) strlcpy(p.title, states[current].title, sizeof(p.title));
+  if (web.hasArg("title")) strlcpy(p.title, web.arg("title").c_str(), sizeof(p.title));  // z. B. lange Namen prüfen
 
   previewState = p;
   previewBoost = !strncmp(web.arg("s").c_str(), "boost", 5);
