@@ -196,6 +196,8 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
   - Solarprognose: Ist in evcc „PV-Vorhersage anhand der realen Erzeugungsdaten anpassen“ eingeschaltet,
     rechnet das Display „REST HEUTE“, „MORGEN“ und die kommenden Stunden im Tagesverlauf jetzt mit demselben
     Faktor wie evcc. Vorher wichen die Werte von evcc ab.
+  - Einstellungsseite: Knopf „Jetzt aktualisieren“ sucht sofort nach einer neuen Version und installiert sie,
+    ohne auf das automatische Update zu warten (#26).
   - Diagnose als Datei: Auf der Einstellungsseite gibt es unten „Diagnose herunterladen“, zum Anhängen an ein
     Issue. Die Datei enthält keine Passwörter, keinen WLAN-Namen, keine Netzwerkadressen, keinen Standort und
     keine Namen von Ladepunkten oder Fahrzeugen. Neu darin: Chip, Touch-Controller, Einstellungen, evcc-Version

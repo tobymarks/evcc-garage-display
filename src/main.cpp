@@ -857,7 +857,7 @@ footer a{color:inherit}h2{font-size:1.05rem;margin:2.2rem 0 0;padding-top:1.1rem
 input[type=checkbox]{width:auto;margin-right:.5rem}.check{font-weight:400}.note{padding:.6rem .8rem;border-radius:.5rem;
 background:#0fdd8d33}figure{margin:1.1rem 0 0;text-align:center}figure img{width:15rem;max-width:100%;height:auto;
 border-radius:.9rem;border:1px solid #8884;display:block;margin:0 auto .6rem}
-button.plain{margin:0;width:auto;padding:.5rem .9rem;background:none;border:1px solid #8888;color:inherit;font-weight:400}
+button:disabled{opacity:.5}button.plain{margin:0;width:auto;padding:.5rem .9rem;background:none;border:1px solid #8888;color:inherit;font-weight:400}
 a.plain{display:inline-block;margin:0 .5rem .5rem 0;padding:.5rem .9rem;border:1px solid #8888;border-radius:.5rem;color:inherit;
 text-decoration:none}.hint{font-size:.85rem;opacity:.65;margin:.6rem 0 .9rem}.hint a{color:inherit}
 </style></head><body><h1>evcc-Garage</h1>)";
@@ -944,6 +944,11 @@ static void handleSettings() {
     h += "<label class=\"check\"><input type=\"checkbox\" name=\"pwclear\" value=\"1\">Passwort entfernen</label>";
   h += "<button>Speichern</button><small>Verbindung, Drehung und Passwort starten das Display neu, alles andere "
        "wirkt sofort.</small></form>";
+  h += "<h2>Firmware</h2><p class=\"hint\">Installiert ist Version <span id=\"fwv\">" FW_VERSION "</span>. Neue Versionen holt das Display "
+       "von selbst, wenn automatische Updates an sind – sobald es zehn Minuten nicht gebraucht wird und kein Auto "
+       "lädt. Hier geht es sofort; das Display startet dabei neu, eine laufende Ladung läuft weiter.</p>"
+       "<button type=\"button\" class=\"plain\" id=\"upd\">Jetzt aktualisieren</button>"
+       "<p class=\"hint\" id=\"updmsg\" hidden></p>";
   h += "<h2>Diagnose</h2><p class=\"hint\">Hilft bei der Fehlersuche: Firmware, Hardware, Einstellungen, die letzten "
        "Starts und Abstürze. Die Datei enthält keine Passwörter, keinen WLAN-Namen, keine Netzwerkadressen, keinen "
        "Standort und keine Namen von Ladepunkten oder Fahrzeugen. Du kannst sie so an ein "
@@ -954,6 +959,21 @@ static void handleSettings() {
        "function l(){b.textContent='Lädt …';i.onload=()=>{i.hidden=false;b.textContent='Aktualisieren'};"
        "i.onerror=()=>{b.textContent='Erneut versuchen'};i.src='/screenshot.bmp?'+Date.now()}"
        "b.onclick=l;if(location.search.includes('saved'))setTimeout(l,800)</script>";
+  // "Jetzt aktualisieren": Prüfung und Installation anstoßen, dann /update abfragen, bis das Ergebnis feststeht.
+  // Während des Neustarts antwortet das Display nicht; läuft danach eine andere Version, ist es geschafft.
+  h += "<script>{const u=document.getElementById('upd'),m=document.getElementById('updmsg'),v0='" FW_VERSION "';"
+       "const say=t=>{m.hidden=false;m.textContent=t};"
+       "u.onclick=async()=>{u.disabled=true;let n=0;say('Suche nach einer neuen Version\u00a0…');"
+       "try{await fetch('/update?check=1&install=1')}catch(e){}"
+       "const t=setInterval(async()=>{const end=x=>{clearInterval(t);u.disabled=false;if(x)say(x)};"
+       "if(++n>120)return end('Keine Antwort vom Display. Bitte Seite neu laden.');"
+       "let x;try{x=await(await fetch('/update')).text()}catch(e){return say('Das Display startet neu\u00a0…')}"
+       "const v=(x.match(/^Firmware (.*)$/m)||[])[1],r=(x.match(/^Letzte Prüfung: (.*)$/m)||[])[1]||'';"
+       "if(v&&v!=v0){document.getElementById('fwv').textContent=v;return end('Aktualisiert auf Version '+v+'.')}"
+       "if(r=='läuft …'||r=='noch nicht geprüft')say('Suche nach einer neuen Version\u00a0…');"
+       "else if(r.startsWith('Installation')||r.startsWith('neue Version')||r.includes('installiert'))"
+       "say('Neue Version wird installiert, danach startet das Display neu\u00a0…');"
+       "else end(r=='aktuell'?'Die Firmware ist aktuell.':r)},2000)}}</script>";
   h += "<footer>Firmware " FW_VERSION
        " · WLAN ändern: Titel am Display 3 s gedrückt halten<br><a href=\"" PROJECT_URL "\">Projektseite und Anleitung</a>"
        " · <a href=\"" REPO_URL "\">GitHub</a></footer></body></html>";
