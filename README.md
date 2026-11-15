@@ -37,7 +37,7 @@ Was die Solarseite zeigt, lässt sich unter `/settings` → „Solarseite einric
 Werk bleibt sie wie beschrieben. Zur Wahl stehen die **große Zahl** (Erzeugung, Überschuss, Verbrauch, Netz,
 Hausakku), das **Diagramm** (Tagesverlauf, Energiebalken mit Tagesverlauf, Anlagen einzeln) und die **drei
 Kacheln** (heute erzeugt, Rest heute, morgen, Prognose heute, Erzeugung, Überschuss, Verbrauch, Netz, Ladestand
-des Hausakkus oder keine Kachel). Die Seite zeigt eine Vorschau, die sofort reagiert, und lädt auf Wunsch das
+oder Leistung des Hausakkus oder keine Kachel). Die Seite zeigt eine Vorschau, die sofort reagiert, und lädt auf Wunsch das
 echte Bild vom Display. Was evcc nicht liefert, ist dort nicht wählbar. Der Überschuss ist gerechnet wie auf der
 Ladepunktseite ohne Fahrzeug: Einspeisung und, sobald der Hausakku seinen Vorrang erreicht hat, auch seine
 Ladeleistung – für ein Display im Haus: Lohnt es sich gerade, die Spülmaschine einzuschalten?
@@ -164,8 +164,12 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
   Unter „Ladepunktseite" und „Solarseite" lässt sich ein- und ausschalten, was das Display zeigt und was sich
   antippen lässt (Fahrzeug wechseln, Ladelimit, Battery Boost, Solarseite); unter „Bildschirm" kann die Seite die
   aktuelle Anzeige des Displays laden. Diese Schalter sowie Design, Helligkeit und Bildschirm-Timeout wirken sofort.
-  Nur Änderungen an evcc-Adresse, Port, Ladepunkten, Drehung oder Passwort starten das Display neu – der Knopf heißt
-  dann „Speichern und neu starten". Oben steht, ob das Display evcc erreicht. Das WLAN bleibt unverändert.
+  Nur Änderungen an evcc-Adresse, Port, Ladepunkten, Drehung, Passwort oder am Schalter „Dimmen mit langsamer
+  Taktung" starten das Display neu – der Knopf heißt dann „Speichern und neu starten". Oben steht, ob das Display
+  evcc erreicht. Das WLAN bleibt unverändert.
+- **Bildschirm bleibt beim Dimmen dunkel oder flackert:** Manche Boards dimmen nur, wenn die Hintergrundbeleuchtung
+  langsamer getaktet wird. Dafür gibt es unter „Bildschirm" den Schalter „Dimmen mit langsamer Taktung" (150 Hz
+  statt 20 000 Hz, ab Werk aus). Bei 100 % Helligkeit spielt er keine Rolle.
 - **Passwort (optional):** unter „System" setzen. Danach verlangen alle Seiten des Displays die Anmeldung als
   `admin`, und Firmware-Uploads im Heimnetz brauchen dasselbe Passwort (`--auth=…` bei `espota`,
   in PlatformIO `upload_flags = --auth=…`). Es wird unverschlüsselt im Heimnetz übertragen – also kein Passwort
@@ -187,7 +191,7 @@ Im Heimnetz unter `http://evcc-garage.local:8080`:
 | `/update` | Firmware-Version und Stand der automatischen Updates, auch Installationen, nach denen die neue Version nicht lief; `?check=1` prüft sofort, `?install=1` installiert eine gefundene neue Version sofort |
 | `/diag` | Diagnose, auch als Knopf „Diagnose herunterladen“ auf der Einstellungsseite (`/diag?download=1` liefert sie als Datei zum Anhängen an ein Issue; ohne Passwörter, WLAN-Namen, Adressen, Standort und Namen von Ladepunkten oder Fahrzeugen): Laufzeit, Neustartgrund, Zustand des Bildschirms, Flash-Baustein, freier Speicher und Stack des evcc-Tasks, Zustand beider Firmware-Plätze (und ob der Inhalt des anderen startfähig ist), die letzten acht Starts (Firmware, Platz, Grund), zurückgerollte und nicht gestartete Updates, der letzte gespeicherte Absturz, dazu Chip, Touch-Controller, Einstellungen, evcc-Version und was evcc je Ladepunkt liefert |
 | `/wake`, `/sleep` | Bildschirm an- bzw. ausschalten, siehe „Bildschirm von außen schalten" |
-| `/backlight` | Taktung der Hintergrundbeleuchtung anzeigen; `?hz=1000` stellt sie bis zum nächsten Neustart um (100 bis 40000 Hz, ab Werk 20000), `?hz=150&save=1` speichert sie und startet das Display neu, sodass sie schon ab dem Start gilt (zurück mit `?hz=20000&save=1`). Zum Ausprobieren, falls das Display unterhalb von 90 % Helligkeit dunkel bleibt |
+| `/backlight` | Taktung der Hintergrundbeleuchtung anzeigen; `?hz=1000` stellt sie bis zum nächsten Neustart um (100 bis 40000 Hz, ab Werk 20000), `?hz=150&save=1` speichert sie und startet das Display neu, sodass sie schon ab dem Start gilt (zurück mit `?hz=20000&save=1`). Zum Ausprobieren anderer Werte; für den üblichen Fall gibt es unter `/settings` den Schalter „Dimmen mit langsamer Taktung" |
 | `/wifiscan` | löst eine WLAN-Suche aus (Lasttest für die Bildausgabe) |
 
 Ohne Gerät: `./tools/sim/render.sh <Ordner> nocar charging …` rendert dieselben Beispielzustände mit der
@@ -211,6 +215,11 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
     etwas kleiner als bisher, damit nichts an den Rand stößt; „ÜBERSCHUSS“ heißt dort „ÜBRIG“.
   - Solarseite: Abends, wenn heute nichts mehr kommt, stehen nur noch „HEUTE“ und „MORGEN“. Die Kachel
     „PROGNOSE“ mit der Vorhersage für den ganzen Tag entfällt, sie las sich wie etwas, das noch kommt (#37).
+  - Solarseite einrichten: Als Kachel ist jetzt auch die Leistung des Hausakkus wählbar. Die Beschriftung nennt
+    die Richtung: „IN AKKU“ beim Laden, „AUS AKKU“ beim Entladen (#42).
+  - Helligkeit: Neuer Schalter „Dimmen mit langsamer Taktung“ unter „Bildschirm“, ab Werk aus. Er hilft bei
+    Boards, die unter 90 % Helligkeit dunkel bleiben oder flackern, und ersetzt dort den Umweg über
+    `/backlight?hz=150&save=1`. Ein so gespeicherter Wert bleibt erhalten (#21).
 - **14.11.2026**
   - Automatische Updates: Fehler behoben, durch den nach einem Update wieder die alte Firmware lief. Nach der
     Installation begann das Display bis zum Neustart sofort eine zweite; bei schneller Internetverbindung

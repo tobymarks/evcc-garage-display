@@ -25,7 +25,7 @@ struct Settings {
   uint8_t solarMid;          // Solarseite, Mitte: SOLAR_MID_…
   uint8_t solarTile[3];      // Solarseite, Kacheln von links: SOLAR_TILE_…
   bool solarFirst;           // Solarseite ist die erste Seite und bleibt stehen (z. B. Display in der Küche)
-  uint32_t backlightHz;      // Taktung der Hintergrundbeleuchtung ab dem Start; nur über /backlight?hz=…&save=1 (#21)
+  uint32_t backlightHz;      // Taktung der Hintergrundbeleuchtung ab dem Start: Schalter „Dimmen mit langsamer Taktung“ oder /backlight?hz=…&save=1 (#21)
   String password;           // schützt Weboberfläche und OTA (Benutzer "admin"); leer = offen
 };
 

@@ -1366,6 +1366,11 @@ static void renderSolar(const UiView& v, bool live) {
           addText("AKKU", buf);
         }
         break;
+      case SOLAR_TILE_BATTERY_POWER:
+        // Wie beim Netz sagt die Beschriftung die Richtung; in Ruhe steht nur „AKKU“
+        if (s.batterySoc >= 0)
+          addPower(s.batteryPower <= -50 ? "IN AKKU" : s.batteryPower >= 50 ? "AUS AKKU" : "AKKU", fabsf(s.batteryPower));
+        break;
     }
   }
   // Zur Breite zählen die Kacheln, die wirklich zu sehen sind
