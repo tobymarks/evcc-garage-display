@@ -55,10 +55,13 @@ enum : uint8_t { SOLAR_BIG_PV, SOLAR_BIG_SURPLUS, SOLAR_BIG_HOME, SOLAR_BIG_GRID
 enum : uint8_t { SOLAR_MID_AUTO, SOLAR_MID_CHART, SOLAR_MID_FLOW, SOLAR_MID_PLANTS, SOLAR_MID_COUNT };
 enum : uint8_t {
   SOLAR_TILE_TODAY, SOLAR_TILE_REST, SOLAR_TILE_TOMORROW, SOLAR_TILE_FORECAST, SOLAR_TILE_PV,
-  SOLAR_TILE_SURPLUS, SOLAR_TILE_HOME, SOLAR_TILE_GRID, SOLAR_TILE_BATTERY, SOLAR_TILE_NONE, SOLAR_TILE_COUNT
+  SOLAR_TILE_SURPLUS, SOLAR_TILE_HOME, SOLAR_TILE_GRID, SOLAR_TILE_BATTERY, SOLAR_TILE_NONE,
+  SOLAR_TILE_BATTERY_POWER,  // später dazugekommen, deshalb hinter NONE (#42)
+  SOLAR_TILE_COUNT
 };
 #define MIN_BACKLIGHT_HZ 100   // einstellbarer Bereich für die Taktung der Hintergrundbeleuchtung (/backlight)
 #define MAX_BACKLIGHT_HZ 40000
+#define SLOW_BACKLIGHT_HZ 150  // Schalter „Dimmen mit langsamer Taktung“: für Boards, die sonst unter 90 % dunkel bleiben (#21)
 #define DEFAULT_SCREEN_TIMEOUT_MIN 2              // aus, wenn nicht geladen und nicht bedient wird; 0 = immer an
 #define NIGHT_SUN_ELEVATION -3.0                 // Sonne tiefer als -3° → dunkles Design (bei Einstellung automatisch)
 #define PREVIEW_DURATION_MS 60000                // Dauer einer Vorschau über /preview

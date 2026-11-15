@@ -19,6 +19,7 @@
 #include <functional>
 #include <lvgl.h>
 
+#include "board.h"
 #include "config.h"
 #include "display.h"
 #include "evcc_client.h"
@@ -96,13 +97,14 @@ static int8_t previewSolarCfg[5] = {-1, -1, -1, -1, -1};
 // ---------- WLAN-Einrichtung / Einstellungen ----------
 
 // Übernimmt die Werte aus dem Portal oder von /settings (gleiche Feldnamen).
-// Liefert true, wenn die Änderung erst nach einem Neustart wirkt (Verbindung, Drehung, Passwort);
+// Liefert true, wenn die Änderung erst nach einem Neustart wirkt (Verbindung, Drehung, Passwort, Taktung);
 // alles andere liest die Oberfläche laufend aus den Einstellungen.
 static bool applySettings(std::function<String(const char*)> value) {
   Settings& s = settings::get();
   const String oldHost = s.evccHost, oldLps = settings::loadpointsText(s), oldPassword = s.password;
   const uint16_t oldPort = s.evccPort;
   const uint8_t oldRotation = s.rotation;
+  const uint32_t oldBacklightHz = s.backlightHz;
   s.evccHost = value("host");
   s.evccHost.trim();
   // Nur der Rechnername zählt: "http://" davor und einen Pfad dahinter verzeihen
@@ -124,6 +126,14 @@ static bool applySettings(std::function<String(const char*)> value) {
   if (!boost.isEmpty()) s.boostButton = boost.toInt() != 0;
   const String bright = value("bright");
   if (!bright.isEmpty()) s.brightnessPct = constrain(bright.toInt(), MIN_BRIGHTNESS_PCT, 100);
+  // Ein eigener Wert aus /backlight?hz=…&save=1 bleibt stehen, solange der Schalter an ist
+  const String slowBacklight = value("slowbl");
+  if (!slowBacklight.isEmpty()) {
+    if (slowBacklight.toInt() == 0)
+      s.backlightHz = LCD_BACKLIGHT_HZ;
+    else if (s.backlightHz == LCD_BACKLIGHT_HZ)
+      s.backlightHz = SLOW_BACKLIGHT_HZ;
+  }
   const String chargeLimit = value("limit");
   if (!chargeLimit.isEmpty()) s.chargeLimit = chargeLimit.toInt() != 0;
   const String vehicleSwitch = value("vehsw");
@@ -140,7 +150,7 @@ static bool applySettings(std::function<String(const char*)> value) {
     s.password = password.substring(0, MAX_PASSWORD_LEN);
   settings::save();
   return s.evccHost != oldHost || s.evccPort != oldPort || settings::loadpointsText(s) != oldLps ||
-         s.rotation != oldRotation || s.password != oldPassword;
+         s.rotation != oldRotation || s.password != oldPassword || s.backlightHz != oldBacklightHz;
 }
 
 static void saveParams() {
@@ -1040,6 +1050,14 @@ static void handleSettings() {
   for (int pct = 100; pct >= MIN_BRIGHTNESS_PCT; pct -= 10)
     h += option(pct, s.brightnessPct, (String(pct) + " %").c_str());
   h += "</select>";
+  // Manche Boards dimmen nur mit langsamer Taktung (#21). Sie gilt ab dem Start, deshalb der Neustart.
+  const bool slowBacklight = s.backlightHz != LCD_BACKLIGHT_HZ;
+  h += toggle("slowbl", slowBacklight, "Dimmen mit langsamer Taktung",
+              (String("Nur einschalten, wenn der Bildschirm unter 90&nbsp;% Helligkeit dunkel bleibt oder flackert.") +
+               (slowBacklight && s.backlightHz != SLOW_BACKLIGHT_HZ
+                    ? " Eingestellt sind " + String(s.backlightHz) + " Hz."
+                    : String()))
+                  .c_str());
   h += field("timeout", "Bildschirm ausschalten", "Solange kein Auto lädt und niemand das Display bedient.") +
        "<select id=\"timeout\" name=\"timeout\">";
   bool listed = false;
@@ -1104,7 +1122,7 @@ static void handleSettings() {
        "const ts=$('#tosolar');"
        "const upd=()=>{sync();const fd=new FormData(f);dn.hidden=snap()==s0;"
        "ts.textContent=dn.hidden?'Solarseite einrichten':'Speichern und Solarseite einrichten';"
-       "bt.textContent=['host','port','lp','rot','pw','pwclear'].some(k=>(fd.get(k)||'')!=(f0.get(k)||''))"
+       "bt.textContent=['host','port','lp','rot','pw','pwclear','slowbl'].some(k=>(fd.get(k)||'')!=(f0.get(k)||''))"
        "?'Speichern und neu starten':'Speichern'};"
        "f.addEventListener('input',upd);f.addEventListener('change',upd);"
        "$('#undo').onclick=e=>{e.preventDefault();f.reset();$('#pw').type='password';upd()};"
@@ -1252,10 +1270,13 @@ const TILE=[{n:'Heute erzeugt',l:'HEUTE',w:kwh(V.today),need:'hist'},
 {n:'Erzeugung',d:'jetzt',l:'ERZEUGUNG',w:kw(V.pv)+' kW'},{n:'Überschuss',d:'jetzt',l:'ÜBERSCHUSS',w:kw(V.sur)+' kW'},
 {n:'Verbrauch',d:'jetzt, im Haus',l:'VERBRAUCH',w:kw(V.home)+' kW'},
 {n:'Netz',d:'jetzt, Einspeisung oder Bezug',l:V.grid>0?'AUS NETZ':'INS NETZ',w:kw(V.grid)+' kW',need:'grid'},
-{n:'Hausakku',d:'Ladestand',l:'AKKU',w:Math.round(V.soc)+' %',need:'bat'},
-{n:'Keine Kachel',d:'Die anderen Kacheln werden breiter',l:'',w:'–'}];
-const SLOTS=[{id:'big',t:'Große Zahl',o:BIG},{id:'mid',t:'Diagramm',o:MID},{id:'t1',t:'Kachel links',o:TILE},
-{id:'t2',t:'Kachel Mitte',o:TILE},{id:'t3',t:'Kachel rechts',o:TILE}];
+{n:'Hausakku-Ladestand',d:'in Prozent',l:'AKKU',w:Math.round(V.soc)+' %',need:'bat'},
+{n:'Keine Kachel',d:'Die anderen Kacheln werden breiter',l:'',w:'–'},
+{n:'Hausakku-Leistung',d:'jetzt, beim Laden oder Entladen',l:V.batp<=-50?'IN AKKU':V.batp>=50?'AUS AKKU':'AKKU',w:kw(V.batp)+' kW',need:'bat'}];
+// Reihenfolge in der Auswahl; die Nummern stehen so im Speicher des Displays
+const TORD=[0,1,2,3,4,5,6,7,8,10,9];
+const SLOTS=[{id:'big',t:'Große Zahl',o:BIG},{id:'mid',t:'Diagramm',o:MID},{id:'t1',t:'Kachel links',o:TILE,ord:TORD},
+{id:'t2',t:'Kachel Mitte',o:TILE,ord:TORD},{id:'t3',t:'Kachel rechts',o:TILE,ord:TORD}];
 const DEF={big:0,mid:C.has.plants?3:1,t1:0,t2:1,t3:2},S0={big:C.big,mid:C.mid,t1:C.t[0],t2:C.t[1],t3:C.t[2]};
 let st={...S0},cur='big',sub=0;
 const E=[0,0,.14,.52,.78,.93,.9,.2,0,0,0,0,0,0,0],F=[0,0,0,0,0,0,0,.6,.42,.2,.05,0,0,0,0];
@@ -1278,9 +1299,9 @@ document.querySelectorAll('.area').forEach(a=>{a.classList.toggle('sel',a.datase
 for(const k in st)f.elements[k].value=st[k];
 const d=Object.keys(st).some(k=>st[k]!=S0[k]);$('dirty').hidden=!d;if(!d)$('leave').hidden=true}
 function list(){$('slots').innerHTML=SLOTS.map(s=>'<section class="slot'+(s.id==cur?' open':'')+'" id="s_'+s.id+'"><button type="button" class="sh" data-slot="'+s.id+
-'" aria-expanded="'+(s.id==cur)+'"><b>'+s.t+'</b><span>'+s.o[st[s.id]].n+'</span></button><div class="opts">'+s.o.map((o,k)=>!o?'':
+'" aria-expanded="'+(s.id==cur)+'"><b>'+s.t+'</b><span>'+s.o[st[s.id]].n+'</span></button><div class="opts">'+(s.ord||s.o.map((o,k)=>k)).map(k=>{const o=s.o[k];return !o?'':
 '<label class="opt'+(ok(o)?'':' off')+'"><input type="radio" name="r_'+s.id+'" value="'+k+'"'+(st[s.id]==k?' checked':'')+(ok(o)||st[s.id]==k?'':' disabled')+
-'><span class="n">'+o.n+'<small>'+(ok(o)?o.d||'':'Nicht verfügbar: '+no[o.need])+'</small></span>'+(o.w||o.v?'<span class="x">'+(o.w||o.v+' kW')+'</span>':'')+'</label>').join('')+
+'><span class="n">'+o.n+'<small>'+(ok(o)?o.d||'':'Nicht verfügbar: '+no[o.need])+'</small></span>'+(o.w||o.v?'<span class="x">'+(o.w||o.v+' kW')+'</span>':'')+'</label>'}).join('')+
 '</div></section>').join('');
 document.querySelectorAll('.sh').forEach(b=>b.onclick=()=>pick(b.dataset.slot==cur?'':b.dataset.slot));
 document.querySelectorAll('.opt input').forEach(i=>i.onchange=()=>{const k=i.name.slice(2);st[k]=+i.value;draw();
