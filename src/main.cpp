@@ -44,6 +44,7 @@ static WiFiManagerParameter* pTheme;
 static WiFiManagerParameter* pTimeout;
 static WiFiManagerParameter* pAutoUpdate;
 static WiFiManagerParameter* pLanguage;
+static WiFiManagerParameter* pName;
 static WebServer web(8080);  // Port 80 gehört dem Einstellungsportal
 
 static bool portalActive = false;
@@ -100,11 +101,13 @@ static int8_t previewSolarCfg[5] = {-1, -1, -1, -1, -1};
 // ---------- WLAN-Einrichtung / Einstellungen ----------
 
 // Übernimmt die Werte aus dem Portal oder von /settings (gleiche Feldnamen).
-// Liefert true, wenn die Änderung erst nach einem Neustart wirkt (Verbindung, Drehung, Passwort, Taktung, Sprache);
+// Liefert true, wenn die Änderung erst nach einem Neustart wirkt (Verbindung, Drehung, Passwort, Taktung, Sprache,
+// Name im Heimnetz);
 // alles andere liest die Oberfläche laufend aus den Einstellungen.
 static bool applySettings(std::function<String(const char*)> value) {
   Settings& s = settings::get();
-  const String oldHost = s.evccHost, oldLps = settings::loadpointsText(s), oldPassword = s.password;
+  const String oldHost = s.evccHost, oldLps = settings::loadpointsText(s), oldPassword = s.password,
+               oldHostname = s.hostname;
   const uint16_t oldPort = s.evccPort;
   const uint8_t oldRotation = s.rotation;
   const uint32_t oldBacklightHz = s.backlightHz;
@@ -154,6 +157,9 @@ static bool applySettings(std::function<String(const char*)> value) {
     s.language = (uint8_t)Lang::En;
   else if (language == "de" || language == "0")
     s.language = (uint8_t)Lang::De;
+  // Name im Heimnetz; leer oder ohne brauchbares Zeichen bleibt der bisherige
+  const String hostname = settings::cleanHostname(value("name"));
+  if (!hostname.isEmpty()) s.hostname = hostname;
   // Leeres Feld = Passwort unverändert; entfernt wird es nur ausdrücklich
   const String password = value("pw");
   if (value("pwclear").toInt() != 0)
@@ -163,7 +169,7 @@ static bool applySettings(std::function<String(const char*)> value) {
   settings::save();
   return s.evccHost != oldHost || s.evccPort != oldPort || settings::loadpointsText(s) != oldLps ||
          s.rotation != oldRotation || s.password != oldPassword || s.backlightHz != oldBacklightHz ||
-         s.language != oldLanguage;
+         s.language != oldLanguage || s.hostname != oldHostname;
 }
 
 static void saveParams() {
@@ -204,12 +210,15 @@ static void setupPortal() {
   pTheme = new WiFiManagerParameter("theme", tr("Design: 0 = automatisch (Sonnenstand), 1 = immer hell, 2 = immer dunkel"), theme, 1);
   pTimeout = new WiFiManagerParameter("timeout", tr("Bildschirm aus nach Minuten ohne Ladung und Bedienung (0 = immer an)"), timeout, 3);
   pAutoUpdate = new WiFiManagerParameter("autoupd", tr("Automatische Updates: 1 = an, 0 = aus"), autoUpdate, 1);
+  pName = new WiFiManagerParameter(
+      "name", tr("Name im Heimnetz (a–z, 0–9, -). Bei mehreren Displays je einen eigenen, z. B. evcc-kueche"),
+      s.hostname.c_str(), MAX_HOSTNAME_LEN);
   static WiFiManagerParameter version("<p>Firmware " FW_VERSION "</p>");
-  for (auto* p : {pLanguage, pHost, pPort, pLoadpoint, pLat, pLon, pRotate, pTheme, pTimeout, pAutoUpdate, &version})
+  for (auto* p : {pLanguage, pHost, pPort, pLoadpoint, pLat, pLon, pRotate, pTheme, pTimeout, pAutoUpdate, pName, &version})
     wm.addParameter(p);
 
   wm.setTitle("evcc-Garage");
-  wm.setHostname(HOSTNAME);
+  wm.setHostname(s.hostname);
   static std::vector<const char*> menu = {"wifi", "param", "info", "restart"};
   wm.setMenu(menu);
   wm.setConfigPortalBlocking(false);
@@ -831,10 +840,11 @@ static String diagDetails() {
   s += buf;
   snprintf(buf, sizeof(buf),
            "Battery Boost %s, Fahrzeugwechsel %s, Ladelimit %s, Solarseite %s (Bausteine %u/%u/%u-%u-%u, zuerst %s), "
-           "Passwort gesetzt %s, Standort gesetzt %s, Sprache %s\n",
+           "Passwort gesetzt %s, Standort gesetzt %s, Sprache %s, eigener Name im Heimnetz %s\n",
            yesNo(st.boostButton), yesNo(st.vehicleSwitch), yesNo(st.chargeLimit), yesNo(st.solarPage),
            st.solarBig, st.solarMid, st.solarTile[0], st.solarTile[1], st.solarTile[2], yesNo(st.solarFirst),
-           yesNo(!st.password.isEmpty()), yesNo(st.latitude != 0 || st.longitude != 0), lang::code());
+           yesNo(!st.password.isEmpty()), yesNo(st.latitude != 0 || st.longitude != 0), lang::code(),
+           yesNo(st.hostname != HOSTNAME));
   s += buf;
   snprintf(buf, sizeof(buf), "WLAN-Kanal %d, Uhrzeit bekannt %s\n", (int)WiFi.channel(), yesNo(timeValid()));
   s += buf;
@@ -1032,7 +1042,7 @@ const snap=()=>new URLSearchParams(new FormData(f)).toString();sync();const s0=s
 const ts=$('#tosolar');
 const upd=()=>{sync();const fd=new FormData(f);dn.hidden=snap()==s0;
 ts.textContent=dn.hidden?'{{Solarseite einrichten}}':'{{Speichern und Solarseite einrichten}}';
-bt.textContent=['host','port','lp','rot','pw','pwclear','slowbl','lang'].some(k=>(fd.get(k)||'')!=(f0.get(k)||''))
+bt.textContent=['host','port','lp','rot','pw','pwclear','slowbl','lang','name'].some(k=>(fd.get(k)||'')!=(f0.get(k)||''))
 ?'{{Speichern und neu starten}}':'{{Speichern}}'};
 f.addEventListener('input',upd);f.addEventListener('change',upd);
 $('#undo').onclick=e=>{e.preventDefault();f.reset();$('#pw').type='password';upd()};
@@ -1087,6 +1097,7 @@ static void handleSettings() {
     updater::confirm();  // wer hier speichert, erreicht das Display – die Firmware läuft also
     // „Solarseite einrichten“ mit offenen Änderungen: erst speichern, dann weiter zur Seite
     const bool toSolar = web.arg("next") == "solar";
+    const String oldHostname = settings::get().hostname;
     if (!applySettings([](const char* key) { return web.arg(key); })) {
       // Wirkt sofort: neu zeichnen und zurück zur Seite, die dann die neue Anzeige lädt
       lastActivity = millis();
@@ -1096,12 +1107,24 @@ static void handleSettings() {
       return;
     }
     restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
-    web.sendHeader("Refresh", toSolar ? "15; url=/solar" : "15; url=/settings");
+    String next = toSolar ? "/solar" : "/settings";
+    String note = tr("Gespeichert. Das Display startet neu, die Seite lädt in einigen Sekunden wieder.");
+    // Neuer Name: Wer die Seite über den alten .local-Namen aufgerufen hat, landet sonst im Leeren
+    const String& hostname = settings::get().hostname;
+    if (hostname != oldHostname) {
+      String via = web.hostHeader();
+      via.toLowerCase();
+      const int colon = via.indexOf(':');
+      if (colon >= 0) via.remove(colon);
+      const String address = "http://" + hostname + ".local:8080";
+      if (via.endsWith(".local")) next = address + next;
+      note += " " + fmt(tr("Danach ist es unter %s erreichbar."),
+                        ("<a href=\"" + address + "/settings\">" + address + "</a>").c_str());
+    }
+    web.sendHeader("Refresh", "15; url=" + next);
     // Noch in der bisherigen Sprache: eine neu gewählte gilt erst nach dem Neustart
     web.send(200, "text/html; charset=utf-8",
-             page(SETTINGS_HEAD) + "<p class=\"note\">" +
-                 tr("Gespeichert. Das Display startet neu, die Seite lädt in einigen Sekunden wieder.") +
-                 "</p></body></html>");
+             page(SETTINGS_HEAD) + "<p class=\"note\">" + note + "</p></body></html>");
     return;
   }
 
@@ -1210,6 +1233,14 @@ static void handleSettings() {
   // In beiden Sprachen beschriftet, damit die Auswahl auch findet, wer die eingestellte Sprache nicht liest
   h += field("lang", "Sprache / Language") + "<select id=\"lang\" name=\"lang\">" +
        option((int)Lang::De, s.language, "Deutsch") + option((int)Lang::En, s.language, "English") + "</select>";
+  h += field("name", tr("Name im Heimnetz"),
+             fmt(tr("Das Display ist unter %s erreichbar. Mehrere Displays brauchen verschiedene Namen, z. B. "
+                    "evcc-kueche. Erlaubt sind a–z, 0–9 und Bindestrich."),
+                 ("http://" + s.hostname + ".local:8080").c_str())
+                 .c_str()) +
+       "<input id=\"name\" name=\"name\" required maxlength=\"" + String(MAX_HOSTNAME_LEN) +
+       "\" autocapitalize=\"none\" autocorrect=\"off\" spellcheck=\"false\" "
+       "value=\"" + htmlEscape(s.hostname) + "\">";
   h += toggle("autoupd", s.autoUpdate, tr("Automatische Updates"),
               tr("Installiert neue Versionen, sobald das Display zehn Minuten nicht gebraucht wird und kein Auto lädt."));
   h += field("pw", tr("Passwort"),
@@ -1555,7 +1586,7 @@ static void startNetworkServices() {
     webStarted = true;
   }
   if (!otaStarted) {
-    ArduinoOTA.setHostname(HOSTNAME);
+    ArduinoOTA.setHostname(settings::get().hostname.c_str());
     // Das Passwort aus den Einstellungen gilt auch für Firmware-Uploads im Heimnetz
     if (!settings::get().password.isEmpty()) ArduinoOTA.setPassword(settings::get().password.c_str());
 #ifdef OTA_PASSWORD

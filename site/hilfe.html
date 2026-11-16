@@ -265,16 +265,20 @@
             <summary>evcc-garage.local öffnet sich nicht</summary>
             <p>
               Nicht jedes Gerät und nicht jeder Router lösen <code>.local</code>-Namen auf. Dann die IP-Adresse des
-              Displays nehmen: Sie steht in der Geräteliste des Routers unter dem Namen <b>evcc-garage</b>. Im Browser
+              Displays nehmen: Sie steht in der Geräteliste des Routers unter dem Namen <b>evcc-garage</b> oder dem Namen, den du
+              ihm gegeben hast. Im Browser
               <code>http://&lt;IP des Displays&gt;:8080</code> aufrufen. Wichtig ist der Port <code>8080</code>.
             </p>
           </details>
           <details class="more" id="mehrere-displays">
             <summary>Ich habe mehrere Displays</summary>
             <p>
-              Alle Displays heißen im Netz <b>evcc-garage</b>. Rufe ihre Einstellungen deshalb über die IP-Adresse aus
-              dem Router auf, am besten mit fester IP-Zuweisung im Router. Ein einstellbarer Name ist geplant
-              (<a href="https://github.com/tobymarks/evcc-garage-display/issues/47">#47</a>).
+              Ab Werk heißt jedes Display im Netz <b>evcc-garage</b>. Gib jedem einen eigenen Namen: in den
+              Einstellungen unter „System“ → „Name im Heimnetz“, z. B. <b>evcc-kueche</b> (ab Firmware vom
+              16.11.2026). Nach dem Neustart ist es unter <b>evcc-kueche.local:8080</b> erreichbar und steht so in der
+              Geräteliste des Routers; bis Computer und Handy den neuen Namen finden, kann es eine Minute dauern. Am besten
+              nacheinander umbenennen: Solange zwei Displays gleich heißen, öffnet <b>evcc-garage.local</b> eines von
+              beiden, das andere erreichst du über seine IP-Adresse aus dem Router.
             </p>
           </details>
           <details class="more" id="mehrere-ladepunkte">

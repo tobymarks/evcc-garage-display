@@ -35,6 +35,8 @@ void settings::load() {
   s.solarTile[1] = prefs.getUChar("st2", SOLAR_TILE_REST);
   s.solarTile[2] = prefs.getUChar("st3", SOLAR_TILE_TOMORROW);
   s.backlightHz = prefs.getUInt("blhz", LCD_BACKLIGHT_HZ);
+  s.hostname = cleanHostname(prefs.getString("name", HOSTNAME));
+  if (s.hostname.isEmpty()) s.hostname = HOSTNAME;
   s.password = prefs.getString("pw", "");
   // Ohne gespeicherte Sprache: Ein schon eingerichtetes Display bleibt deutsch, ein neues beginnt englisch
   s.language = prefs.getUChar("lang", (uint8_t)(prefs.isKey("host") ? Lang::De : Lang::En));
@@ -76,6 +78,7 @@ void settings::save() {
   prefs.putUChar("st3", s.solarTile[2]);
   prefs.putBool("solar1st", s.solarFirst);
   prefs.putUInt("blhz", s.backlightHz);
+  prefs.putString("name", s.hostname);
   prefs.putString("pw", s.password);
   prefs.putUChar("lang", s.language);
   prefs.end();
@@ -110,4 +113,28 @@ String settings::loadpointsText(const Settings& in) {
     t += in.loadpoints[i];
   }
   return t;
+}
+
+String settings::cleanHostname(const String& text) {
+  String out;
+  for (size_t i = 0; i < text.length() && out.length() < MAX_HOSTNAME_LEN; i++) {
+    const char c = text[i];
+    if (isalnum((unsigned char)c))
+      out += (char)tolower((unsigned char)c);
+    else if (c == '-' || c == ' ' || c == '_' || c == '.')
+      out += '-';
+    else if ((uint8_t)c == 0xC3 && i + 1 < text.length()) {  // Umlaute (UTF-8) wie in Domainnamen üblich
+      const uint8_t d = (uint8_t)text[++i];
+      if (d == 0xA4 || d == 0x84) out += "ae";
+      else if (d == 0xB6 || d == 0x96) out += "oe";
+      else if (d == 0xBC || d == 0x9C) out += "ue";
+      else if (d == 0x9F) out += "ss";
+    }
+  }
+  // Keine doppelten Bindestriche, keiner am Anfang oder Ende
+  while (out.indexOf("--") >= 0) out.replace("--", "-");
+  while (out.startsWith("-")) out.remove(0, 1);
+  if (out.length() > MAX_HOSTNAME_LEN) out.remove(MAX_HOSTNAME_LEN);
+  while (out.endsWith("-")) out.remove(out.length() - 1);
+  return out;
 }

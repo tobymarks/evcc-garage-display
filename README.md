@@ -166,6 +166,7 @@ WLAN auswählen und Passwort eingeben. Schritt für Schritt steht das in der
 | Design | `0` automatisch, `1` hell, `2` dunkel |
 | Bildschirm aus nach Minuten | `2` (`0` = immer an) |
 | Automatische Updates | `1` an (`0` = aus) |
+| Name im Heimnetz | `evcc-garage` – bei mehreren Displays je einen eigenen, z. B. `evcc-kueche` |
 
 ## Später ändern
 
@@ -173,11 +174,15 @@ WLAN auswählen und Passwort eingeben. Schritt für Schritt steht das in der
   Unter „Ladepunktseite" und „Solarseite" lässt sich ein- und ausschalten, was das Display zeigt und was sich
   antippen lässt (Fahrzeug wechseln, Ladelimit, Battery Boost, Solarseite); unter „Bildschirm" kann die Seite die
   aktuelle Anzeige des Displays laden. Diese Schalter sowie Design, Helligkeit und Bildschirm-Timeout wirken sofort.
-  Nur Änderungen an evcc-Adresse, Port, Ladepunkten, Drehung, Passwort, Sprache oder am Schalter „Dimmen mit langsamer
+  Nur Änderungen an evcc-Adresse, Port, Ladepunkten, Drehung, Passwort, Sprache, Name im Heimnetz oder am Schalter „Dimmen mit langsamer
   Taktung" starten das Display neu – der Knopf heißt dann „Speichern und neu starten". Oben steht, ob das Display
   evcc erreicht. Das WLAN bleibt unverändert.
 - **Bildschirm bleibt beim Dimmen dunkel oder flackert:** Schalter „Dimmen mit langsamer Taktung" unter „Bildschirm"
   (150 Hz statt 20 000 Hz, ab Werk aus), siehe [Hilfe](https://tobymarks.github.io/evcc-garage-display/hilfe.html#helligkeit-dunkel).
+- **Mehrere Displays:** Jedes bekommt unter „System“ → „Name im Heimnetz“ (oder im WLAN-Portal) einen eigenen
+  Namen, z. B. `evcc-kueche`. Es ist dann unter `http://evcc-kueche.local:8080` erreichbar und steht so in der
+  Geräteliste des Routers; auch die Adressen für `/wake` und `/sleep` und der Upload per PlatformIO nutzen ihn.
+  Erlaubt sind a–z, 0–9 und Bindestrich, höchstens 24 Zeichen; Umlaute werden umschrieben.
 - **Passwort (optional):** unter „System" setzen. Danach verlangen alle Seiten des Displays die Anmeldung als
   `admin`, und Firmware-Uploads im Heimnetz brauchen dasselbe Passwort (`--auth=…` bei `espota`,
   in PlatformIO `upload_flags = --auth=…`). Es wird unverschlüsselt im Heimnetz übertragen – also kein Passwort
@@ -213,6 +218,8 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
 `/settings`.
 
 - **16.11.2026**
+  - Name im Heimnetz einstellbar (#47): Unter `/settings` → System oder im WLAN-Portal bekommt jedes Display einen
+    eigenen Namen, z. B. `evcc-kueche` → `http://evcc-kueche.local:8080`. Ab Werk bleibt es `evcc-garage`.
   - Neue [Hilfeseite](https://tobymarks.github.io/evcc-garage-display/hilfe.html) mit Anleitungen und häufigen
     Fragen. Die Einstellungsseite verlinkt dorthin, unter „Firmware“ direkt auf das Update von Hand.
   - Englisch: Display, Einstellungsseite und „Solarseite einrichten“ gibt es jetzt auch auf Englisch (#44).

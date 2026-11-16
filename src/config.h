@@ -13,7 +13,8 @@
 #define MAX_PASSWORD_LEN 32
 #define DEFAULT_AUTO_UPDATE 1      // neue Firmware von der Projektseite selbst installieren
 
-#define HOSTNAME "evcc-garage"
+#define HOSTNAME "evcc-garage"   // Standard für den Namen im Heimnetz, einstellbar (#47)
+#define MAX_HOSTNAME_LEN 24
 #define PORTAL_AP_NAME "evcc-Garage"
 #define PORTAL_TIMEOUT_S 300
 
