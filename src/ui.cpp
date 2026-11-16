@@ -6,6 +6,7 @@
 #include "config.h"
 #include "fw_version.h"
 #include "icons.h"
+#include "lang.h"
 
 LV_FONT_DECLARE(font_16);
 LV_FONT_DECLARE(font_18);
@@ -139,8 +140,8 @@ static lv_obj_t* tile[3];
 static lv_obj_t* tileLabel[3];
 static lv_obj_t* tileValue[3];
 // Beschriftungen wie in evcc: klein, grau, in Großbuchstaben
-static const char* TILE_TEXT[3] = {"GELADEN", "DAUER", "Ø SONNE"};
-static const char* HEATING_TILE_TEXT[3] = {"ENERGIE", "DAUER", "Ø SONNE"};
+static const char* TILE_TEXT[3] = {TR_KEY("GELADEN"), TR_KEY("DAUER"), TR_KEY("Ø SONNE")};
+static const char* HEATING_TILE_TEXT[3] = {TR_KEY("ENERGIE"), TR_KEY("DAUER"), TR_KEY("Ø SONNE")};
 static lv_obj_t* segBg;
 static lv_obj_t* seg[3];
 static lv_obj_t* segLbl[3];
@@ -148,8 +149,8 @@ static lv_obj_t* segSub[3];
 static const ChargeMode SEG_MODES[3] = {ChargeMode::Smart, ChargeMode::Slow, ChargeMode::Fast};
 // Nur Text wie in evcc, dazu eine Zeile, die sagt, was der Modus tut.
 // "Smart" heißt wie in evcc; "Langsam" ist Smart mit "Immer laden".
-static const char* SEG_TEXT[3] = {"Smart", "Langsam", "Schnell"};
-static const char* SEG_SUB[3] = {"nur Sonne", "lädt immer", "volle Leistung"};
+static const char* SEG_TEXT[3] = {TR_KEY("Smart"), TR_KEY("Langsam"), TR_KEY("Schnell")};
+static const char* SEG_SUB[3] = {TR_KEY("nur Sonne"), TR_KEY("lädt immer"), TR_KEY("volle Leistung")};
 
 // Hinweisbildschirm
 // Auswahl des Ladelimits: liegt über dem Hauptbildschirm
@@ -194,7 +195,7 @@ static lv_obj_t* makeBox(lv_obj_t* parent) {
 static void formatDecimal(char* buf, size_t len, float value) {
   snprintf(buf, len, "%.1f", value);
   for (char* p = buf; *p; p++)
-    if (*p == '.') *p = ',';
+    if (*p == '.') *p = lang::decimal();
 }
 
 static void formatDuration(char* buf, size_t len, uint32_t seconds) {
@@ -547,9 +548,9 @@ static void buildMain() {
     lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_center(col);
     segLbl[i] = makeLabel(col, &font_24);
-    lv_label_set_text(segLbl[i], SEG_TEXT[i]);
+    lv_label_set_text(segLbl[i], tr(SEG_TEXT[i]));
     segSub[i] = makeLabel(col, &font_16);
-    lv_label_set_text(segSub[i], SEG_SUB[i]);
+    lv_label_set_text(segSub[i], tr(SEG_SUB[i]));
   }
 
   // Breite nach Textlänge statt gleicher Drittel: jede Taste bekommt ihren Text plus gleich viel Rand,
@@ -557,8 +558,8 @@ static void buildMain() {
   int textW[3], sum = 0;
   for (int i = 0; i < 3; i++) {
     lv_point_t a, b;
-    lv_text_get_size(&a, SEG_TEXT[i], &font_24, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    lv_text_get_size(&b, SEG_SUB[i], &font_16, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    lv_text_get_size(&a, tr(SEG_TEXT[i]), &font_24, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    lv_text_get_size(&b, tr(SEG_SUB[i]), &font_16, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     textW[i] = LV_MAX(a.x, b.x);
     sum += textW[i];
   }
@@ -589,7 +590,7 @@ static void buildPicker() {
   lv_obj_add_flag(picker, LV_OBJ_FLAG_HIDDEN);
 
   lblPickTitle = makeLabel(picker, &font_26);
-  lv_label_set_text(lblPickTitle, "Ladelimit");
+  lv_label_set_text(lblPickTitle, tr("Ladelimit"));
   lv_obj_set_pos(lblPickTitle, MARGIN + 4, (HEADER_H - font_26.line_height) / 2 + 4);
   lblPickSub = makeLabel(picker, &font_22);
   lv_obj_set_width(lblPickSub, CONTENT_W - 8);
@@ -615,7 +616,7 @@ static void buildPicker() {
   lv_obj_add_flag(btnPickCancel, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(btnPickCancel, onPickCancel, LV_EVENT_CLICKED, nullptr);
   lblPickCancel = makeLabel(btnPickCancel, &font_24);
-  lv_label_set_text(lblPickCancel, "Abbrechen");
+  lv_label_set_text(lblPickCancel, tr("Abbrechen"));
   lv_obj_center(lblPickCancel);
 
   pickTimer = lv_timer_create([](lv_timer_t*) { closePicker(); }, PICK_TIMEOUT_MS, nullptr);
@@ -800,23 +801,40 @@ static void renderHouseTiles(const EvccState& s, bool live) {
   };
   if (!battery || !hasForecast) {
     formatDecimal(num, sizeof(num), s.pvPower / 1000.0f);
-    add("SONNE", "%s kW");
+    add(tr("SONNE"), "%s kW");
   }
   formatDecimal(num, sizeof(num), s.homePower / 1000.0f);
-  add("HAUS", "%s kW");
+  add(tr("HAUS"), "%s kW");
   if (battery) {  // Ladestand steht oben neben der Uhr, hier die Leistung
     const bool charging = s.batteryPower <= -50, discharging = s.batteryPower >= 50;
     formatDecimal(num, sizeof(num), (charging || discharging ? fabsf(s.batteryPower) : 0) / 1000.0f);
-    add(charging ? "AKKU LÄDT" : discharging ? "AKKU GIBT" : "AKKU", "%s kW");
+    add(charging ? tr("AKKU LÄDT") : discharging ? tr("AKKU GIBT") : tr("AKKU"), "%s kW");
   }
   if (hasForecast && n < 3) {
     formatDecimal(num, sizeof(num), forecast / 1000.0f);
-    add(today ? "REST HEUTE" : "MORGEN", "%s kWh");
+    add(today ? tr("REST HEUTE") : tr("MORGEN"), "%s kWh");
   }
   for (int i = 0; i < 3; i++) {
     setVisible(tile[i], i < n);
     lv_obj_set_style_text_color(tileValue[i], live ? t.text : t.muted, 0);
   }
+}
+
+// Beschriftungen der Kacheln auf der Ladepunktseite: Passt eine nicht (übersetzte Texte sind teils breiter),
+// bekommen alle die kleinere Schrift – wie auf der Solarseite
+static void fitTileLabels() {
+  int shown = 0;
+  for (int i = 0; i < 3; i++) shown += !lv_obj_has_flag(tile[i], LV_OBJ_FLAG_HIDDEN);
+  // 14 links, 6 rechts: so viel Rand lässt die breiteste deutsche Beschriftung („REST HEUTE“)
+  const int room = (CONTENT_W - (LV_MAX(shown, 1) - 1) * TILE_GAP) / LV_MAX(shown, 1) - 14 - 6;
+  bool small = false;
+  for (int i = 0; i < 3; i++) {
+    if (lv_obj_has_flag(tile[i], LV_OBJ_FLAG_HIDDEN)) continue;
+    lv_point_t size;
+    lv_text_get_size(&size, lv_label_get_text(tileLabel[i]), &font_18, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    small |= size.x > room;
+  }
+  for (int i = 0; i < 3; i++) lv_obj_set_style_text_font(tileLabel[i], small ? &font_16 : &font_18, 0);
 }
 
 // Battery Boost lässt sich schalten: eingeschaltet, Auto angesteckt, Modus Smart (oder Boost läuft noch)
@@ -863,7 +881,8 @@ static void renderBattery(const UiView& v, bool live) {
   const bool on = button && boostShown(v);
   const bool pending = v.pendingBoost >= 0;
   char buf[32];
-  snprintf(buf, sizeof(buf), ICON_BATTERY " %d %%", (int)lroundf(v.state.batterySoc));
+  const int iconLen = snprintf(buf, sizeof(buf), ICON_BATTERY " ");
+  snprintf(buf + iconLen, sizeof(buf) - iconLen, tr("%d %%"), (int)lroundf(v.state.batterySoc));
   lv_label_set_text(lblBattery, buf);
 
   if (button)
@@ -897,15 +916,20 @@ static int greenShareText(const EvccState& s, char* buf, size_t len) {
   const float battery = s.batterySoc >= 0 ? LV_MAX(0.0f, s.batteryPower) : 0;
   const float feedIn = s.hasGrid ? LV_MAX(0.0f, -s.gridPower) : 0;
   const float sun = LV_MAX(0.0f, s.pvPower - feedIn);
-  if (s.pvPower < 0 && battery < 50) return snprintf(buf, len, " · %d %% Sonne", (int)lroundf(green));  // PV unbekannt
+  if (s.pvPower < 0 && battery < 50) return snprintf(buf, len, tr(" · %d %% Sonne"), (int)lroundf(green));  // PV unbekannt
   const float sources = (sun >= 50 ? sun : 0) + (battery >= 50 ? battery : 0);
   if (sources <= 0) return 0;  // nachts ohne Akku: kein Zusatz
   const int sunPct = (int)lroundf(green * (sun >= 50 ? sun : 0) / sources);
   const int batteryPct = (int)lroundf(green) - sunPct;
   if (sunPct > 0 && batteryPct > 0)
-    return snprintf(buf, len, " · " ICON_SUN " %d %% · " ICON_BATTERY " %d %%", sunPct, batteryPct);
-  if (batteryPct > 0) return snprintf(buf, len, " · %d %% Akku", batteryPct);
-  return snprintf(buf, len, " · %d %% Sonne", sunPct);
+    {
+    char sunText[12], batteryText[12];
+    snprintf(sunText, sizeof(sunText), tr("%d %%"), sunPct);
+    snprintf(batteryText, sizeof(batteryText), tr("%d %%"), batteryPct);
+    return snprintf(buf, len, " · " ICON_SUN " %s · " ICON_BATTERY " %s", sunText, batteryText);
+  }
+  if (batteryPct > 0) return snprintf(buf, len, tr(" · %d %% Akku"), batteryPct);
+  return snprintf(buf, len, tr(" · %d %% Sonne"), sunPct);
 }
 
 // Fahrzeug hat sein Ziel erreicht und lädt deshalb nicht weiter – egal wie viel Sonne da ist.
@@ -913,24 +937,24 @@ static int greenShareText(const EvccState& s, char* buf, size_t len) {
 static bool limitReached(const EvccState& s, char* buf, size_t len) {
   // Ohne Ladestand begrenzt evcc die Energie der Ladung
   if (!s.heating && !s.socBased && s.limitEnergy > 0 && s.chargedEnergy >= s.limitEnergy * 1000.0f - 50.0f) {
-    snprintf(buf, len, "Ladelimit erreicht");
+    snprintf(buf, len, tr("Ladelimit erreicht"));
     return true;
   }
   if (s.vehicleSoc <= 0) return false;
   // Heizgeräte melden Ist- und Zieltemperatur
   if (s.heating) {
     if (s.limitSoc <= 0 || s.vehicleSoc < s.limitSoc) return false;
-    snprintf(buf, len, "Zieltemperatur erreicht");
+    snprintf(buf, len, tr("Zieltemperatur erreicht"));
     return true;
   }
   const bool lp = s.limitSoc > 0 && s.limitSoc < 100 && s.vehicleSoc >= s.limitSoc;
   const bool car = s.vehicleLimitSoc > 0 && s.vehicleLimitSoc < 100 && s.vehicleSoc >= s.vehicleLimitSoc;
   if (s.vehicleSoc >= 99.5f) {
-    snprintf(buf, len, "Voll geladen");
+    snprintf(buf, len, tr("Voll geladen"));
   } else if (lp) {
-    snprintf(buf, len, "Ladelimit erreicht");
+    snprintf(buf, len, tr("Ladelimit erreicht"));
   } else if (car) {
-    snprintf(buf, len, "Limit im Fahrzeug erreicht");
+    snprintf(buf, len, tr("Limit im Fahrzeug erreicht"));
   } else {
     return false;
   }
@@ -955,53 +979,53 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
 
   if (v.flash) {
     color = t.error;
-    snprintf(buf, len, "%s", v.flash);
+    snprintf(buf, len, "%s", tr(v.flash));
   } else if (!v.wifiConnected) {
     color = t.error;
-    snprintf(buf, len, "Keine WLAN-Verbindung");
+    snprintf(buf, len, tr("Keine WLAN-Verbindung"));
   } else if (v.stale) {
     color = t.error;
     if (s.valid && v.lastUpdate[0])
-      snprintf(buf, len, "evcc nicht erreichbar · Stand %s", v.lastUpdate);
+      snprintf(buf, len, tr("evcc nicht erreichbar · Stand %s"), v.lastUpdate);
     else
-      snprintf(buf, len, millis() > STALE_AFTER_MS ? "evcc nicht erreichbar" : "Verbinde mit evcc …");
+      snprintf(buf, len, millis() > STALE_AFTER_MS ? tr("evcc nicht erreichbar") : tr("Verbinde mit evcc …"));
   } else if (s.missing) {
     color = t.warn;
-    snprintf(buf, len, "Diese Nummer gibt es in evcc nicht");
+    snprintf(buf, len, tr("Diese Nummer gibt es in evcc nicht"));
   } else if (v.pendingMode != ChargeMode::None) {
-    snprintf(buf, len, "Modus wird gesetzt …");
+    snprintf(buf, len, tr("Modus wird gesetzt …"));
   } else if (v.pendingBoost >= 0) {
-    snprintf(buf, len, v.pendingBoost ? "Boost wird eingeschaltet …" : "Boost wird ausgeschaltet …");
+    snprintf(buf, len, v.pendingBoost ? tr("Boost wird eingeschaltet …") : tr("Boost wird ausgeschaltet …"));
   } else if (v.pendingVehicle) {
-    snprintf(buf, len, "Fahrzeug wird gewechselt …");
+    snprintf(buf, len, tr("Fahrzeug wird gewechselt …"));
   } else if (v.pendingLimit >= 0) {
-    snprintf(buf, len, "Ladelimit wird gesetzt …");
+    snprintf(buf, len, tr("Ladelimit wird gesetzt …"));
   } else if (!s.connected && house && s.minChargePower > 0) {
     // Hilft bei der Entscheidung: reicht die Sonne gerade für Smart?
     if (surplus(s) >= s.minChargePower) {
       color = t.solarText;
-      snprintf(buf, len, "Überschuss reicht für Smart");
+      snprintf(buf, len, tr("Überschuss reicht für Smart"));
     } else {
       formatDecimal(tmp, sizeof(tmp), s.minChargePower / 1000.0f);
-      snprintf(buf, len, "Smart startet ab %s kW Überschuss", tmp);
+      snprintf(buf, len, tr("Smart startet ab %s kW Überschuss"), tmp);
     }
   } else if (!s.connected && house) {
-    snprintf(buf, len, "Sonnenüberschuss");
+    snprintf(buf, len, tr("Sonnenüberschuss"));
   } else if (!s.connected) {
-    snprintf(buf, len, "Modus für die nächste Ladung wählen");
+    snprintf(buf, len, tr("Modus für die nächste Ladung wählen"));
   } else if (s.modeOff) {
     color = t.warn;
-    snprintf(buf, len, "Ladepunkt ist aus – Modus wählen");
+    snprintf(buf, len, tr("Ladepunkt ist aus – Modus wählen"));
   } else if (s.charging) {
-    int n = append(buf, len, 0, s.heating ? "Heizt" : "Lädt");
-    if (s.phasesActive > 0) n = append(buf, len, n, " · %d-phasig", s.phasesActive);
+    int n = append(buf, len, 0, s.heating ? tr("Heizt") : tr("Lädt"));
+    if (s.phasesActive > 0) n = append(buf, len, n, tr(" · %d-phasig"), s.phasesActive);
     if (!strcmp(s.pvAction, "disable") && s.pvRemaining > 0) {
       // Die Warnung verdrängt den Sonnenanteil – beides zusammen passt nicht in die Zeile
       formatCountdown(tmp, sizeof(tmp), s.pvRemaining);
-      append(buf, len, n, " · stoppt in %s", tmp);
+      append(buf, len, n, tr(" · stoppt in %s"), tmp);
       color = t.warn;
     } else if (s.batteryBoost) {
-      append(buf, len, n, " · Akku hilft mit");
+      append(buf, len, n, tr(" · Akku hilft mit"));
     } else if (greenShareText(s, tmp, sizeof(tmp)) > 0) {
       append(buf, len, n, "%s", tmp);
     }
@@ -1011,13 +1035,13 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
   } else if (!strcmp(s.pvAction, "enable") && s.pvRemaining > 0) {
     formatCountdown(tmp, sizeof(tmp), s.pvRemaining);
     color = t.solarText;
-    snprintf(buf, len, "Genug Sonne – Start in %s", tmp);
+    snprintf(buf, len, tr("Genug Sonne – Start in %s"), tmp);
   } else if (s.mode == ChargeMode::Smart) {
-    snprintf(buf, len, "Wartet auf Sonnenüberschuss");
+    snprintf(buf, len, tr("Wartet auf Sonnenüberschuss"));
   } else if (s.planActive || s.smartCostActive) {
-    snprintf(buf, len, "Wartet auf günstigen Zeitpunkt");
+    snprintf(buf, len, tr("Wartet auf günstigen Zeitpunkt"));
   } else {
-    snprintf(buf, len, s.heating ? "Heizt gerade nicht" : "Verbunden · lädt gerade nicht");
+    snprintf(buf, len, s.heating ? tr("Heizt gerade nicht") : tr("Verbunden · lädt gerade nicht"));
   }
 }
 
@@ -1050,13 +1074,13 @@ static int renderLimit(const UiView& v) {
   char buf[32];
   const float value = limitValue(v);
   if (v.state.socBased) {
-    snprintf(buf, sizeof(buf), "Limit %d %%", (int)lroundf(value));
+    snprintf(buf, sizeof(buf), tr("Limit %d %%"), (int)lroundf(value));
   } else if (value > 0) {
     char num[20];
     formatEnergy(num, sizeof(num), value);
-    snprintf(buf, sizeof(buf), "Limit %s", num);
+    snprintf(buf, sizeof(buf), tr("Limit %s"), num);
   } else {
-    snprintf(buf, sizeof(buf), "Kein Limit");
+    snprintf(buf, sizeof(buf), tr("Kein Limit"));
   }
   lv_label_set_text(lblLimit, buf);
   lv_obj_set_style_text_opa(lblLimit, v.pendingLimit >= 0 ? LV_OPA_50 : LV_OPA_COVER, 0);
@@ -1080,12 +1104,12 @@ static void renderPicker() {
 
   if (pickerEnergy) {
     formatDecimal(num, sizeof(num), s.chargedEnergy / 1000.0f);
-    snprintf(buf, sizeof(buf), "Für diese Ladung · bisher %s kWh", num);
+    snprintf(buf, sizeof(buf), tr("Für diese Ladung · bisher %s kWh"), num);
   } else if (s.vehicleSoc > 0) {
-    snprintf(buf, sizeof(buf), "%s%sjetzt %d %%", s.vehicleTitle, s.vehicleTitle[0] ? " · " : "",
+    snprintf(buf, sizeof(buf), tr("%s%sjetzt %d %%"), s.vehicleTitle, s.vehicleTitle[0] ? " · " : "",
              (int)lroundf(s.vehicleSoc));
   } else {
-    snprintf(buf, sizeof(buf), "%s", s.vehicleTitle[0] ? s.vehicleTitle : "Laden bis");
+    snprintf(buf, sizeof(buf), "%s", s.vehicleTitle[0] ? s.vehicleTitle : tr("Laden bis"));
   }
   lv_label_set_text(lblPickSub, buf);
 
@@ -1096,11 +1120,11 @@ static void renderPicker() {
     lv_obj_set_size(pickBtn[i], w, h);
     lv_obj_set_pos(pickBtn[i], MARGIN + (i % 3) * (w + PICK_GAP), PICK_TOP + (i / 3) * (h + PICK_GAP));
     if (!pickerEnergy)
-      snprintf(buf, sizeof(buf), "%d %%", (int)value);
+      snprintf(buf, sizeof(buf), tr("%d %%"), (int)value);
     else if (value > 0)
       formatEnergy(buf, sizeof(buf), value);
     else
-      snprintf(buf, sizeof(buf), "Kein Limit");
+      snprintf(buf, sizeof(buf), tr("Kein Limit"));
     lv_label_set_text(pickLbl[i], buf);
     lv_obj_set_style_text_font(pickLbl[i], !pickerEnergy ? &font_32 : value > 0 ? &font_24 : &font_22, 0);
     // Weniger als schon geladen ergibt kein sinnvolles Energielimit
@@ -1239,31 +1263,31 @@ static void renderSolar(const UiView& v, bool live) {
   const bool rows = data && live && midSel == SOLAR_MID_PLANTS && d.plantCount >= 2;
   if (data) {
     float power = LV_MAX(0.0f, s.pvPower);
-    const char* label = "Erzeugung jetzt";
+    const char* label = tr("Erzeugung jetzt");
     const char* icon = ICON_SUN;
     switch (big) {
       case SOLAR_BIG_SURPLUS:
         power = surplus(s);
-        label = "Überschuss jetzt";
+        label = tr("Überschuss jetzt");
         break;
       case SOLAR_BIG_HOME:
         power = LV_MAX(0.0f, s.homePower);
-        label = "Verbrauch jetzt";
+        label = tr("Verbrauch jetzt");
         icon = ICON_HOME;
         break;
       case SOLAR_BIG_GRID:
         power = fabsf(s.gridPower);
-        label = s.gridPower >= 50 ? "Netzbezug jetzt" : s.gridPower <= -50 ? "Einspeisung jetzt" : "Netz jetzt";
+        label = s.gridPower >= 50 ? tr("Netzbezug jetzt") : s.gridPower <= -50 ? tr("Einspeisung jetzt") : tr("Netz jetzt");
         icon = ICON_GRID;
         break;
       case SOLAR_BIG_BATTERY:
         power = fabsf(s.batteryPower);
-        label = s.batteryPower <= -50 ? "Akku lädt mit" : s.batteryPower >= 50 ? "Akku entlädt mit" : "Hausakku";
+        label = s.batteryPower <= -50 ? tr("Akku lädt mit") : s.batteryPower >= 50 ? tr("Akku entlädt mit") : tr("Hausakku");
         icon = ICON_BATTERY;
         break;
     }
     if (big == SOLAR_BIG_PV && rows)
-      snprintf(buf, sizeof(buf), "Erzeugung jetzt · %u Anlagen", d.plantTotal);
+      snprintf(buf, sizeof(buf), tr("Erzeugung jetzt · %u Anlagen"), d.plantTotal);
     else
       snprintf(buf, sizeof(buf), "%s", label);
     setVehicleText(buf);
@@ -1276,10 +1300,10 @@ static void renderSolar(const UiView& v, bool live) {
   } else if (!s.valid) {
     const bool starting = millis() < STALE_AFTER_MS;
     lv_label_set_text(lblIdleIcon, !v.wifiConnected ? ICON_WIFI_OFF : ICON_CLOUD_OFF);
-    lv_label_set_text(lblIdleText, !v.wifiConnected ? "Kein WLAN" : starting ? "Verbinde …" : "Keine Daten");
+    lv_label_set_text(lblIdleText, !v.wifiConnected ? tr("Kein WLAN") : starting ? tr("Verbinde …") : tr("Keine Daten"));
   } else {
     lv_label_set_text(lblIdleIcon, ICON_SUN);
-    lv_label_set_text(lblIdleText, "Keine PV-Anlage");
+    lv_label_set_text(lblIdleText, tr("Keine PV-Anlage"));
   }
 
   // Die Statuszeile meldet hier nur Störungen; dann weichen ihr Verlauf und Anlagen
@@ -1337,39 +1361,39 @@ static void renderSolar(const UiView& v, bool live) {
     if (!data) break;
     switch (tile) {
       case SOLAR_TILE_TODAY:
-        if (d.valid) addEnergy("HEUTE", d.today);
+        if (d.valid) addEnergy(tr("HEUTE"), d.today);
         break;
       case SOLAR_TILE_REST:
-        if (s.solarToday >= 0 && (s.solarToday >= 100 || !d.valid)) addEnergy("REST HEUTE", s.solarToday / 1000.0f);
+        if (s.solarToday >= 0 && (s.solarToday >= 100 || !d.valid)) addEnergy(tr("REST HEUTE"), s.solarToday / 1000.0f);
         break;
       case SOLAR_TILE_TOMORROW:
-        if (s.solarTomorrow >= 0) addEnergy("MORGEN", s.solarTomorrow / 1000.0f);
+        if (s.solarTomorrow >= 0) addEnergy(tr("MORGEN"), s.solarTomorrow / 1000.0f);
         break;
       case SOLAR_TILE_FORECAST:
-        if (d.valid) addEnergy("PROGNOSE", d.forecastToday);
+        if (d.valid) addEnergy(tr("PROGNOSE"), d.forecastToday);
         break;
       case SOLAR_TILE_PV:
-        addPower("ERZEUGUNG", LV_MAX(0.0f, s.pvPower));
+        addPower(tr("ERZEUGUNG"), LV_MAX(0.0f, s.pvPower));
         break;
       case SOLAR_TILE_SURPLUS:
-        addPower("ÜBERSCHUSS", surplus(s), "ÜBRIG");
+        addPower(tr("ÜBERSCHUSS"), surplus(s), tr("ÜBRIG"));
         break;
       case SOLAR_TILE_HOME:
-        addPower("VERBRAUCH", LV_MAX(0.0f, s.homePower));
+        addPower(tr("VERBRAUCH"), LV_MAX(0.0f, s.homePower));
         break;
       case SOLAR_TILE_GRID:
-        if (s.hasGrid) addPower(s.gridPower > 0 ? "AUS NETZ" : "INS NETZ", fabsf(s.gridPower));
+        if (s.hasGrid) addPower(s.gridPower > 0 ? tr("AUS NETZ") : tr("INS NETZ"), fabsf(s.gridPower));
         break;
       case SOLAR_TILE_BATTERY:
         if (s.batterySoc >= 0) {
-          snprintf(buf, sizeof(buf), "%d %%", (int)lroundf(s.batterySoc));
-          addText("AKKU", buf);
+          snprintf(buf, sizeof(buf), tr("%d %%"), (int)lroundf(s.batterySoc));
+          addText(tr("AKKU"), buf);
         }
         break;
       case SOLAR_TILE_BATTERY_POWER:
         // Wie beim Netz sagt die Beschriftung die Richtung; in Ruhe steht nur „AKKU“
         if (s.batterySoc >= 0)
-          addPower(s.batteryPower <= -50 ? "IN AKKU" : s.batteryPower >= 50 ? "AUS AKKU" : "AKKU", fabsf(s.batteryPower));
+          addPower(s.batteryPower <= -50 ? tr("IN AKKU") : s.batteryPower >= 50 ? tr("AUS AKKU") : tr("AKKU"), fabsf(s.batteryPower));
         break;
     }
   }
@@ -1446,13 +1470,14 @@ void ui::render(const UiView& v) {
   else if (pickerOpen)
     renderPicker();
   if (house) {
-    setVehicleText(ICON_PLUG " Kein Fahrzeug");
+    snprintf(buf, sizeof(buf), ICON_PLUG " %s", tr("Kein Fahrzeug"));
+    setVehicleText(buf);
   } else if (vehicle && s.heating) {
     // Wärmepumpe oder Heizstab: Temperatur mit einer Nachkommastelle wie in evcc, ohne Auto-Symbol
     char temp[16];
     formatDecimal(temp, sizeof(temp), s.vehicleSoc);
     if (s.vehicleSoc > 0)
-      snprintf(buf, sizeof(buf), "%s%s%s °C", s.vehicleTitle[0] ? s.vehicleTitle : "Temperatur",
+      snprintf(buf, sizeof(buf), "%s%s%s °C", s.vehicleTitle[0] ? s.vehicleTitle : tr("Temperatur"),
                s.vehicleTitle[0] ? " · " : " ", temp);
     else
       snprintf(buf, sizeof(buf), "%s", s.vehicleTitle);
@@ -1460,11 +1485,14 @@ void ui::render(const UiView& v) {
   } else if (vehicle) {
     const char* title = v.pendingVehicle        ? v.pendingVehicleTitle
                         : s.vehicleTitle[0]     ? s.vehicleTitle
-                        : canSelectVehicle      ? "Gastfahrzeug"
+                        : canSelectVehicle      ? tr("Gastfahrzeug")
                                                 : "";
     int n = snprintf(buf, sizeof(buf), ICON_CAR "%s%s", title[0] ? " " : "", title);
     if (!v.pendingVehicle && s.vehicleSoc > 0)
-      snprintf(buf + n, sizeof(buf) - n, "%s%d %%", title[0] ? " · " : " ", (int)lroundf(s.vehicleSoc));
+      {
+      n += snprintf(buf + n, sizeof(buf) - n, "%s", title[0] ? " · " : " ");
+      snprintf(buf + n, sizeof(buf) - n, tr("%d %%"), (int)lroundf(s.vehicleSoc));
+    }
     setVehicleText(buf, limitW);
   }
   setVisible(btnVehicle, house || vehicle);
@@ -1486,14 +1514,14 @@ void ui::render(const UiView& v) {
     lv_obj_set_style_text_opa(lblBolt, live && enough ? LV_OPA_COVER : LV_OPA_40, 0);
   } else if (s.missing) {
     lv_label_set_text(lblIdleIcon, ICON_ALERT);
-    lv_label_set_text(lblIdleText, "Nicht gefunden");
+    lv_label_set_text(lblIdleText, tr("Nicht gefunden"));
   } else if (!s.valid) {
     const bool starting = millis() < STALE_AFTER_MS;
     lv_label_set_text(lblIdleIcon, !v.wifiConnected ? ICON_WIFI_OFF : ICON_CLOUD_OFF);
-    lv_label_set_text(lblIdleText, !v.wifiConnected ? "Kein WLAN" : starting ? "Verbinde …" : "Keine Daten");
+    lv_label_set_text(lblIdleText, !v.wifiConnected ? tr("Kein WLAN") : starting ? tr("Verbinde …") : tr("Keine Daten"));
   } else {
     lv_label_set_text(lblIdleIcon, ICON_PLUG);
-    lv_label_set_text(lblIdleText, "Kein Fahrzeug");
+    lv_label_set_text(lblIdleText, tr("Kein Fahrzeug"));
   }
 
   lv_color_t statusColor;
@@ -1514,7 +1542,7 @@ void ui::render(const UiView& v) {
     renderHouseTiles(s, live);
   } else if (showTiles) {
     for (int i = 0; i < 3; i++) {
-      lv_label_set_text(tileLabel[i], (s.heating ? HEATING_TILE_TEXT : TILE_TEXT)[i]);
+      lv_label_set_text(tileLabel[i], tr((s.heating ? HEATING_TILE_TEXT : TILE_TEXT)[i]));
       setVisible(tile[i], true);
     }
     formatDecimal(num, sizeof(num), s.chargedEnergy / 1000.0f);
@@ -1522,12 +1550,13 @@ void ui::render(const UiView& v) {
     lv_label_set_text(tileValue[0], buf);
     formatDuration(buf, sizeof(buf), s.chargeDuration);
     lv_label_set_text(tileValue[1], buf);
-    snprintf(buf, sizeof(buf), "%d %%", (int)lroundf(s.sessionSolarPct));
+    snprintf(buf, sizeof(buf), tr("%d %%"), (int)lroundf(s.sessionSolarPct));
     lv_label_set_text(tileValue[2], buf);
     for (int i = 0; i < 3; i++) lv_obj_set_style_text_color(tileValue[i], live ? t.text : t.muted, 0);
   }
+  if (house || showTiles) fitTileLabels();
 
-  lv_label_set_text(segSub[1], s.heating ? "heizt immer" : SEG_SUB[1]);
+  lv_label_set_text(segSub[1], s.heating ? tr("heizt immer") : tr(SEG_SUB[1]));
   const bool pending = v.pendingMode != ChargeMode::None;
   renderSegments(pending ? v.pendingMode : s.mode, pending);
 }

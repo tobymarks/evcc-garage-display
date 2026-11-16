@@ -5,6 +5,7 @@
 #include <string>
 
 #include "icons.h"
+#include "lang.h"
 #include "preview.h"
 #include "ui.h"
 
@@ -45,11 +46,14 @@ static void writeBmp(const std::string& path) {
 }
 
 // sim <Ausgabeordner> <Zustand>… – je Zustand <Zustand>-light.bmp und <Zustand>-dark.bmp
+// Sprache über die Umgebungsvariable SIM_LANG (de oder en)
 int main(int argc, char** argv) {
   if (argc < 3) {
     fprintf(stderr, "Aufruf: sim <Ordner> <Zustand>…  (%s)\n", preview::NAMES);
     return 1;
   }
+  const char* language = getenv("SIM_LANG");
+  lang::set(language && !strcmp(language, "en") ? Lang::En : Lang::De);
   lv_init();
   lv_tick_set_cb(millis);
   static uint16_t buf[W * H];
@@ -80,11 +84,14 @@ int main(int argc, char** argv) {
     const std::string file = std::string(argv[i]) + (pick ? "-pick" : "") + (v.pageCount > 1 ? "-lp" + std::to_string(v.page + 1) : "");
     // "settings": Hinweis beim Öffnen der Einstellungen (Text wie in main.cpp)
     const bool settings = !strcmp(argv[i], "settings");
-    if (settings)
-      ui::showMessage(ICON_SETTINGS, "Einstellungen",
-                      "Mit dem WLAN \"evcc-Garage\" verbinden. Die Seite öffnet sich automatisch, "
-                      "sonst 192.168.4.1 aufrufen. Antippen zum Abbrechen.");
-    else if (!strncmp(argv[i], "pv", 2)) {
+    if (settings) {
+      char text[200];
+      snprintf(text, sizeof(text),
+               tr("Mit dem WLAN \"%s\" verbinden. Die Seite öffnet sich automatisch, sonst 192.168.4.1 aufrufen. "
+                  "Antippen zum Abbrechen."),
+               "evcc-Garage");
+      ui::showMessage(ICON_SETTINGS, tr("Einstellungen"), text);
+    } else if (!strncmp(argv[i], "pv", 2)) {
       // Solarseite: letzte Seite hinter einem Ladepunkt
       if (!preview::solarScene(argv[i], v.state, v.solarData, v.hour)) {
         fprintf(stderr, "Unbekannter Zustand: %s\n", argv[i]);

@@ -4,6 +4,7 @@
 
 #include "board.h"
 #include "config.h"
+#include "lang.h"
 
 static Settings s;
 static Preferences prefs;
@@ -35,6 +36,8 @@ void settings::load() {
   s.solarTile[2] = prefs.getUChar("st3", SOLAR_TILE_TOMORROW);
   s.backlightHz = prefs.getUInt("blhz", LCD_BACKLIGHT_HZ);
   s.password = prefs.getString("pw", "");
+  // Ohne gespeicherte Sprache: Ein schon eingerichtetes Display bleibt deutsch, ein neues beginnt englisch
+  s.language = prefs.getUChar("lang", (uint8_t)(prefs.isKey("host") ? Lang::De : Lang::En));
   prefs.end();
 
   if (s.rotation > 3) s.rotation = DEFAULT_ROTATION;
@@ -45,6 +48,8 @@ void settings::load() {
   for (uint8_t& tile : s.solarTile)
     if (tile >= SOLAR_TILE_COUNT) tile = SOLAR_TILE_NONE;
   s.backlightHz = constrain(s.backlightHz, (uint32_t)MIN_BACKLIGHT_HZ, (uint32_t)MAX_BACKLIGHT_HZ);
+  if (s.language >= (uint8_t)Lang::Count) s.language = (uint8_t)Lang::De;
+  lang::set((Lang)s.language);
 }
 
 void settings::save() {
@@ -72,6 +77,7 @@ void settings::save() {
   prefs.putBool("solar1st", s.solarFirst);
   prefs.putUInt("blhz", s.backlightHz);
   prefs.putString("pw", s.password);
+  prefs.putUChar("lang", s.language);
   prefs.end();
 }
 
