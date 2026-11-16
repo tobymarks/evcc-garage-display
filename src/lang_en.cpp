@@ -237,6 +237,9 @@ static const lang::Pair PAIRS[] = {
     {"Diagnose herunterladen", "Download diagnostics"},
     {"Ansehen", "View"},
     {"Projektseite und Anleitung", "Project page and guide (in German)"},
+    {"Hilfe", "Help (in German)"},
+    {"Bleibt das Display auf einer alten Version stehen, hilft die %sAnleitung für Updates von Hand%s.",
+     "If the display stays on an old version, the %sguide to updating by hand%s helps (in German)."},
 
     // ---------- Solarseite einrichten (/solar) ----------
     {"Die Änderungen an der Solarseite sind noch nicht gespeichert.",

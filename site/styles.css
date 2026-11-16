@@ -814,7 +814,7 @@ esp-web-install-button {
     position: static;
   }
 
-  .nav-links a:not(.gh) {
+  .nav-links a:not(.gh, .keep) {
     display: none;
   }
 }
@@ -841,4 +841,302 @@ esp-web-install-button {
   html {
     scroll-behavior: auto;
   }
+}
+
+/* ---------- Hilfe (hilfe.html) ---------- */
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.help-head {
+  background: radial-gradient(1000px 500px at 80% 0%, #0b1046 0%, var(--navy) 60%);
+  color: var(--white);
+  padding-bottom: 64px;
+}
+
+.help-head .eyebrow {
+  color: var(--muted-dark);
+}
+
+.help-intro {
+  padding-top: 40px;
+}
+
+.help-intro h1 {
+  font-size: clamp(36px, 4.6vw, 54px);
+}
+
+.help-intro .lead {
+  margin: 20px 0 36px;
+}
+
+.help-intro .lead b {
+  color: var(--white);
+  font-weight: 600;
+}
+
+.guide-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.guide-cards a {
+  display: block;
+  text-decoration: none;
+  background: var(--navy-box);
+  border: 1px solid var(--navy-line);
+  border-radius: 20px;
+  padding: 18px 20px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.guide-cards a:hover {
+  border-color: var(--green);
+  transform: translateY(-2px);
+}
+
+.guide-cards b {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.guide-cards span {
+  display: block;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted-dark);
+}
+
+.help-main {
+  max-width: 860px;
+  padding-bottom: 110px;
+}
+
+.help-section {
+  padding-top: 72px;
+}
+
+.help-section > h2,
+.faq-head h2 {
+  font-size: clamp(28px, 3.2vw, 38px);
+}
+
+.help-section > h2 {
+  margin-bottom: 24px;
+}
+
+/* Anker nicht unter den Rand scrollen */
+.help [id] {
+  scroll-margin-top: 24px;
+}
+
+.guide {
+  background: var(--white);
+  border: 1px solid #e4e4ec;
+  border-radius: var(--radius);
+  padding: 30px 32px;
+  margin-top: 16px;
+}
+
+.guide h3 {
+  font-size: 22px;
+}
+
+.guide-sub {
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
+.guide ol {
+  margin: 20px 0 0;
+  padding-left: 1.4em;
+  display: grid;
+  gap: 12px;
+}
+
+.guide li::marker {
+  font-weight: 700;
+}
+
+.guide-note {
+  margin: 20px 0 0;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: #e6fbec;
+  font-size: 15px;
+}
+
+.help-main a {
+  color: var(--green-text);
+  text-underline-offset: 3px;
+}
+
+.help table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0 4px;
+  font-size: 15px;
+}
+
+.help th,
+.help td {
+  text-align: left;
+  vertical-align: top;
+  padding: 9px 0;
+  border-top: 1px solid #e4e4ec;
+}
+
+.help th {
+  font-weight: 600;
+  width: 38%;
+  padding-right: 16px;
+}
+
+.help td {
+  color: var(--muted);
+}
+
+.help code {
+  font-size: 0.86em;
+  padding: 2px 7px;
+  overflow-wrap: anywhere;
+}
+
+.help pre {
+  margin: 12px 0 0;
+  background: var(--paper);
+  border-radius: 14px;
+  padding: 14px 16px;
+  overflow-x: auto;
+}
+
+.help pre code {
+  padding: 0;
+  overflow-wrap: normal;
+}
+
+.faq-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+  flex-wrap: wrap;
+}
+
+.faq-search input {
+  font: inherit;
+  font-size: 15px;
+  width: min(320px, 100%);
+  padding: 11px 18px;
+  border-radius: 999px;
+  border: 1px solid #cfd0da;
+  background: var(--white);
+  color: var(--ink);
+}
+
+.faq-search input:focus {
+  outline: 2px solid var(--green-text);
+  outline-offset: 1px;
+}
+
+.faq-empty {
+  margin: 24px 0 0;
+  color: var(--muted);
+}
+
+.faq-group {
+  margin-top: 36px;
+}
+
+.faq-group h3 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.faq-group .more {
+  margin-top: 10px;
+}
+
+.help .more summary {
+  padding: 2px 0;
+}
+
+.help .more ul {
+  color: var(--muted);
+  margin: 12px 0 0;
+  padding-left: 1.2em;
+}
+
+.help .more li + li {
+  margin-top: 6px;
+}
+
+.help .more[open] {
+  border-color: #cfd0da;
+}
+
+@media (max-width: 900px) {
+  .guide-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .guide-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .guide {
+    padding: 24px 20px;
+  }
+
+  .help th,
+  .help td {
+    display: block;
+    width: auto;
+    padding: 0;
+    border: 0;
+  }
+
+  .help th {
+    padding-top: 10px;
+    border-top: 1px solid #e4e4ec;
+  }
+
+  .help td {
+    padding-bottom: 10px;
+  }
+
+  .faq-search,
+  .faq-search input {
+    width: 100%;
+  }
+}
+
+.help-link {
+  margin: 20px 0 0;
+  color: var(--muted);
+}
+
+.help-link a {
+  font-weight: 600;
+  color: var(--green-text);
+  text-decoration: none;
+}
+
+.help-link a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
