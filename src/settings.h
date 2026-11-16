@@ -27,6 +27,7 @@ struct Settings {
   bool solarFirst;           // Solarseite ist die erste Seite und bleibt stehen (z. B. Display in der Küche)
   uint32_t backlightHz;      // Taktung der Hintergrundbeleuchtung ab dem Start: Schalter „Dimmen mit langsamer Taktung“ oder /backlight?hz=…&save=1 (#21)
   uint8_t language;          // Sprache der Oberfläche, siehe Lang in lang.h; ein Wechsel wirkt nach dem Neustart
+  String hostname;           // Name im Heimnetz: <name>.local, Geräteliste des Routers, OTA (#47)
   String password;           // schützt Weboberfläche und OTA (Benutzer "admin"); leer = offen
 };
 
@@ -34,6 +35,8 @@ namespace settings {
 void load();
 // "1, 3" → {1, 3}; ungültige und doppelte Nummern fallen weg, leer → Ladepunkt 1
 void parseLoadpoints(const char* text, Settings& s);
+// "Küche 2" → "kueche-2": nur a–z, 0–9 und Bindestrich, höchstens MAX_HOSTNAME_LEN Zeichen; leer → ""
+String cleanHostname(const String& text);
 // {1, 3} → "1,3"
 String loadpointsText(const Settings& s);
 void save();

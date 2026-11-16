@@ -223,6 +223,14 @@ static const lang::Pair PAIRS[] = {
     {"Kein Passwort", "No password"},
     {"Unverändert", "Unchanged"},
     {"Passwort anzeigen", "Show password"},
+    {"Name im Heimnetz", "Network name"},
+    {"Das Display ist unter %s erreichbar. Mehrere Displays brauchen verschiedene Namen, z. B. evcc-kueche. Erlaubt sind "
+     "a–z, 0–9 und Bindestrich.",
+     "The display can be reached at %s. Several displays need different names, e.g. evcc-kitchen. Allowed are a–z, 0–9 "
+     "and hyphens."},
+    {"Danach ist es unter %s erreichbar.", "It can then be reached at %s."},
+    {"Name im Heimnetz (a–z, 0–9, -). Bei mehreren Displays je einen eigenen, z. B. evcc-kueche",
+     "Network name (a–z, 0–9, -). Give each display its own, e.g. evcc-kitchen"},
     {"Passwort entfernen", "Remove password"},
     {"Ungespeicherte Änderungen", "Unsaved changes"},
     {"Verwerfen", "Discard"},
