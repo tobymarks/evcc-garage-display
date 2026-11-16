@@ -16,6 +16,7 @@
 #include <esp_rom_crc.h>
 #include <esp_rom_sys.h>
 #include <rom/rtc.h>
+#include <stdarg.h>
 #include <functional>
 #include <lvgl.h>
 
@@ -25,6 +26,7 @@
 #include "evcc_client.h"
 #include "fw_version.h"
 #include "icons.h"
+#include "lang.h"
 #include "preview.h"
 #include "settings.h"
 #include "sun.h"
@@ -41,6 +43,7 @@ static WiFiManagerParameter* pRotate;
 static WiFiManagerParameter* pTheme;
 static WiFiManagerParameter* pTimeout;
 static WiFiManagerParameter* pAutoUpdate;
+static WiFiManagerParameter* pLanguage;
 static WebServer web(8080);  // Port 80 gehört dem Einstellungsportal
 
 static bool portalActive = false;
@@ -97,7 +100,7 @@ static int8_t previewSolarCfg[5] = {-1, -1, -1, -1, -1};
 // ---------- WLAN-Einrichtung / Einstellungen ----------
 
 // Übernimmt die Werte aus dem Portal oder von /settings (gleiche Feldnamen).
-// Liefert true, wenn die Änderung erst nach einem Neustart wirkt (Verbindung, Drehung, Passwort, Taktung);
+// Liefert true, wenn die Änderung erst nach einem Neustart wirkt (Verbindung, Drehung, Passwort, Taktung, Sprache);
 // alles andere liest die Oberfläche laufend aus den Einstellungen.
 static bool applySettings(std::function<String(const char*)> value) {
   Settings& s = settings::get();
@@ -105,6 +108,7 @@ static bool applySettings(std::function<String(const char*)> value) {
   const uint16_t oldPort = s.evccPort;
   const uint8_t oldRotation = s.rotation;
   const uint32_t oldBacklightHz = s.backlightHz;
+  const uint8_t oldLanguage = s.language;
   s.evccHost = value("host");
   s.evccHost.trim();
   // Nur der Rechnername zählt: "http://" davor und einen Pfad dahinter verzeihen
@@ -142,6 +146,14 @@ static bool applySettings(std::function<String(const char*)> value) {
   if (!solarPage.isEmpty()) s.solarPage = solarPage.toInt() != 0;
   const String solarFirst = value("solar1st");
   if (!solarFirst.isEmpty()) s.solarFirst = solarFirst.toInt() != 0;
+  // Sprache: im Formular die Nummer, im WLAN-Portal das Kürzel ("de", "en")
+  String language = value("lang");
+  language.trim();
+  language.toLowerCase();
+  if (language == "en" || language == "1")
+    s.language = (uint8_t)Lang::En;
+  else if (language == "de" || language == "0")
+    s.language = (uint8_t)Lang::De;
   // Leeres Feld = Passwort unverändert; entfernt wird es nur ausdrücklich
   const String password = value("pw");
   if (value("pwclear").toInt() != 0)
@@ -150,7 +162,8 @@ static bool applySettings(std::function<String(const char*)> value) {
     s.password = password.substring(0, MAX_PASSWORD_LEN);
   settings::save();
   return s.evccHost != oldHost || s.evccPort != oldPort || settings::loadpointsText(s) != oldLps ||
-         s.rotation != oldRotation || s.password != oldPassword || s.backlightHz != oldBacklightHz;
+         s.rotation != oldRotation || s.password != oldPassword || s.backlightHz != oldBacklightHz ||
+         s.language != oldLanguage;
 }
 
 static void saveParams() {
@@ -179,18 +192,20 @@ static void setupPortal() {
   snprintf(timeout, sizeof(timeout), "%u", s.screenTimeoutMin);
   snprintf(autoUpdate, sizeof(autoUpdate), "%u", s.autoUpdate);
 
-  pHost = new WiFiManagerParameter("host", "evcc-Adresse", s.evccHost.c_str(), 40);
-  pPort = new WiFiManagerParameter("port", "evcc-Port", port, 5);
+  // Die Sprache steht oben und in beiden Sprachen da: Ein neues Display startet auf Englisch
+  pLanguage = new WiFiManagerParameter("lang", "Sprache / Language: de = Deutsch, en = English", lang::code(), 2);
+  pHost = new WiFiManagerParameter("host", tr("evcc-Adresse"), s.evccHost.c_str(), 40);
+  pPort = new WiFiManagerParameter("port", tr("evcc-Port"), port, 5);
   pLoadpoint = new WiFiManagerParameter(
-      "lp", "Ladepunkt-Nr. (1 = erster in evcc). Mehrere mit Komma, z. B. 1,2,3 – dann wischen zum Wechseln", lp, 17);
-  pLat = new WiFiManagerParameter("lat", "Breitengrad (für Tag/Nacht)", lat, 11);
-  pLon = new WiFiManagerParameter("lon", "Längengrad (für Tag/Nacht)", lon, 11);
-  pRotate = new WiFiManagerParameter("rot", "Drehung: 0–3 (je 90° im Uhrzeigersinn)", rot, 1);
-  pTheme = new WiFiManagerParameter("theme", "Design: 0 = automatisch (Sonnenstand), 1 = immer hell, 2 = immer dunkel", theme, 1);
-  pTimeout = new WiFiManagerParameter("timeout", "Bildschirm aus nach Minuten ohne Ladung und Bedienung (0 = immer an)", timeout, 3);
-  pAutoUpdate = new WiFiManagerParameter("autoupd", "Automatische Updates: 1 = an, 0 = aus", autoUpdate, 1);
+      "lp", tr("Ladepunkt-Nr. (1 = erster in evcc). Mehrere mit Komma, z. B. 1,2,3 – dann wischen zum Wechseln"), lp, 17);
+  pLat = new WiFiManagerParameter("lat", tr("Breitengrad (für Tag/Nacht)"), lat, 11);
+  pLon = new WiFiManagerParameter("lon", tr("Längengrad (für Tag/Nacht)"), lon, 11);
+  pRotate = new WiFiManagerParameter("rot", tr("Drehung: 0–3 (je 90° im Uhrzeigersinn)"), rot, 1);
+  pTheme = new WiFiManagerParameter("theme", tr("Design: 0 = automatisch (Sonnenstand), 1 = immer hell, 2 = immer dunkel"), theme, 1);
+  pTimeout = new WiFiManagerParameter("timeout", tr("Bildschirm aus nach Minuten ohne Ladung und Bedienung (0 = immer an)"), timeout, 3);
+  pAutoUpdate = new WiFiManagerParameter("autoupd", tr("Automatische Updates: 1 = an, 0 = aus"), autoUpdate, 1);
   static WiFiManagerParameter version("<p>Firmware " FW_VERSION "</p>");
-  for (auto* p : {pHost, pPort, pLoadpoint, pLat, pLon, pRotate, pTheme, pTimeout, pAutoUpdate, &version})
+  for (auto* p : {pLanguage, pHost, pPort, pLoadpoint, pLat, pLon, pRotate, pTheme, pTimeout, pAutoUpdate, &version})
     wm.addParameter(p);
 
   wm.setTitle("evcc-Garage");
@@ -204,9 +219,12 @@ static void setupPortal() {
 }
 
 static void showPortalMessage() {
-  ui::showMessage(ICON_SETTINGS, "Einstellungen",
-                  "Mit dem WLAN \"" PORTAL_AP_NAME "\" verbinden. Die Seite öffnet sich automatisch, "
-                  "sonst 192.168.4.1 aufrufen. Antippen zum Abbrechen.");
+  char text[200];
+  snprintf(text, sizeof(text),
+           tr("Mit dem WLAN \"%s\" verbinden. Die Seite öffnet sich automatisch, sonst 192.168.4.1 aufrufen. "
+              "Antippen zum Abbrechen."),
+           PORTAL_AP_NAME);
+  ui::showMessage(ICON_SETTINGS, tr("Einstellungen"), text);
 }
 
 static void openSettings() {
@@ -273,7 +291,7 @@ static void onVehicleTapped() {
   const int next = idx < 0 ? 0 : idx + 1;
   // Zeiger in die Liste, nicht in das Ziel selbst – das wird gleich überschrieben
   const char* targetName = next < vehicles.count ? vehicles.names[next] : "";
-  const char* targetTitle = next < vehicles.count ? vehicles.titles[next] : "Gastfahrzeug";
+  const char* targetTitle = next < vehicles.count ? vehicles.titles[next] : tr("Gastfahrzeug");
   strlcpy(vehicleTargetName[current], targetName, sizeof(vehicleTargetName[0]));
   strlcpy(vehicleTargetTitle[current], targetTitle, sizeof(vehicleTargetTitle[0]));
   startPending(Command::Vehicle, current, 0);
@@ -417,14 +435,14 @@ static void updateState() {
     // Fehler nur melden, wenn der Ladepunkt gerade zu sehen ist
     const char* error = nullptr;
     const char* e;
-    if ((e = checkPending(Command::Mode, i, st.mode == modeTarget[i], "Modus konnte nicht gesetzt werden",
-                          "evcc hat den Modus nicht übernommen")))
+    if ((e = checkPending(Command::Mode, i, st.mode == modeTarget[i], TR_KEY("Modus konnte nicht gesetzt werden"),
+                          TR_KEY("evcc hat den Modus nicht übernommen"))))
       error = e;
     if ((e = checkPending(Command::Boost, i, st.batteryBoost == boostTarget[i],
-                          "Boost konnte nicht geschaltet werden", "evcc hat den Boost nicht übernommen")))
+                          TR_KEY("Boost konnte nicht geschaltet werden"), TR_KEY("evcc hat den Boost nicht übernommen"))))
       error = e;
     if ((e = checkPending(Command::Vehicle, i, !strcmp(st.vehicleName, vehicleTargetName[i]),
-                          "Fahrzeug konnte nicht gewechselt werden", "evcc hat das Fahrzeug nicht übernommen")))
+                          TR_KEY("Fahrzeug konnte nicht gewechselt werden"), TR_KEY("evcc hat das Fahrzeug nicht übernommen"))))
       error = e;
     Pending& lim = pending(Command::Limit, i);
     if (lim.active && st.valid && !st.connected) {
@@ -433,8 +451,8 @@ static void updateState() {
     }
     const bool limitReached = limitTargetEnergy[i] ? fabsf(st.limitEnergy - limitTarget[i]) < 0.05f
                                                    : lroundf(st.limitSoc) == lroundf(limitTarget[i]);
-    if ((e = checkPending(Command::Limit, i, limitReached, "Ladelimit konnte nicht gesetzt werden",
-                          "evcc hat das Ladelimit nicht übernommen")))
+    if ((e = checkPending(Command::Limit, i, limitReached, TR_KEY("Ladelimit konnte nicht gesetzt werden"),
+                          TR_KEY("evcc hat das Ladelimit nicht übernommen"))))
       error = e;
     if (error) {
       if (i == current) flash(error);
@@ -813,10 +831,10 @@ static String diagDetails() {
   s += buf;
   snprintf(buf, sizeof(buf),
            "Battery Boost %s, Fahrzeugwechsel %s, Ladelimit %s, Solarseite %s (Bausteine %u/%u/%u-%u-%u, zuerst %s), "
-           "Passwort gesetzt %s, Standort gesetzt %s\n",
+           "Passwort gesetzt %s, Standort gesetzt %s, Sprache %s\n",
            yesNo(st.boostButton), yesNo(st.vehicleSwitch), yesNo(st.chargeLimit), yesNo(st.solarPage),
            st.solarBig, st.solarMid, st.solarTile[0], st.solarTile[1], st.solarTile[2], yesNo(st.solarFirst),
-           yesNo(!st.password.isEmpty()), yesNo(st.latitude != 0 || st.longitude != 0));
+           yesNo(!st.password.isEmpty()), yesNo(st.latitude != 0 || st.longitude != 0), lang::code());
   s += buf;
   snprintf(buf, sizeof(buf), "WLAN-Kanal %d, Uhrzeit bekannt %s\n", (int)WiFi.channel(), yesNo(timeValid()));
   s += buf;
@@ -901,8 +919,8 @@ static String option(int value, int selected, const char* label) {
          "</option>";
 }
 
-static const char SETTINGS_HEAD[] PROGMEM = R"(<!doctype html><html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Einstellungen · evcc-Garage</title><style>
+static const char SETTINGS_HEAD[] PROGMEM = R"(<!doctype html><html lang="{{@lang}}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{{Einstellungen}} · evcc-Garage</title><style>
 :root{color-scheme:light dark;--a:#0fdd8d}[hidden]{display:none!important}
 body{font:16px/1.4 system-ui,sans-serif;max-width:30rem;margin:0 auto;padding:1.5rem 1rem}
 h1{font-size:1.4rem;margin:0 0 1.5rem}h1 span{font-weight:400;opacity:.65;margin-left:.5rem}
@@ -934,7 +952,7 @@ padding:.5rem .9rem;background:none;border:1px solid #8888;border-radius:.5rem;c
 .bar{position:sticky;bottom:0;margin:1.8rem -1rem 0;padding:.75rem 1rem;background:Canvas;border-top:1px solid #8884}
 .bar small{margin-bottom:.5rem;opacity:1;font-weight:600}.bar a{color:inherit;font-weight:400}
 footer{margin-top:2rem;opacity:.65;font-size:.85rem}footer a{color:inherit}
-</style></head><body><h1>evcc-Garage<span>Einstellungen</span></h1>)";
+</style></head><body><h1>evcc-Garage<span>{{Einstellungen}}</span></h1>)";
 
 // Beschriftung eines Felds, mit ihm verbunden (Antippen setzt den Cursor, Vorleseprogramme nennen den Namen)
 static String field(const char* id, const char* label, const char* hint = nullptr) {
@@ -951,12 +969,96 @@ static String toggle(const char* name, bool on, const char* label, const char* h
          name + "\" value=\"0\"></label>";
 }
 
-static String timeoutLabel(int minutes) {
-  if (!minutes) return "Nie";
-  if (minutes == 1) return "Nach 1 Minute";
-  if (minutes % 60 == 0) return String("Nach ") + minutes / 60 + (minutes == 60 ? " Stunde" : " Stunden");
-  return String("Nach ") + minutes + " Minuten";
+// Text mit Platzhaltern als String, für übersetzte Sätze mit Zahlen oder Namen
+static String fmt(const char* format, ...) {
+  char buf[400];
+  va_list args;
+  va_start(args, format);
+  vsnprintf(buf, sizeof(buf), format, args);
+  va_end(args);
+  return buf;
 }
+
+// Seitenvorlage ausfüllen: Ein deutscher Text in doppelten geschweiften Klammern wird durch die Übersetzung
+// ersetzt, dazu {{@lang}} (Sprachkürzel), {{@locale}} (Zeitformat im Browser), {{@dec}} (Dezimaltrennzeichen)
+// und {{@pct}} (Prozentzeichen mit Abstand).
+// Die Texte stehen in den Vorlagen in HTML und in JavaScript mit einfachen Anführungszeichen: Übersetzungen
+// dürfen deshalb kein ' enthalten (prüft tools/check_lang.py).
+static String page(const char* tmpl) {
+  String out;
+  out.reserve(strlen(tmpl) + 512);
+  // Die Klammern einzeln, damit tools/check_lang.py diese Zeilen nicht für einen Vorlagentext hält
+  static const char OPEN[] = {'{', '{', 0}, CLOSE[] = {'}', '}', 0};
+  const char* p = tmpl;
+  for (;;) {
+    const char* open = strstr(p, OPEN);
+    const char* close = open ? strstr(open, CLOSE) : nullptr;
+    if (!close) break;
+    out.concat(p, open - p);
+    String key;
+    key.concat(open + 2, close - open - 2);
+    if (key == "@lang")
+      out += lang::code();
+    else if (key == "@locale")
+      out += lang::locale();
+    else if (key == "@dec")
+      out += lang::decimal();
+    else if (key == "@pct")
+      out += lang::get() == Lang::De ? " %" : "%";
+    else
+      out += tr(key.c_str());
+    p = close + 2;
+  }
+  out += p;
+  return out;
+}
+
+static String timeoutLabel(int minutes) {
+  if (!minutes) return tr("Nie");
+  if (minutes == 1) return tr("Nach 1 Minute");
+  if (minutes == 60) return tr("Nach 1 Stunde");
+  if (minutes % 60 == 0) return fmt(tr("Nach %d Stunden"), minutes / 60);
+  return fmt(tr("Nach %d Minuten"), minutes);
+}
+
+// Bild vom Display laden; abhängige Felder, ungespeicherte Änderungen und der Hinweis auf den Neustart
+static const char SETTINGS_SCRIPT[] PROGMEM = R"JS(<script>const i=document.getElementById('shot'),b=document.getElementById('load');
+function l(){b.textContent='{{Lädt …}}';i.onload=()=>{i.hidden=false;b.textContent='{{Aktualisieren}}'};
+i.onerror=()=>{b.textContent='{{Erneut versuchen}}'};i.src='/screenshot.bmp?'+Date.now()}
+b.onclick=l;if(location.search.includes('saved'))setTimeout(l,800)</script>
+<script>{const f=document.forms[0],$=s=>document.querySelector(s),bt=$('.bar button'),dn=$('#dirty');
+const sync=()=>{$('#solarsub').disabled=!$('input[name=solar]').checked;$('#loc').hidden=$('#theme').value!='0'};
+const snap=()=>new URLSearchParams(new FormData(f)).toString();sync();const s0=snap(),f0=new FormData(f);let sub=0;
+const ts=$('#tosolar');
+const upd=()=>{sync();const fd=new FormData(f);dn.hidden=snap()==s0;
+ts.textContent=dn.hidden?'{{Solarseite einrichten}}':'{{Speichern und Solarseite einrichten}}';
+bt.textContent=['host','port','lp','rot','pw','pwclear','slowbl','lang'].some(k=>(fd.get(k)||'')!=(f0.get(k)||''))
+?'{{Speichern und neu starten}}':'{{Speichern}}'};
+f.addEventListener('input',upd);f.addEventListener('change',upd);
+$('#undo').onclick=e=>{e.preventDefault();f.reset();$('#pw').type='password';upd()};
+$('#pwshow').onchange=e=>{$('#pw').type=e.target.checked?'text':'password'};
+f.onsubmit=()=>{sub=1};
+ts.onclick=e=>{if(dn.hidden)return;e.preventDefault();const n=document.createElement('input');
+n.type='hidden';n.name='next';n.value='solar';f.append(n);if(f.reportValidity()){sub=1;f.submit()}else n.remove()};
+addEventListener('beforeunload',e=>{if(!dn.hidden&&!sub){e.preventDefault();e.returnValue=''}});
+if(location.search.includes('saved'))history.replaceState(null,'','/settings')}</script>)JS";
+
+// "Jetzt aktualisieren": Prüfung und Installation anstoßen, dann /update abfragen, bis das Ergebnis feststeht.
+// Während des Neustarts antwortet das Display nicht; läuft danach eine andere Version, ist es geschafft.
+// /update antwortet immer deutsch (siehe lang.h), deshalb bleiben die Suchmuster deutsch.
+static const char UPDATE_SCRIPT[] PROGMEM = R"JS(<script>{const u=document.getElementById('upd'),m=document.getElementById('updmsg'),v0=')JS" FW_VERSION R"JS(';
+const say=t=>{m.hidden=false;m.textContent=t};
+u.onclick=async()=>{u.disabled=true;let n=0;say('{{Suche nach einer neuen Version …}}');
+try{await fetch('/update?check=1&install=1')}catch(e){}
+const t=setInterval(async()=>{const end=x=>{clearInterval(t);u.disabled=false;if(x)say(x)};
+if(++n>120)return end('{{Keine Antwort vom Display. Bitte Seite neu laden.}}');
+let x;try{x=await(await fetch('/update')).text()}catch(e){return say('{{Das Display startet neu …}}')}
+const v=(x.match(/^Firmware (.*)$/m)||[])[1],r=(x.match(/^Letzte Prüfung: (.*)$/m)||[])[1]||'';
+if(v&&v!=v0){document.getElementById('fwv').textContent=v;return end('{{Aktualisiert auf Version %s.}}'.replace('%s',v))}
+if(r=='läuft …'||r=='noch nicht geprüft')say('{{Suche nach einer neuen Version …}}');
+else if(r.startsWith('Installation')||r.startsWith('neue Version')||r.includes('installiert'))
+say('{{Neue Version wird installiert, danach startet das Display neu …}}');
+else end(r=='aktuell'?'{{Die Firmware ist aktuell.}}':r)},2000)}}</script>)JS";
 
 static void handleSettings() {
   if (web.method() == HTTP_POST) {
@@ -964,14 +1066,21 @@ static void handleSettings() {
     static const struct {
       const char* key;
       const char* label;
-    } REQUIRED[] = {{"host", "evcc-Adresse"}, {"port", "Port"},  {"lp", "Ladepunkte"},
-                    {"rot", "Drehung"},       {"theme", "Design"}, {"timeout", "Bildschirm ausschalten"},
-                    {"autoupd", "Automatische Updates"}};
+    } REQUIRED[] = {
+        {"host", TR_KEY("evcc-Adresse")},
+                    {"port", TR_KEY("Port")},
+                    {"lp", TR_KEY("Ladepunkte")},
+                    {"rot", TR_KEY("Drehung")},
+                    {"theme", TR_KEY("Design")},
+                    {"timeout", TR_KEY("Bildschirm ausschalten")},
+                    {"autoupd", TR_KEY("Automatische Updates")}};
     for (const auto& r : REQUIRED) {
       if (web.arg(r.key).isEmpty()) {
         web.send(400, "text/html; charset=utf-8",
-                 String(FPSTR(SETTINGS_HEAD)) + "<p class=\"note\">Nicht gespeichert: Das Feld „" + r.label +
-                     "“ ist leer.</p><a class=\"plain\" href=\"javascript:history.back()\">Zurück zum Formular</a></body></html>");
+                 page(SETTINGS_HEAD) + "<p class=\"note\">" +
+                     fmt(tr("Nicht gespeichert: Das Feld „%s“ ist leer."), tr(r.label)) +
+                     "</p><a class=\"plain\" href=\"javascript:history.back()\">" + tr("Zurück zum Formular") +
+                     "</a></body></html>");
         return;
       }
     }
@@ -988,77 +1097,87 @@ static void handleSettings() {
     }
     restartAt = millis() + 2000;  // Antwortseite noch ausliefern, dann neu starten
     web.sendHeader("Refresh", toSolar ? "15; url=/solar" : "15; url=/settings");
+    // Noch in der bisherigen Sprache: eine neu gewählte gilt erst nach dem Neustart
     web.send(200, "text/html; charset=utf-8",
-             String(FPSTR(SETTINGS_HEAD)) +
-                 "<p class=\"note\">Gespeichert. Das Display startet neu, die Seite lädt in einigen Sekunden wieder.</p></body></html>");
+             page(SETTINGS_HEAD) + "<p class=\"note\">" +
+                 tr("Gespeichert. Das Display startet neu, die Seite lädt in einigen Sekunden wieder.") +
+                 "</p></body></html>");
     return;
   }
 
   const Settings& s = settings::get();
-  String h = FPSTR(SETTINGS_HEAD);
-  h.reserve(10240);
-  if (web.hasArg("saved")) h += "<p class=\"note\">Gespeichert – die Änderung ist schon am Display zu sehen.</p>";
+  String h = page(SETTINGS_HEAD);
+  h.reserve(12288);
+  if (web.hasArg("saved"))
+    h += String("<p class=\"note\">") + tr("Gespeichert – die Änderung ist schon am Display zu sehen.") + "</p>";
   // autocomplete=off: Nach „Zurück“ im Browser steht der gespeicherte Stand da, nicht eine verworfene Eingabe
-  h += "<form method=\"post\" autocomplete=\"off\"><h2>Verbindung</h2>";
+  h += String("<form method=\"post\" autocomplete=\"off\"><h2>") + tr("Verbindung") + "</h2>";
   // Steht die Verbindung? Das zeigt sofort, ob Adresse und Port stimmen.
   const evcc::Diagnostics d = evcc::diagnostics();
   const uint32_t age = d.lastOkMs ? (millis() - d.lastOkMs) / 1000 : 0;
   if (d.lastOkMs && age < 60) {
-    h += String("<p class=\"st\">Verbunden mit evcc") + (d.version[0] ? String(" ") + d.version : String()) + "</p>";
+    h += String("<p class=\"st\">") + tr("Verbunden mit evcc") + (d.version[0] ? String(" ") + d.version : String()) + "</p>";
   } else if (d.lastOkMs) {
-    h += String("<p class=\"st bad\">evcc antwortet nicht mehr, zuletzt vor ") +
-         (age < 120 ? String(age) + " Sekunden" : String(age / 60) + " Minuten") + ". Läuft evcc, stimmen Adresse und Port?</p>";
+    h += "<p class=\"st bad\">" +
+         (age < 120 ? fmt(tr("evcc antwortet nicht mehr, zuletzt vor %lu Sekunden. Läuft evcc, stimmen Adresse und Port?"),
+                          (unsigned long)age)
+                    : fmt(tr("evcc antwortet nicht mehr, zuletzt vor %lu Minuten. Läuft evcc, stimmen Adresse und Port?"),
+                          (unsigned long)(age / 60))) +
+         "</p>";
   } else {
-    h += "<p class=\"st bad\">Noch keine Antwort von evcc. Stimmen Adresse und Port?</p>";
+    h += String("<p class=\"st bad\">") + tr("Noch keine Antwort von evcc. Stimmen Adresse und Port?") + "</p>";
   }
-  h += "<div class=\"row\"><div><label for=\"host\">evcc-Adresse</label><input id=\"host\" name=\"host\" required "
+  h += String("<div class=\"row\"><div><label for=\"host\">") + tr("evcc-Adresse") +
+       "</label><input id=\"host\" name=\"host\" required "
        "autocapitalize=\"none\" autocorrect=\"off\" spellcheck=\"false\" value=\"" + htmlEscape(s.evccHost) + "\"></div>";
-  h += "<div style=\"flex:.45\"><label for=\"port\">Port</label><input id=\"port\" name=\"port\" type=\"number\" required "
+  h += String("<div style=\"flex:.45\"><label for=\"port\">") + tr("Port") +
+       "</label><input id=\"port\" name=\"port\" type=\"number\" required "
        "min=\"1\" max=\"65535\" value=\"" + String(s.evccPort) + "\"></div></div>";
-  h += field("lp", "Ladepunkte", "Nummer wie in evcc, 1 ist der erste. Mehrere mit Komma: 1,2,3 – am Display wechselt Wischen.") +
+  h += field("lp", tr("Ladepunkte"),
+             tr("Nummer wie in evcc, 1 ist der erste. Mehrere mit Komma: 1,2,3 – am Display wechselt Wischen.")) +
        "<input id=\"lp\" name=\"lp\" required inputmode=\"numeric\" pattern=\"[0-9 ,]*\" value=\"" +
        settings::loadpointsText(s) + "\">";
   for (uint8_t i = 0; i < evcc::count(); i++) {
     if (!states[i].valid && states[i].missing)
-      h += String("<p class=\"st bad\">Ladepunkt ") + s.loadpoints[i] + " gibt es in evcc nicht.</p>";
+      h += "<p class=\"st bad\">" + fmt(tr("Ladepunkt %u gibt es in evcc nicht."), (unsigned)s.loadpoints[i]) + "</p>";
   }
-  h += "<p class=\"hint\">WLAN wechseln: am Display den Titel 3 Sekunden gedrückt halten.</p>";
+  h += String("<p class=\"hint\">") + tr("WLAN wechseln: am Display den Titel 3 Sekunden gedrückt halten.") + "</p>";
 
-  h += "<h2>Ladepunktseite</h2>";
-  h += toggle("vehsw", s.vehicleSwitch, "Fahrzeug wechseln",
-              "Die Fahrzeugzeile antippen schaltet durch die Fahrzeuge aus evcc.");
-  h += toggle("limit", s.chargeLimit, "Ladelimit",
-              "Steht neben dem Fahrzeug; antippen stellt es für diese Ladung ein.");
+  h += String("<h2>") + tr("Ladepunktseite") + "</h2>";
+  h += toggle("vehsw", s.vehicleSwitch, tr("Fahrzeug wechseln"),
+              tr("Die Fahrzeugzeile antippen schaltet durch die Fahrzeuge aus evcc."));
+  h += toggle("limit", s.chargeLimit, tr("Ladelimit"),
+              tr("Steht neben dem Fahrzeug; antippen stellt es für diese Ladung ein."));
   h += toggle("boost", s.boostButton, "Battery Boost",
-              "Im Modus Smart die Akku-Anzeige antippen, um den Hausakku dazuzuschalten.");
+              tr("Im Modus Smart die Akku-Anzeige antippen, um den Hausakku dazuzuschalten."));
 
-  h += "<h2>Solarseite</h2>";
-  h += toggle("solar", s.solarPage, "Solarseite anzeigen",
-              "Eigene Seite mit Erzeugung, Tagesverlauf und Prognose, erreichbar durch Wischen. Den Tagesverlauf "
-              "liefert evcc ab Version 0.319.");
+  h += String("<h2>") + tr("Solarseite") + "</h2>";
+  h += toggle("solar", s.solarPage, tr("Solarseite anzeigen"),
+              tr("Eigene Seite mit Erzeugung, Tagesverlauf und Prognose, erreichbar durch Wischen. Den Tagesverlauf "
+                 "liefert evcc ab Version 0.319."));
   h += "<fieldset id=\"solarsub\">";
-  h += "<label>Inhalt<small>Große Zahl, Diagramm und Kacheln selbst auswählen.</small></label>"
-       "<a class=\"plain\" href=\"/solar\" id=\"tosolar\">Solarseite einrichten</a>";
-  h += toggle("solar1st", s.solarFirst, "Als Startseite",
-              "Etwa für ein Display im Haus: Es bleibt auf der Solarseite, auch wenn ein Auto angesteckt wird, und "
-              "kehrt zwei Minuten nach der letzten Berührung zu ihr zurück.");
+  h += String("<label>") + tr("Inhalt") + "<small>" + tr("Große Zahl, Diagramm und Kacheln selbst auswählen.") +
+       "</small></label><a class=\"plain\" href=\"/solar\" id=\"tosolar\">" + tr("Solarseite einrichten") + "</a>";
+  h += toggle("solar1st", s.solarFirst, tr("Als Startseite"),
+              tr("Etwa für ein Display im Haus: Es bleibt auf der Solarseite, auch wenn ein Auto angesteckt wird, und "
+                 "kehrt zwei Minuten nach der letzten Berührung zu ihr zurück."));
   h += "</fieldset>";
 
-  h += "<h2>Bildschirm</h2><figure><img id=\"shot\" alt=\"Aktuelle Anzeige des Displays\" width=\"480\" height=\"480\" hidden>"
-       "<button type=\"button\" class=\"plain\" id=\"load\">Aktuelle Anzeige laden</button></figure>";
-  h += field("bright", "Helligkeit") + "<select id=\"bright\" name=\"bright\">";
-  for (int pct = 100; pct >= MIN_BRIGHTNESS_PCT; pct -= 10)
-    h += option(pct, s.brightnessPct, (String(pct) + " %").c_str());
+  h += String("<h2>") + tr("Bildschirm") + "</h2><figure><img id=\"shot\" alt=\"" + tr("Aktuelle Anzeige des Displays") +
+       "\" width=\"480\" height=\"480\" hidden><button type=\"button\" class=\"plain\" id=\"load\">" +
+       tr("Aktuelle Anzeige laden") + "</button></figure>";
+  h += field("bright", tr("Helligkeit")) + "<select id=\"bright\" name=\"bright\">";
+  for (int pct = 100; pct >= MIN_BRIGHTNESS_PCT; pct -= 10) h += option(pct, s.brightnessPct, fmt(tr("%d %%"), pct).c_str());
   h += "</select>";
   // Manche Boards dimmen nur mit langsamer Taktung (#21). Sie gilt ab dem Start, deshalb der Neustart.
   const bool slowBacklight = s.backlightHz != LCD_BACKLIGHT_HZ;
-  h += toggle("slowbl", slowBacklight, "Dimmen mit langsamer Taktung",
-              (String("Nur einschalten, wenn der Bildschirm unter 90&nbsp;% Helligkeit dunkel bleibt oder flackert.") +
+  h += toggle("slowbl", slowBacklight, tr("Dimmen mit langsamer Taktung"),
+              (String(tr("Nur einschalten, wenn der Bildschirm unter 90&nbsp;% Helligkeit dunkel bleibt oder flackert.")) +
                (slowBacklight && s.backlightHz != SLOW_BACKLIGHT_HZ
-                    ? " Eingestellt sind " + String(s.backlightHz) + " Hz."
+                    ? fmt(tr(" Eingestellt sind %lu Hz."), (unsigned long)s.backlightHz)
                     : String()))
                   .c_str());
-  h += field("timeout", "Bildschirm ausschalten", "Solange kein Auto lädt und niemand das Display bedient.") +
+  h += field("timeout", tr("Bildschirm ausschalten"), tr("Solange kein Auto lädt und niemand das Display bedient.")) +
        "<select id=\"timeout\" name=\"timeout\">";
   bool listed = false;
   for (int minutes : {0, 1, 2, 5, 10, 15, 30, 60, 120, 240}) {
@@ -1069,94 +1188,69 @@ static void handleSettings() {
     h += option(minutes, s.screenTimeoutMin, timeoutLabel(minutes).c_str());
   }
   h += "</select>";
-  h += field("theme", "Design") + "<select id=\"theme\" name=\"theme\">" +
-       option(0, s.theme, "Automatisch: tagsüber hell, nachts dunkel") + option(1, s.theme, "Immer hell") +
-       option(2, s.theme, "Immer dunkel") + "</select>";
+  h += field("theme", tr("Design")) + "<select id=\"theme\" name=\"theme\">" +
+       option(0, s.theme, tr("Automatisch: tagsüber hell, nachts dunkel")) + option(1, s.theme, tr("Immer hell")) +
+       option(2, s.theme, tr("Immer dunkel")) + "</select>";
   char lat[12], lon[12];
   snprintf(lat, sizeof(lat), "%.4f", s.latitude);
   snprintf(lon, sizeof(lon), "%.4f", s.longitude);
-  h += "<div id=\"loc\"><label>Standort<small>Für Sonnenauf- und -untergang, grob genügt.</small></label><div class=\"row\" style=\"margin-top:.5rem\">"
-       "<div><label class=\"mini\" for=\"lat\">Breitengrad</label><input id=\"lat\" name=\"lat\" type=\"number\" step=\"any\" min=\"-90\" "
+  h += String("<div id=\"loc\"><label>") + tr("Standort") + "<small>" + tr("Für Sonnenauf- und -untergang, grob genügt.") +
+       "</small></label><div class=\"row\" style=\"margin-top:.5rem\">"
+       "<div><label class=\"mini\" for=\"lat\">" + tr("Breitengrad") +
+       "</label><input id=\"lat\" name=\"lat\" type=\"number\" step=\"any\" min=\"-90\" "
        "max=\"90\" value=\"" + String(lat) + "\"></div>"
-       "<div><label class=\"mini\" for=\"lon\">Längengrad</label><input id=\"lon\" name=\"lon\" type=\"number\" step=\"any\" min=\"-180\" "
+       "<div><label class=\"mini\" for=\"lon\">" + tr("Längengrad") +
+       "</label><input id=\"lon\" name=\"lon\" type=\"number\" step=\"any\" min=\"-180\" "
        "max=\"180\" value=\"" + String(lon) + "\"></div></div></div>";
-  h += field("rot", "Drehung") + "<select id=\"rot\" name=\"rot\">" + option(0, s.rotation, "0°") +
-       option(1, s.rotation, "90° im Uhrzeigersinn") + option(2, s.rotation, "180°") +
-       option(3, s.rotation, "270° im Uhrzeigersinn") + "</select>";
+  h += field("rot", tr("Drehung")) + "<select id=\"rot\" name=\"rot\">" + option(0, s.rotation, "0°") +
+       option(1, s.rotation, tr("90° im Uhrzeigersinn")) + option(2, s.rotation, "180°") +
+       option(3, s.rotation, tr("270° im Uhrzeigersinn")) + "</select>";
 
   h += "<h2>System</h2>";
-  h += toggle("autoupd", s.autoUpdate, "Automatische Updates",
-              "Installiert neue Versionen, sobald das Display zehn Minuten nicht gebraucht wird und kein Auto lädt.");
-  h += field("pw", "Passwort",
-             (String("Schützt diese Seite und Firmware-Uploads im Heimnetz, Benutzername „" WEB_USER "“. ") +
-              (s.password.isEmpty() ? "Aktuell ist keines gesetzt."
-                                    : "Aktuell ist eines gesetzt; leer lassen, um es zu behalten.") +
-              " Vergessen? Speichern im WLAN-Portal am Display löscht es.")
+  // In beiden Sprachen beschriftet, damit die Auswahl auch findet, wer die eingestellte Sprache nicht liest
+  h += field("lang", "Sprache / Language") + "<select id=\"lang\" name=\"lang\">" +
+       option((int)Lang::De, s.language, "Deutsch") + option((int)Lang::En, s.language, "English") + "</select>";
+  h += toggle("autoupd", s.autoUpdate, tr("Automatische Updates"),
+              tr("Installiert neue Versionen, sobald das Display zehn Minuten nicht gebraucht wird und kein Auto lädt."));
+  h += field("pw", tr("Passwort"),
+             (fmt(tr("Schützt diese Seite und Firmware-Uploads im Heimnetz, Benutzername „%s“. "), WEB_USER) +
+              (s.password.isEmpty() ? tr("Aktuell ist keines gesetzt.")
+                                    : tr("Aktuell ist eines gesetzt; leer lassen, um es zu behalten.")) +
+              tr(" Vergessen? Speichern im WLAN-Portal am Display löscht es."))
                  .c_str()) +
        "<input id=\"pw\" name=\"pw\" type=\"password\" autocomplete=\"new-password\" maxlength=\"" + String(MAX_PASSWORD_LEN) +
-       "\" placeholder=\"" + (s.password.isEmpty() ? "Kein Passwort" : "Unverändert") + "\">"
-       "<label class=\"check\"><input type=\"checkbox\" id=\"pwshow\">Passwort anzeigen</label>";
+       "\" placeholder=\"" + (s.password.isEmpty() ? tr("Kein Passwort") : tr("Unverändert")) + "\">"
+       "<label class=\"check\"><input type=\"checkbox\" id=\"pwshow\">" + tr("Passwort anzeigen") + "</label>";
   if (!s.password.isEmpty())
-    h += "<label class=\"check\"><input type=\"checkbox\" name=\"pwclear\" value=\"1\">Passwort entfernen</label>";
+    h += String("<label class=\"check\"><input type=\"checkbox\" name=\"pwclear\" value=\"1\">") + tr("Passwort entfernen") +
+         "</label>";
   // Die Leiste bleibt am unteren Rand stehen, solange das Formular zu sehen ist
-  h += "<div class=\"bar\"><small id=\"dirty\" hidden>Ungespeicherte Änderungen · <a href=\"#\" id=\"undo\">Verwerfen</a></small>"
-       "<button>Speichern</button></div></form>";
+  h += String("<div class=\"bar\"><small id=\"dirty\" hidden>") + tr("Ungespeicherte Änderungen") +
+       " · <a href=\"#\" id=\"undo\">" + tr("Verwerfen") + "</a></small><button>" + tr("Speichern") + "</button></div></form>";
 
-  h += "<h2>Firmware</h2><p class=\"hint\">Installiert ist Version <span id=\"fwv\">" FW_VERSION "</span>. Beim Aktualisieren "
-       "startet das Display neu, eine laufende Ladung läuft weiter.</p>"
-       "<button type=\"button\" class=\"plain\" id=\"upd\">Jetzt aktualisieren</button>"
-       "<p class=\"hint\" id=\"updmsg\" hidden></p>";
-  h += "<h2>Diagnose</h2><p class=\"hint\">Für die Fehlersuche. Die Datei enthält keine Passwörter, WLAN-Namen, "
-       "Netzwerkadressen, Standorte oder Namen von Ladepunkten und Fahrzeugen und kann so an ein "
-       "<a href=\"" REPO_URL "/issues\" target=\"_blank\" rel=\"noopener\">Issue auf GitHub</a> angehängt werden.</p>"
-       "<a class=\"plain\" href=\"/diag?download=1\" download>Diagnose herunterladen</a>"
-       "<a class=\"plain\" href=\"/diag\" target=\"_blank\">Ansehen</a>";
-  h += "<script>const i=document.getElementById('shot'),b=document.getElementById('load');"
-       "function l(){b.textContent='Lädt …';i.onload=()=>{i.hidden=false;b.textContent='Aktualisieren'};"
-       "i.onerror=()=>{b.textContent='Erneut versuchen'};i.src='/screenshot.bmp?'+Date.now()}"
-       "b.onclick=l;if(location.search.includes('saved'))setTimeout(l,800)</script>";
-  // Abhängige Felder, ungespeicherte Änderungen und der Hinweis auf den Neustart
-  h += "<script>{const f=document.forms[0],$=s=>document.querySelector(s),bt=$('.bar button'),dn=$('#dirty');"
-       "const sync=()=>{$('#solarsub').disabled=!$('input[name=solar]').checked;$('#loc').hidden=$('#theme').value!='0'};"
-       "const snap=()=>new URLSearchParams(new FormData(f)).toString();sync();const s0=snap(),f0=new FormData(f);let sub=0;"
-       "const ts=$('#tosolar');"
-       "const upd=()=>{sync();const fd=new FormData(f);dn.hidden=snap()==s0;"
-       "ts.textContent=dn.hidden?'Solarseite einrichten':'Speichern und Solarseite einrichten';"
-       "bt.textContent=['host','port','lp','rot','pw','pwclear','slowbl'].some(k=>(fd.get(k)||'')!=(f0.get(k)||''))"
-       "?'Speichern und neu starten':'Speichern'};"
-       "f.addEventListener('input',upd);f.addEventListener('change',upd);"
-       "$('#undo').onclick=e=>{e.preventDefault();f.reset();$('#pw').type='password';upd()};"
-       "$('#pwshow').onchange=e=>{$('#pw').type=e.target.checked?'text':'password'};"
-       "f.onsubmit=()=>{sub=1};"
-       // Wechsel zum Editor mit offenen Änderungen: speichern und weiter, ohne Rückfrage des Browsers
-       "ts.onclick=e=>{if(dn.hidden)return;e.preventDefault();const n=document.createElement('input');"
-       "n.type='hidden';n.name='next';n.value='solar';f.append(n);if(f.reportValidity()){sub=1;f.submit()}else n.remove()};"
-       "addEventListener('beforeunload',e=>{if(!dn.hidden&&!sub){e.preventDefault();e.returnValue=''}});"
-       "if(location.search.includes('saved'))history.replaceState(null,'','/settings')}</script>";
-  // "Jetzt aktualisieren": Prüfung und Installation anstoßen, dann /update abfragen, bis das Ergebnis feststeht.
-  // Während des Neustarts antwortet das Display nicht; läuft danach eine andere Version, ist es geschafft.
-  h += "<script>{const u=document.getElementById('upd'),m=document.getElementById('updmsg'),v0='" FW_VERSION "';"
-       "const say=t=>{m.hidden=false;m.textContent=t};"
-       "u.onclick=async()=>{u.disabled=true;let n=0;say('Suche nach einer neuen Version …');"
-       "try{await fetch('/update?check=1&install=1')}catch(e){}"
-       "const t=setInterval(async()=>{const end=x=>{clearInterval(t);u.disabled=false;if(x)say(x)};"
-       "if(++n>120)return end('Keine Antwort vom Display. Bitte Seite neu laden.');"
-       "let x;try{x=await(await fetch('/update')).text()}catch(e){return say('Das Display startet neu …')}"
-       "const v=(x.match(/^Firmware (.*)$/m)||[])[1],r=(x.match(/^Letzte Prüfung: (.*)$/m)||[])[1]||'';"
-       "if(v&&v!=v0){document.getElementById('fwv').textContent=v;return end('Aktualisiert auf Version '+v+'.')}"
-       "if(r=='läuft …'||r=='noch nicht geprüft')say('Suche nach einer neuen Version …');"
-       "else if(r.startsWith('Installation')||r.startsWith('neue Version')||r.includes('installiert'))"
-       "say('Neue Version wird installiert, danach startet das Display neu …');"
-       "else end(r=='aktuell'?'Die Firmware ist aktuell.':r)},2000)}}</script>";
-  h += "<footer><a href=\"" PROJECT_URL "\" target=\"_blank\" rel=\"noopener\">Projektseite und Anleitung</a> · <a href=\"" REPO_URL "\" target=\"_blank\" rel=\"noopener\">GitHub</a></footer></body></html>";
+  h += "<h2>Firmware</h2><p class=\"hint\">" +
+       fmt(tr("Installiert ist Version %s. Beim Aktualisieren startet das Display neu, eine laufende Ladung läuft weiter."),
+           "<span id=\"fwv\">" FW_VERSION "</span>") +
+       "</p><button type=\"button\" class=\"plain\" id=\"upd\">" + tr("Jetzt aktualisieren") +
+       "</button><p class=\"hint\" id=\"updmsg\" hidden></p>";
+  h += String("<h2>") + tr("Diagnose") + "</h2><p class=\"hint\">" +
+       fmt(tr("Für die Fehlersuche. Die Datei enthält keine Passwörter, WLAN-Namen, Netzwerkadressen, Standorte oder "
+              "Namen von Ladepunkten und Fahrzeugen und kann so an ein %sIssue auf GitHub%s angehängt werden."),
+           "<a href=\"" REPO_URL "/issues\" target=\"_blank\" rel=\"noopener\">", "</a>") +
+       "</p><a class=\"plain\" href=\"/diag?download=1\" download>" + tr("Diagnose herunterladen") +
+       "</a><a class=\"plain\" href=\"/diag\" target=\"_blank\">" + tr("Ansehen") + "</a>";
+  h += page(SETTINGS_SCRIPT);
+  h += page(UPDATE_SCRIPT);
+  h += String("<footer><a href=\"" PROJECT_URL "\" target=\"_blank\" rel=\"noopener\">") + tr("Projektseite und Anleitung") +
+       "</a> · <a href=\"" REPO_URL "\" target=\"_blank\" rel=\"noopener\">GitHub</a></footer></body></html>";
   web.send(200, "text/html; charset=utf-8", h);
 }
 
 // ---------- Solarseite einrichten (/solar) ----------
 // Die Vorschau ist eine nachgebaute Solarseite und reagiert sofort; das echte Bild vom Display lädt ein Knopf.
 // Das Skript bekommt den Stand als Objekt C: Auswahl, was evcc liefert, und die aktuellen Werte.
-static const char SOLAR_EDITOR_HEAD[] PROGMEM = R"HTML(<!doctype html><html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Solarseite einrichten · evcc-Garage</title><style>
+static const char SOLAR_EDITOR_HEAD[] PROGMEM = R"HTML(<!doctype html><html lang="{{@lang}}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{{Solarseite einrichten}} · evcc-Garage</title><style>
 :root{color-scheme:light dark;--a:#0fdd8d}[hidden]{display:none!important}
 body{font:16px/1.4 system-ui,sans-serif;max-width:46rem;margin:0 auto;padding:1.5rem 1rem}
 .back{display:inline-block;font-size:.9rem;opacity:.65;color:inherit;text-decoration:none;padding:.4rem 0;margin-bottom:.2rem}
@@ -1221,24 +1315,24 @@ h1{font-size:1.4rem;margin:0 0 .3rem}.lead{margin:0 0 1.3rem;opacity:.65}
 button{font:inherit;font-weight:600;min-height:2.75rem;padding:.75rem 1.2rem;border:0;border-radius:.5rem;background:var(--a);color:#000;cursor:pointer;flex:1}
 button.plain{flex:none;background:none;border:1px solid #8888;color:inherit;font-weight:400;padding:.5rem .9rem}
 </style></head><body>
-<a class="back" href="/settings" id="back">‹ Einstellungen</a>
-<p class="note" id="leave" hidden>Die Änderungen an der Solarseite sind noch nicht gespeichert.
-<span class="act" style="margin-top:.6rem"><button type="button" id="lsave">Speichern und zurück</button>
-<button type="button" class="plain" id="ldrop">Verwerfen und zurück</button></span></p>
-<h1>Solarseite einrichten</h1>
-<p class="lead">Im Bild einen Bereich antippen und auswählen, was dort stehen soll.</p>
-<p class="note" id="saved" hidden>Gespeichert – die Solarseite sieht am Display jetzt so aus.</p>
-<p class="note" id="off" hidden>Die Solarseite ist ausgeschaltet. Einschalten lässt sie sich in den <a href="/settings">Einstellungen</a> unter „Solarseite“.</p>
+<a class="back" href="/settings" id="back">‹ {{Einstellungen}}</a>
+<p class="note" id="leave" hidden>{{Die Änderungen an der Solarseite sind noch nicht gespeichert.}}
+<span class="act" style="margin-top:.6rem"><button type="button" id="lsave">{{Speichern und zurück}}</button>
+<button type="button" class="plain" id="ldrop">{{Verwerfen und zurück}}</button></span></p>
+<h1>{{Solarseite einrichten}}</h1>
+<p class="lead">{{Im Bild einen Bereich antippen und auswählen, was dort stehen soll.}}</p>
+<p class="note" id="saved" hidden>{{Gespeichert – die Solarseite sieht am Display jetzt so aus.}}</p>
+<p class="note" id="off" hidden>{{Die Solarseite ist ausgeschaltet. Einschalten lässt sie sich in den <a href="/settings">Einstellungen</a> unter „Solarseite“.}}</p>
 <form method="post" class="wrap" autocomplete="off">
 <div class="left"><div class="screen" id="screen"><div class="s480" id="s480">
 <div class="hd"><span>Solar</span><span class="r" id="clock"></span></div>
 <div class="bd"><button type="button" class="area big" data-slot="big" id="aBig"></button>
 <button type="button" class="area mid" data-slot="mid" id="aMid"></button><div class="tiles" id="aTiles"></div></div>
-<div class="dots"><i></i><i class="on"></i></div></div><img id="shot" alt="Echtes Bild vom Display" hidden></div>
-<p class="cap" id="cap"></p><p class="cen"><button type="button" class="plain" id="real">Echtes Bild vom Display laden</button></p></div>
+<div class="dots"><i></i><i class="on"></i></div></div><img id="shot" alt="{{Echtes Bild vom Display}}" hidden></div>
+<p class="cap" id="cap"></p><p class="cen"><button type="button" class="plain" id="real">{{Echtes Bild vom Display laden}}</button></p></div>
 <div><div id="slots"></div>
-<div class="bar"><small id="dirty" hidden>Ungespeicherte Änderungen · <a href="#" id="undo">Verwerfen</a></small>
-<div class="act"><button>Speichern</button><button type="button" class="plain" id="reset">Zurück auf Standard</button></div></div>
+<div class="bar"><small id="dirty" hidden>{{Ungespeicherte Änderungen}} · <a href="#" id="undo">{{Verwerfen}}</a></small>
+<div class="act"><button>{{Speichern}}</button><button type="button" class="plain" id="reset">{{Zurück auf Standard}}</button></div></div>
 <input type="hidden" name="big"><input type="hidden" name="mid"><input type="hidden" name="t1"><input type="hidden" name="t2"><input type="hidden" name="t3">
 </div></form>
 <script>const C=)HTML";
@@ -1252,31 +1346,31 @@ GRID=I('<path d="M24 58 29 8h6l5 50"/><path d="M12 22h40M17 34h30"/>'),
 BAT=I('<rect x="8" y="20" width="42" height="26" rx="6"/><path d="M57 29v8"/><path d="M17 29h18v8H17z" fill="currentColor"/>');
 // Werte von jetzt; ohne Daten von evcc Beispielwerte
 const V=C.v||{pv:4400,sur:3500,home:900,grid:-3000,batp:-500,soc:78,today:18.2,rest:4.3,tom:19,fc:22.5};
-const kw=w=>(Math.abs(w)/1000).toFixed(1).replace('.',','),kwh=e=>e.toFixed(1).replace('.',',')+' kWh';
-const no={bat:'evcc meldet keinen Hausakku',grid:'evcc meldet keine Netzleistung',plants:'nur bei mehreren PV-Anlagen in evcc',
-hist:'braucht evcc ab Version 0.319',fc:'evcc hat keine Solarprognose'};
-const BIG=[{n:'Erzeugung',d:'Was die PV-Anlage gerade liefert',lb:'Erzeugung jetzt',v:kw(V.pv),ic:SUN},
-{n:'Überschuss',d:'Was gerade übrig ist, etwa fürs Auto',lb:'Überschuss jetzt',v:kw(V.sur),ic:SUN},
-{n:'Verbrauch',d:'Verbrauch im Haus ohne Ladepunkte',lb:'Verbrauch jetzt',v:kw(V.home),ic:HOUSE},
-{n:'Netz',d:'Einspeisung oder Netzbezug, je nach Richtung',lb:V.grid>0?'Netzbezug jetzt':'Einspeisung jetzt',v:kw(V.grid),ic:GRID,need:'grid'},
-{n:'Hausakku',d:'Leistung, mit der der Akku lädt oder entlädt',lb:V.batp>0?'Akku entlädt mit':'Akku lädt mit',v:kw(V.batp),ic:BAT,need:'bat'}];
-const MID=[null,{n:'Tagesverlauf',d:'Erzeugung je Stunde, dahinter die Prognose'},
-{n:'Energiebalken und Tagesverlauf',d:'Balken wie auf der Ladepunktseite: Netz, Sonne, Akku',need:'grid'},
-{n:'Anlagen einzeln',d:'Leistung je PV-Anlage',need:'plants'}];
-const TILE=[{n:'Heute erzeugt',l:'HEUTE',w:kwh(V.today),need:'hist'},
-{n:'Rest heute',d:'Prognose für den Rest des Tages; entfällt abends',l:'REST HEUTE',w:kwh(V.rest),need:'fc'},
-{n:'Morgen',d:'Prognose für morgen',l:'MORGEN',w:kwh(V.tom),need:'fc'},
-{n:'Prognose heute',d:'Prognose für den ganzen Tag',l:'PROGNOSE',w:kwh(V.fc),need:'hist'},
-{n:'Erzeugung',d:'jetzt',l:'ERZEUGUNG',w:kw(V.pv)+' kW'},{n:'Überschuss',d:'jetzt',l:'ÜBERSCHUSS',w:kw(V.sur)+' kW'},
-{n:'Verbrauch',d:'jetzt, im Haus',l:'VERBRAUCH',w:kw(V.home)+' kW'},
-{n:'Netz',d:'jetzt, Einspeisung oder Bezug',l:V.grid>0?'AUS NETZ':'INS NETZ',w:kw(V.grid)+' kW',need:'grid'},
-{n:'Hausakku-Ladestand',d:'in Prozent',l:'AKKU',w:Math.round(V.soc)+' %',need:'bat'},
-{n:'Keine Kachel',d:'Die anderen Kacheln werden breiter',l:'',w:'–'},
-{n:'Hausakku-Leistung',d:'jetzt, beim Laden oder Entladen',l:V.batp<=-50?'IN AKKU':V.batp>=50?'AUS AKKU':'AKKU',w:kw(V.batp)+' kW',need:'bat'}];
+const kw=w=>(Math.abs(w)/1000).toFixed(1).replace('.','{{@dec}}'),kwh=e=>e.toFixed(1).replace('.','{{@dec}}')+' kWh';
+const no={bat:'{{evcc meldet keinen Hausakku}}',grid:'{{evcc meldet keine Netzleistung}}',plants:'{{nur bei mehreren PV-Anlagen in evcc}}',
+hist:'{{braucht evcc ab Version 0.319}}',fc:'{{evcc hat keine Solarprognose}}'};
+const BIG=[{n:'{{Erzeugung}}',d:'{{Was die PV-Anlage gerade liefert}}',lb:'{{Erzeugung jetzt}}',v:kw(V.pv),ic:SUN},
+{n:'{{Überschuss}}',d:'{{Was gerade übrig ist, etwa fürs Auto}}',lb:'{{Überschuss jetzt}}',v:kw(V.sur),ic:SUN},
+{n:'{{Verbrauch}}',d:'{{Verbrauch im Haus ohne Ladepunkte}}',lb:'{{Verbrauch jetzt}}',v:kw(V.home),ic:HOUSE},
+{n:'{{Netz}}',d:'{{Einspeisung oder Netzbezug, je nach Richtung}}',lb:V.grid>0?'{{Netzbezug jetzt}}':'{{Einspeisung jetzt}}',v:kw(V.grid),ic:GRID,need:'grid'},
+{n:'{{Hausakku}}',d:'{{Leistung, mit der der Akku lädt oder entlädt}}',lb:V.batp>0?'{{Akku entlädt mit}}':'{{Akku lädt mit}}',v:kw(V.batp),ic:BAT,need:'bat'}];
+const MID=[null,{n:'{{Tagesverlauf}}',d:'{{Erzeugung je Stunde, dahinter die Prognose}}'},
+{n:'{{Energiebalken und Tagesverlauf}}',d:'{{Balken wie auf der Ladepunktseite: Netz, Sonne, Akku}}',need:'grid'},
+{n:'{{Anlagen einzeln}}',d:'{{Leistung je PV-Anlage}}',need:'plants'}];
+const TILE=[{n:'{{Heute erzeugt}}',l:'{{HEUTE}}',w:kwh(V.today),need:'hist'},
+{n:'{{Rest heute}}',d:'{{Prognose für den Rest des Tages; entfällt abends}}',l:'{{REST HEUTE}}',w:kwh(V.rest),need:'fc'},
+{n:'{{Morgen}}',d:'{{Prognose für morgen}}',l:'{{MORGEN}}',w:kwh(V.tom),need:'fc'},
+{n:'{{Prognose heute}}',d:'{{Prognose für den ganzen Tag}}',l:'{{PROGNOSE}}',w:kwh(V.fc),need:'hist'},
+{n:'{{Erzeugung}}',d:'{{jetzt}}',l:'{{ERZEUGUNG}}',w:kw(V.pv)+' kW'},{n:'{{Überschuss}}',d:'{{jetzt}}',l:'{{ÜBERSCHUSS}}',w:kw(V.sur)+' kW'},
+{n:'{{Verbrauch}}',d:'{{jetzt, im Haus}}',l:'{{VERBRAUCH}}',w:kw(V.home)+' kW'},
+{n:'{{Netz}}',d:'{{jetzt, Einspeisung oder Bezug}}',l:V.grid>0?'{{AUS NETZ}}':'{{INS NETZ}}',w:kw(V.grid)+' kW',need:'grid'},
+{n:'{{Hausakku-Ladestand}}',d:'{{in Prozent}}',l:'{{AKKU}}',w:Math.round(V.soc)+'{{@pct}}',need:'bat'},
+{n:'{{Keine Kachel}}',d:'{{Die anderen Kacheln werden breiter}}',l:'',w:'–'},
+{n:'{{Hausakku-Leistung}}',d:'{{jetzt, beim Laden oder Entladen}}',l:V.batp<=-50?'{{IN AKKU}}':V.batp>=50?'{{AUS AKKU}}':'{{AKKU}}',w:kw(V.batp)+' kW',need:'bat'}];
 // Reihenfolge in der Auswahl; die Nummern stehen so im Speicher des Displays
 const TORD=[0,1,2,3,4,5,6,7,8,10,9];
-const SLOTS=[{id:'big',t:'Große Zahl',o:BIG},{id:'mid',t:'Diagramm',o:MID},{id:'t1',t:'Kachel links',o:TILE,ord:TORD},
-{id:'t2',t:'Kachel Mitte',o:TILE,ord:TORD},{id:'t3',t:'Kachel rechts',o:TILE,ord:TORD}];
+const SLOTS=[{id:'big',t:'{{Große Zahl}}',o:BIG},{id:'mid',t:'{{Diagramm}}',o:MID},{id:'t1',t:'{{Kachel links}}',o:TILE,ord:TORD},
+{id:'t2',t:'{{Kachel Mitte}}',o:TILE,ord:TORD},{id:'t3',t:'{{Kachel rechts}}',o:TILE,ord:TORD}];
 const DEF={big:0,mid:C.has.plants?3:1,t1:0,t2:1,t3:2},S0={big:C.big,mid:C.mid,t1:C.t[0],t2:C.t[1],t3:C.t[2]};
 let st={...S0},cur='big',sub=0;
 const E=[0,0,.14,.52,.78,.93,.9,.2,0,0,0,0,0,0,0],F=[0,0,0,0,0,0,0,.6,.42,.2,.05,0,0,0,0];
@@ -1284,16 +1378,16 @@ const ok=o=>!o.need||C.has[o.need];
 function draw(){$('shot').hidden=true;
 const b=BIG[st.big];$('aBig').innerHTML='<span class="lb">'+b.lb+'</span><span class="nr"><span class="v">'+b.v+'</span><span class="u">kW</span>'+b.ic+'</span>';
 let m='';
-if(st.mid==3)m='<div class="plants"><div class="p"><span>Anlage 1</span><b>'+kw(V.pv*.66)+' kW</b><span class="t"><i style="width:66%"></i></span></div>'+
-'<div class="p"><span>Anlage 2</span><b>'+kw(V.pv*.34)+' kW</b><span class="t"><i style="width:34%"></i></span></div></div>';
+if(st.mid==3)m='<div class="plants"><div class="p"><span>{{Anlage 1}}</span><b>'+kw(V.pv*.66)+' kW</b><span class="t"><i style="width:66%"></i></span></div>'+
+'<div class="p"><span>{{Anlage 2}}</span><b>'+kw(V.pv*.34)+' kW</b><span class="t"><i style="width:34%"></i></span></div></div>';
 else{if(st.mid==2)m+='<div class="flow"><span class="g"></span><span class="y"></span></div>';
 m+='<div class="chart" style="height:'+(st.mid==2?78:108)+'px">'+E.map((e,i)=>'<span class="c">'+(e||F[i]?'':'<span class="z"></span>')+
 (F[i]?'<span class="f" style="height:'+F[i]*100+'%"></span>':'')+(e?'<span class="e" style="height:'+e*100+'%"></span>':'')+'</span>').join('')+
 '</div><div class="axis">'+E.map((e,i)=>'<span>'+(i%3?'':i+6)+'</span>').join('')+'</div>'}
 $('aMid').innerHTML=m;
 const three=![st.t1,st.t2,st.t3].includes(9);
-$('aTiles').innerHTML=['t1','t2','t3'].map(k=>{const t={...TILE[st[k]]};if(three&&st[k]==5)t.l='ÜBRIG';return st[k]==9
-?'<button type="button" class="area tile empty" data-slot="'+k+'" aria-label="Leere Kachel">+</button>'
+$('aTiles').innerHTML=['t1','t2','t3'].map(k=>{const t={...TILE[st[k]]};if(three&&st[k]==5)t.l='{{ÜBRIG}}';return st[k]==9
+?'<button type="button" class="area tile empty" data-slot="'+k+'" aria-label="{{Leere Kachel}}">+</button>'
 :'<button type="button" class="area tile" data-slot="'+k+'"><span class="l">'+t.l+'</span><span class="w">'+t.w+'</span></button>'}).join('');
 document.querySelectorAll('.area').forEach(a=>{a.classList.toggle('sel',a.dataset.slot==cur);a.onclick=()=>pick(a.dataset.slot,1)});
 for(const k in st)f.elements[k].value=st[k];
@@ -1301,7 +1395,7 @@ const d=Object.keys(st).some(k=>st[k]!=S0[k]);$('dirty').hidden=!d;if(!d)$('leav
 function list(){$('slots').innerHTML=SLOTS.map(s=>'<section class="slot'+(s.id==cur?' open':'')+'" id="s_'+s.id+'"><button type="button" class="sh" data-slot="'+s.id+
 '" aria-expanded="'+(s.id==cur)+'"><b>'+s.t+'</b><span>'+s.o[st[s.id]].n+'</span></button><div class="opts">'+(s.ord||s.o.map((o,k)=>k)).map(k=>{const o=s.o[k];return !o?'':
 '<label class="opt'+(ok(o)?'':' off')+'"><input type="radio" name="r_'+s.id+'" value="'+k+'"'+(st[s.id]==k?' checked':'')+(ok(o)||st[s.id]==k?'':' disabled')+
-'><span class="n">'+o.n+'<small>'+(ok(o)?o.d||'':'Nicht verfügbar: '+no[o.need])+'</small></span>'+(o.w||o.v?'<span class="x">'+(o.w||o.v+' kW')+'</span>':'')+'</label>'}).join('')+
+'><span class="n">'+o.n+'<small>'+(ok(o)?o.d||'':'{{Nicht verfügbar: %s}}'.replace('%s',no[o.need]))+'</small></span>'+(o.w||o.v?'<span class="x">'+(o.w||o.v+' kW')+'</span>':'')+'</label>'}).join('')+
 '</div></section>').join('');
 document.querySelectorAll('.sh').forEach(b=>b.onclick=()=>pick(b.dataset.slot==cur?'':b.dataset.slot));
 document.querySelectorAll('.opt input').forEach(i=>i.onchange=()=>{const k=i.name.slice(2);st[k]=+i.value;draw();
@@ -1317,14 +1411,14 @@ $('lsave').onclick=()=>{const n=document.createElement('input');n.type='hidden';
 $('ldrop').onclick=()=>{sub=1;location.href='/settings'};
 addEventListener('beforeunload',e=>{if(!$('dirty').hidden&&!sub){e.preventDefault();e.returnValue=''}});
 // Das Display zeigt die Auswahl eine Minute lang mit den echten Daten, dann holt die Seite sein Bild
-$('real').onclick=async()=>{const b=$('real'),i=$('shot');b.disabled=true;b.textContent='Lädt …';
+$('real').onclick=async()=>{const b=$('real'),i=$('shot');b.disabled=true;b.textContent='{{Lädt …}}';
 const done=t=>{b.disabled=false;b.textContent=t};
 try{await fetch('/preview?s=pvlive&cfg='+[st.big,st.mid,st.t1,st.t2,st.t3].join(','));await new Promise(r=>setTimeout(r,1500));
-i.onload=()=>{i.hidden=false;done('Echtes Bild neu laden')};i.onerror=()=>done('Erneut versuchen');i.src='/screenshot.bmp?'+Date.now()}
-catch(e){done('Erneut versuchen')}};
-$('clock').textContent=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
-$('cap').textContent=C.v?'Vorschau mit den Werten von jetzt, Diagramm als Beispiel':'Vorschau mit Beispielwerten';
-$('saved').hidden=!C.saved;if(C.saved==2)$('saved').textContent='Einstellungen gespeichert.';$('off').hidden=C.on;if(C.saved)history.replaceState(null,'','/solar');
+i.onload=()=>{i.hidden=false;done('{{Echtes Bild neu laden}}')};i.onerror=()=>done('{{Erneut versuchen}}');i.src='/screenshot.bmp?'+Date.now()}
+catch(e){done('{{Erneut versuchen}}')}};
+$('clock').textContent=new Date().toLocaleTimeString('{{@locale}}',{hour:'2-digit',minute:'2-digit'});
+$('cap').textContent=C.v?'{{Vorschau mit den Werten von jetzt, Diagramm als Beispiel}}':'{{Vorschau mit Beispielwerten}}';
+$('saved').hidden=!C.saved;if(C.saved==2)$('saved').textContent='{{Einstellungen gespeichert.}}';$('off').hidden=C.on;if(C.saved)history.replaceState(null,'','/solar');
 new ResizeObserver(()=>{$('s480').style.transform='scale('+$('screen').clientWidth/480+')'}).observe($('screen'));
 list();draw()}
 </script></body></html>)HTML";
@@ -1368,10 +1462,10 @@ static void handleSolarEditor() {
            st.solarBig, mid, st.solarTile[0], st.solarTile[1], st.solarTile[2], st.solarPage, (int)web.arg("saved").toInt(),
            !data || s.batterySoc >= 0, !data || s.hasGrid, !data || !st.solarPage || solar.plantCount >= 2,
            !data || !st.solarPage || solar.valid, !data || s.solarToday >= 0, values);
-  String h = FPSTR(SOLAR_EDITOR_HEAD);
-  h.reserve(15360);
+  String h = page(SOLAR_EDITOR_HEAD);
+  h.reserve(16384);
   h += json;
-  h += FPSTR(SOLAR_EDITOR_TAIL);
+  h += page(SOLAR_EDITOR_TAIL);
   web.send(200, "text/html; charset=utf-8", h);
 }
 
@@ -1469,7 +1563,7 @@ static void startNetworkServices() {
     ArduinoOTA.onEnd([]() { restartAt = millis() + 500; });
     ArduinoOTA.onStart([]() {
       display::setBrightness(settings::backlight());
-      ui::showMessage(ICON_SETTINGS, "Update", "Neue Firmware wird installiert …");
+      ui::showMessage(ICON_SETTINGS, "Update", tr("Neue Firmware wird installiert …"));
       lv_refr_now(nullptr);
     });
     // Bricht der Upload ab, bliebe der Hinweis sonst bis zum Neustart stehen
@@ -1498,7 +1592,7 @@ void setup() {
 
   ui::begin(onModeSelected, openSettings, onSwipe, onBoostTapped, onVehicleTapped, onLimitSelected);
   ui::onMessageTap(closeSettings);
-  ui::showMessage(ICON_SETTINGS, "Verbinde …", "WLAN-Verbindung wird aufgebaut");
+  ui::showMessage(ICON_SETTINGS, tr("Verbinde …"), tr("WLAN-Verbindung wird aufgebaut"));
   lv_refr_now(nullptr);
   display::setBrightness(settings::backlight());  // erst einschalten, wenn ein Bild im Speicher steht
 
@@ -1510,9 +1604,11 @@ void setup() {
     ui::showMain();
   } else {
     portalActive = true;
-    ui::showMessage(ICON_WIFI_OFF, "WLAN einrichten",
-                    "Mit dem WLAN \"" PORTAL_AP_NAME "\" verbinden. Die Seite öffnet sich automatisch, "
-                    "sonst 192.168.4.1 aufrufen.");
+    char text[200];
+    snprintf(text, sizeof(text),
+             tr("Mit dem WLAN \"%s\" verbinden. Die Seite öffnet sich automatisch, sonst 192.168.4.1 aufrufen."),
+             PORTAL_AP_NAME);
+    ui::showMessage(ICON_WIFI_OFF, tr("WLAN einrichten"), text);
   }
   WiFi.onEvent(
       [](WiFiEvent_t, WiFiEventInfo_t info) {
@@ -1572,7 +1668,7 @@ static void handleUpdates() {
   switch (updater::loop(idle)) {
     case updater::Event::Installing: {
       static char text[80];
-      snprintf(text, sizeof(text), "Version %s wird geladen und installiert …", updater::availableVersion());
+      snprintf(text, sizeof(text), tr("Version %s wird geladen und installiert …"), updater::availableVersion());
       ui::showMessage(ICON_SETTINGS, "Update", text);
       break;
     }

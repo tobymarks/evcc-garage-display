@@ -7,6 +7,10 @@ Strom per USB-C. Bezugsquelle, die ich genutzt habe: [AliExpress](https://de.ali
 
 Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-final`.
 
+**English:** The display and its settings pages are available in English. A newly flashed display starts in
+English; choose the language in the Wi-Fi setup portal ("Sprache / Language") or later under `/settings` → System.
+This guide and the diagnostics output are German only.
+
 ## Anzeige
 
 | Bereich | Inhalt |
@@ -150,6 +154,7 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
 
 | Feld | Standard |
 | --- | --- |
+| Sprache / Language | `en` bei einem neuen Display, `de` für Deutsch |
 | evcc-Adresse / Port | `192.168.178.209` / `7070` |
 | Ladepunkt-Nr. | `1` (Garage); mehrere mit Komma, z. B. `1,2,3` – dann wischen zum Wechseln |
 | Breiten-/Längengrad | Mitte Deutschlands – für die automatische Tag/Nacht-Umschaltung |
@@ -164,7 +169,7 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
   Unter „Ladepunktseite" und „Solarseite" lässt sich ein- und ausschalten, was das Display zeigt und was sich
   antippen lässt (Fahrzeug wechseln, Ladelimit, Battery Boost, Solarseite); unter „Bildschirm" kann die Seite die
   aktuelle Anzeige des Displays laden. Diese Schalter sowie Design, Helligkeit und Bildschirm-Timeout wirken sofort.
-  Nur Änderungen an evcc-Adresse, Port, Ladepunkten, Drehung, Passwort oder am Schalter „Dimmen mit langsamer
+  Nur Änderungen an evcc-Adresse, Port, Ladepunkten, Drehung, Passwort, Sprache oder am Schalter „Dimmen mit langsamer
   Taktung" starten das Display neu – der Knopf heißt dann „Speichern und neu starten". Oben steht, ob das Display
   evcc erreicht. Das WLAN bleibt unverändert.
 - **Bildschirm bleibt beim Dimmen dunkel oder flackert:** Manche Boards dimmen nur, wenn die Hintergrundbeleuchtung
@@ -203,6 +208,11 @@ Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
 Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktionen sind Schalter unter
 `/settings`.
 
+- **16.11.2026**
+  - Englisch: Display, Einstellungsseite und „Solarseite einrichten“ gibt es jetzt auch auf Englisch (#44).
+    Umschalten unter `/settings` → System → „Sprache / Language“ oder im WLAN-Portal; danach startet das Display
+    neu. Bestehende Displays bleiben deutsch, neu geflashte beginnen englisch. Diagnose (`/diag`, `/update`) und
+    diese Anleitung bleiben deutsch.
 - **15.11.2026**
   - Einstellungsseite überarbeitet: Schalter statt Auswahllisten für An/Aus, kürzere Erklärungen, neue Abschnitte
     (Verbindung, Ladepunktseite, Solarseite, Bildschirm, System). „Speichern“ bleibt am unteren Rand sichtbar und
@@ -275,6 +285,11 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
   Solarprognose.
 
 ## Anpassen
+
+Weitere Sprachen: Im Quelltext stehen die deutschen Texte in `tr("…")`; eine Sprache ist eine Tabelle wie
+[src/lang_en.cpp](src/lang_en.cpp), eingetragen in [src/lang.h](src/lang.h) und `src/lang.cpp`.
+`python3 tools/check_lang.py` prüft, ob sie vollständig ist (läuft auch vor jedem Build), und
+`SIM_LANG=en ./tools/sim/render.sh <Ordner> <Zustand …>` zeigt, ob die Texte auf den Bildschirm passen.
 
 Zeiten und Standardwerte stehen in [src/config.h](src/config.h), Pins und Display-Timings in
 [src/board.h](src/board.h). Ein Passwort für Weboberfläche und OTA

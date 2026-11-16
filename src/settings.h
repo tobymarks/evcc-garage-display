@@ -26,6 +26,7 @@ struct Settings {
   uint8_t solarTile[3];      // Solarseite, Kacheln von links: SOLAR_TILE_…
   bool solarFirst;           // Solarseite ist die erste Seite und bleibt stehen (z. B. Display in der Küche)
   uint32_t backlightHz;      // Taktung der Hintergrundbeleuchtung ab dem Start: Schalter „Dimmen mit langsamer Taktung“ oder /backlight?hz=…&save=1 (#21)
+  uint8_t language;          // Sprache der Oberfläche, siehe Lang in lang.h; ein Wechsel wirkt nach dem Neustart
   String password;           // schützt Weboberfläche und OTA (Benutzer "admin"); leer = offen
 };
 
