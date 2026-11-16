@@ -11,6 +11,9 @@ Der frühere Stand für das 2,8"-„Cheap Yellow Display" liegt im Git-Tag `cyd-
 English; choose the language in the Wi-Fi setup portal ("Sprache / Language") or later under `/settings` → System.
 This guide and the diagnostics output are German only.
 
+**Anleitungen und häufige Fragen** für alle, die das Display nutzen: [Hilfe](https://tobymarks.github.io/evcc-garage-display/hilfe.html).
+Diese README beschreibt Funktionen und Technik.
+
 ## Anzeige
 
 | Bereich | Inhalt |
@@ -150,7 +153,8 @@ starten und innerhalb von 10 Minuten `/update?check=1&install=1` aufrufen (oder 
 ## Erster Start
 
 Mit dem Handy ins WLAN `evcc-Garage` wechseln – die Einrichtungsseite öffnet sich (sonst `192.168.4.1`).
-WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
+WLAN auswählen und Passwort eingeben. Schritt für Schritt steht das in der
+[Hilfe](https://tobymarks.github.io/evcc-garage-display/hilfe.html#einrichten). Darunter lassen sich einstellen:
 
 | Feld | Standard |
 | --- | --- |
@@ -172,9 +176,8 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
   Nur Änderungen an evcc-Adresse, Port, Ladepunkten, Drehung, Passwort, Sprache oder am Schalter „Dimmen mit langsamer
   Taktung" starten das Display neu – der Knopf heißt dann „Speichern und neu starten". Oben steht, ob das Display
   evcc erreicht. Das WLAN bleibt unverändert.
-- **Bildschirm bleibt beim Dimmen dunkel oder flackert:** Manche Boards dimmen nur, wenn die Hintergrundbeleuchtung
-  langsamer getaktet wird. Dafür gibt es unter „Bildschirm" den Schalter „Dimmen mit langsamer Taktung" (150 Hz
-  statt 20 000 Hz, ab Werk aus). Bei 100 % Helligkeit spielt er keine Rolle.
+- **Bildschirm bleibt beim Dimmen dunkel oder flackert:** Schalter „Dimmen mit langsamer Taktung" unter „Bildschirm"
+  (150 Hz statt 20 000 Hz, ab Werk aus), siehe [Hilfe](https://tobymarks.github.io/evcc-garage-display/hilfe.html#helligkeit-dunkel).
 - **Passwort (optional):** unter „System" setzen. Danach verlangen alle Seiten des Displays die Anmeldung als
   `admin`, und Firmware-Uploads im Heimnetz brauchen dasselbe Passwort (`--auth=…` bei `espota`,
   in PlatformIO `upload_flags = --auth=…`). Es wird unverschlüsselt im Heimnetz übertragen – also kein Passwort
@@ -183,6 +186,7 @@ WLAN auswählen und Passwort eingeben. Darunter lassen sich einstellen:
 - **Einstellungen am Display** (auch für ein anderes WLAN): „Garage" oben links **3 Sekunden gedrückt halten** →
   das Portal `evcc-Garage` startet erneut. Antippen des Hinweises bricht ab.
 - Nach einem Stromausfall wartet das Display auf den Router und startet nach 5 Minuten ohne WLAN selbst neu.
+- Weitere Fragen zu Verbindung, Anzeige und Updates beantwortet die [Hilfe](https://tobymarks.github.io/evcc-garage-display/hilfe.html#fragen).
 
 ## Diagnose
 
@@ -209,6 +213,8 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
 `/settings`.
 
 - **16.11.2026**
+  - Neue [Hilfeseite](https://tobymarks.github.io/evcc-garage-display/hilfe.html) mit Anleitungen und häufigen
+    Fragen. Die Einstellungsseite verlinkt dorthin, unter „Firmware“ direkt auf das Update von Hand.
   - Englisch: Display, Einstellungsseite und „Solarseite einrichten“ gibt es jetzt auch auf Englisch (#44).
     Umschalten unter `/settings` → System → „Sprache / Language“ oder im WLAN-Portal; danach startet das Display
     neu. Bestehende Displays bleiben deutsch, neu geflashte beginnen englisch. Diagnose (`/diag`, `/update`) und

@@ -1232,7 +1232,10 @@ static void handleSettings() {
        fmt(tr("Installiert ist Version %s. Beim Aktualisieren startet das Display neu, eine laufende Ladung läuft weiter."),
            "<span id=\"fwv\">" FW_VERSION "</span>") +
        "</p><button type=\"button\" class=\"plain\" id=\"upd\">" + tr("Jetzt aktualisieren") +
-       "</button><p class=\"hint\" id=\"updmsg\" hidden></p>";
+       "</button><p class=\"hint\" id=\"updmsg\" hidden></p><p class=\"hint\">" +
+       fmt(tr("Bleibt das Display auf einer alten Version stehen, hilft die %sAnleitung für Updates von Hand%s."),
+           "<a href=\"" PROJECT_URL "hilfe.html#update-von-hand\" target=\"_blank\" rel=\"noopener\">", "</a>") +
+       "</p>";
   h += String("<h2>") + tr("Diagnose") + "</h2><p class=\"hint\">" +
        fmt(tr("Für die Fehlersuche. Die Datei enthält keine Passwörter, WLAN-Namen, Netzwerkadressen, Standorte oder "
               "Namen von Ladepunkten und Fahrzeugen und kann so an ein %sIssue auf GitHub%s angehängt werden."),
@@ -1242,6 +1245,7 @@ static void handleSettings() {
   h += page(SETTINGS_SCRIPT);
   h += page(UPDATE_SCRIPT);
   h += String("<footer><a href=\"" PROJECT_URL "\" target=\"_blank\" rel=\"noopener\">") + tr("Projektseite und Anleitung") +
+       "</a> · <a href=\"" PROJECT_URL "hilfe.html\" target=\"_blank\" rel=\"noopener\">" + tr("Hilfe") +
        "</a> · <a href=\"" REPO_URL "\" target=\"_blank\" rel=\"noopener\">GitHub</a></footer></body></html>";
   web.send(200, "text/html; charset=utf-8", h);
 }

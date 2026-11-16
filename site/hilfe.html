@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hilfe – evcc-Garagendisplay</title>
+    <meta
+      name="description"
+      content="Anleitungen und Antworten zum evcc-Garagendisplay: Installation, WLAN, Solarseite, Updates, Helligkeit und was die Anzeige bedeutet."
+    />
+    <meta name="theme-color" content="#010322" />
+    <link rel="icon" href="img/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="help">
+    <header class="help-head">
+      <nav class="nav wrap">
+        <a class="brand" href="./">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M20 4h12l-6 16h10L18 44l4-18H12z" /></svg>
+          Garagendisplay
+        </a>
+        <div class="nav-links">
+          <a href="#anleitungen">Anleitungen</a>
+          <a href="#fragen">Fragen</a>
+          <a href="./#installieren">Installieren</a>
+          <a class="gh" href="https://github.com/tobymarks/evcc-garage-display">GitHub</a>
+        </div>
+      </nav>
+      <div class="wrap help-intro">
+        <p class="eyebrow">Hilfe</p>
+        <h1>Was tun, wenn …?</h1>
+        <p class="lead">
+          Anleitungen für die üblichen Handgriffe und Antworten auf die Fragen, die bisher aufkamen. Die Einstellungen
+          des Displays erreichst du im Heimnetz unter <b>evcc-garage.local:8080</b>.
+        </p>
+        <nav class="guide-cards" aria-label="Anleitungen">
+          <a href="#einrichten"><b>Erstinstallation</b><span>Flashen, WLAN, evcc verbinden</span></a>
+          <a href="#solarseite"><b>Solarseite einrichten</b><span>Zusätzliche Seite mit Erzeugung und Prognose</span></a>
+          <a href="#update-von-hand"><b>Update von Hand</b><span>Wenn das automatische Update nicht klappt</span></a>
+          <a href="#wlan-wechseln"><b>WLAN wechseln, zurücksetzen</b><span>Neues Netz, vergessenes Passwort, Werkszustand</span></a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap help-main">
+      <!-- ---------- Anleitungen ---------- -->
+      <section id="anleitungen" class="help-section">
+        <h2>Anleitungen</h2>
+
+        <article class="guide" id="einrichten">
+          <h3>Erstinstallation</h3>
+          <p class="guide-sub">Etwa zehn Minuten. Du brauchst einen Computer mit Chrome oder Edge und ein Handy.</p>
+          <ol>
+            <li>
+              Das Display mit einem <b>Datenkabel</b> an den Computer stecken, am zuverlässigsten von USB-A auf USB-C.
+            </li>
+            <li>
+              Auf der <a href="./#installieren">Startseite</a> „Installieren“ klicken und den Port wählen (meist „USB
+              Serial“, unter Windows „USB-SERIAL CH340“). Beim ersten Mal <b>„Erase device“</b> anhaken, das löscht die
+              Demo-Software ab Werk. <a href="#kein-port">Kein Port in der Liste?</a>
+            </li>
+            <li>
+              Nach dem Neustart öffnet das Display ein eigenes WLAN. Mit dem Handy ins WLAN <b>evcc-Garage</b> wechseln.
+              Die Einrichtungsseite öffnet sich von selbst, sonst im Browser <code>192.168.4.1</code> aufrufen.
+            </li>
+            <li>
+              Heimnetz wählen, Passwort eingeben und darunter die Felder ausfüllen:
+              <table>
+                <tr><th>Sprache / Language</th><td><code>de</code> für Deutsch. Ein neues Display beginnt englisch.</td></tr>
+                <tr><th>evcc-Adresse</th><td>IP-Adresse oder Name des Rechners, auf dem evcc läuft, ohne <code>http://</code>. Zum Beispiel <code>192.168.178.20</code></td></tr>
+                <tr><th>Port</th><td><code>7070</code>, außer du hast ihn in evcc geändert</td></tr>
+                <tr><th>Ladepunkt-Nr.</th><td><code>1</code> ist der erste Ladepunkt in evcc. Mehrere mit Komma, z. B. <code>1,2</code></td></tr>
+                <tr><th>Breiten-/Längengrad</th><td>Ungefähr reicht. Damit wechselt das Design nach Sonnenstand zwischen hell und dunkel</td></tr>
+                <tr><th>Drehung</th><td><code>0</code>, oder je 90° im Uhrzeigersinn <code>1</code>, <code>2</code>, <code>3</code></td></tr>
+              </table>
+            </li>
+            <li>
+              Speichern. Das Display verbindet sich mit dem Heimnetz und zeigt nach wenigen Sekunden den Ladepunkt. Steht
+              dort „evcc nicht erreichbar“, hilft <a href="#evcc-nicht-erreichbar">dieser Abschnitt</a>.
+            </li>
+          </ol>
+          <p class="guide-note">
+            Alles Weitere stellst du bequem am Computer ein: im Heimnetz <b>evcc-garage.local:8080</b> aufrufen.
+            Die meisten Änderungen wirken sofort.
+          </p>
+        </article>
+
+        <article class="guide" id="solarseite">
+          <h3>Solarseite einrichten</h3>
+          <p class="guide-sub">
+            Eine zusätzliche Seite hinter den Ladepunkten: aktuelle Erzeugung, der Tag je Stunde und die Prognose. Gut
+            für ein zweites Display im Haus.
+          </p>
+          <ol>
+            <li>Einstellungen öffnen (<b>evcc-garage.local:8080</b>) und unter „Solarseite“ den Schalter einschalten.</li>
+            <li>
+              Auf <b>„Solarseite einrichten“</b> tippen. Dort wählst du die große Zahl (z. B. Erzeugung oder Überschuss),
+              das Diagramm und die drei Kacheln. Die Vorschau zeigt jede Änderung sofort, „Echtes Bild vom Display laden“
+              zeigt, wie es wirklich aussieht.
+            </li>
+            <li>Speichern. Am Display wischst du vom Ladepunkt nach links zur Solarseite.</li>
+            <li>
+              Optional: <b>„Als Startseite“</b> einschalten. Dann beginnt das Display mit der Solarseite, springt nicht
+              zum Ladepunkt und kehrt zwei Minuten nach der letzten Berührung zu ihr zurück.
+            </li>
+          </ol>
+          <p class="guide-note">
+            Was evcc nicht liefert, ist nicht wählbar, etwa die Prognose ohne eingerichtete Solarprognose in evcc. Den
+            Tagesverlauf gibt es ab evcc 0.319, ältere Versionen zeigen nur Erzeugung und Prognose.
+          </p>
+        </article>
+
+        <article class="guide" id="update-von-hand">
+          <h3>Update von Hand</h3>
+          <p class="guide-sub">
+            Normalerweise hält sich das Display selbst aktuell (<a href="#wie-updates">so funktioniert das</a>). Wenn es
+            auf einer alten Version stehen bleibt, geht es so, vom einfachsten zum sichersten Weg:
+          </p>
+          <ol>
+            <li>
+              <b>Über die Einstellungen:</b> Einstellungen öffnen, ganz unten unter „Firmware“ auf
+              <b>„Jetzt aktualisieren“</b> tippen. Die Seite zeigt, was passiert, und danach die neue Version.
+            </li>
+            <li>
+              <b>Über die Adresse:</b> Das Display antippen oder neu starten und innerhalb von 10 Minuten im Browser
+              <code>http://evcc-garage.local:8080/update?check=1&amp;install=1</code> aufrufen. Das ist der Weg für
+              Displays mit einer Firmware von vor dem 14.11.2026. Bei denen gibt es „Jetzt aktualisieren“ noch nicht,
+              und das automatische Update kann dort scheitern.
+            </li>
+            <li>
+              <b>Steht dort „Prüfung fehlgeschlagen (HTTP -1)“:</b> Dem Display fehlt für die Prüfung Speicher. Das kam
+              vor der Version vom 16.11.2026 bei mehreren Ladepunkten mit Solarseite vor. Vorübergehend nur einen
+              Ladepunkt eintragen und die Solarseite ausschalten, speichern, dann Schritt 1 oder 2 wiederholen. Danach
+              die Einstellungen zurückstellen.
+            </li>
+            <li>
+              <b>Per USB, klappt immer:</b> Wie bei der <a href="#einrichten">Erstinstallation</a> über die Startseite
+              installieren, aber <b>ohne</b> Haken bei „Erase device“. Dann bleiben WLAN und alle Einstellungen
+              erhalten.
+            </li>
+          </ol>
+          <p class="guide-note">
+            Die installierte Version steht in den Einstellungen unter „Firmware“ und unter
+            <code>evcc-garage.local:8080/update</code>. Die aktuelle Version siehst du auf der
+            <a href="./#installieren">Startseite</a> unter dem Installieren-Knopf.
+          </p>
+        </article>
+
+        <article class="guide" id="wlan-wechseln">
+          <h3>WLAN wechseln, Passwort vergessen, zurücksetzen</h3>
+          <ol>
+            <li>
+              <b>Anderes WLAN oder neues WLAN-Passwort:</b> Am Display den Namen oben links <b>3 Sekunden gedrückt
+              halten</b>. Das Einrichtungs-WLAN <b>evcc-Garage</b> startet erneut, weiter wie bei der
+              <a href="#einrichten">Erstinstallation</a> ab Schritt 3. Antippen des Hinweises am Display bricht ab.
+            </li>
+            <li>
+              <b>Passwort der Einstellungsseite vergessen:</b> Wie oben das Einrichtungs-WLAN öffnen und dort speichern.
+              Das löscht das Passwort.
+            </li>
+            <li>
+              <b>Komplett zurücksetzen:</b> Per USB neu installieren und dabei „Erase device“ anhaken. Danach ist das
+              Display wie neu.
+            </li>
+          </ol>
+        </article>
+      </section>
+
+      <!-- ---------- Fragen ---------- -->
+      <section id="fragen" class="help-section">
+        <div class="faq-head">
+          <h2>Häufige Fragen</h2>
+          <label class="faq-search">
+            <span class="sr">Fragen durchsuchen</span>
+            <input type="search" id="faq-filter" placeholder="Fragen durchsuchen, z. B. Helligkeit" autocomplete="off" />
+          </label>
+        </div>
+        <p class="faq-empty" id="faq-empty" hidden>
+          Dazu steht hier noch nichts. Frag gern in einem
+          <a href="https://github.com/tobymarks/evcc-garage-display/issues">Issue auf GitHub</a>.
+        </p>
+
+        <div class="faq-group">
+          <h3>Hardware und Installation</h3>
+          <details class="more" id="welches-display">
+            <summary>Welches Display brauche ich?</summary>
+            <p>
+              Das Guition <b>ESP32-4848S040C</b>: 4″-Touch-Display mit 480 × 480 Pixeln und ESP32-S3, 86,5 × 86,5 mm.
+              Es passt auf eine Unterputzdose und bekommt Strom über USB-C von einem üblichen USB-Netzteil.
+              <a href="https://de.aliexpress.com/item/1005012911942193.html" rel="noopener">Dieses hier habe ich bei
+              AliExpress bestellt.</a> Andere Boards werden nicht unterstützt.
+            </p>
+          </details>
+          <details class="more" id="kein-port">
+            <summary>Beim Installieren erscheint kein passender Port</summary>
+            <p>
+              Ein anderes Kabel probieren. Reine Ladekabel übertragen keine Daten, und USB-C auf USB-C klappt nicht an
+              jedem Rechner. Unter Windows heißt der Port „USB-SERIAL CH340 (COM…)“. Fehlt er, ist der CH340-Treiber
+              nicht installiert.
+            </p>
+          </details>
+          <details class="more" id="failed-initialize">
+            <summary>„Failed to initialize“ und der Tipp mit der BOOT-Taste</summary>
+            <p>
+              Eine Taste braucht dieses Display nicht, es wechselt von selbst in den Installationsmodus. Meist ist der
+              falsche Port gewählt, oder ein anderes Programm belegt ihn, etwa ein serieller Monitor. Kabel kurz
+              abziehen und noch einmal versuchen.
+            </p>
+          </details>
+          <details class="more" id="browser">
+            <summary>Der Installieren-Knopf geht nicht</summary>
+            <p>
+              Der Installer braucht Zugriff auf USB, den haben nur <b>Chrome und Edge am Computer</b>. Safari, Firefox
+              und Browser auf Handy oder Tablet können das nicht.
+            </p>
+          </details>
+        </div>
+
+        <div class="faq-group">
+          <h3>Verbindung</h3>
+          <details class="more" id="evcc-nicht-erreichbar">
+            <summary>Das Display zeigt „evcc nicht erreichbar“</summary>
+            <p>
+              Das Display ist im WLAN, bekommt aber keine Antwort von evcc. Prüfe in den Einstellungen unter
+              „Verbindung“:
+            </p>
+            <ul>
+              <li>
+                <b>evcc-Adresse</b> ist die IP-Adresse oder der Name des Rechners, auf dem evcc läuft, ohne
+                <code>http://</code> und ohne Port.
+              </li>
+              <li><b>Port</b> ist der von evcc, ab Werk <code>7070</code>.</li>
+              <li>
+                Display und evcc müssen sich im Netz sehen können. Ein Gäste-WLAN oder ein getrenntes Netz für
+                Smart-Home-Geräte blockiert das oft.
+              </li>
+            </ul>
+            <p>
+              Ob es klappt, steht nach dem Speichern oben auf der Einstellungsseite. Zum Gegentest im Browser
+              <code>http://&lt;evcc-Adresse&gt;:7070</code> aufrufen. Zeigt der Browser evcc, sind Adresse und Port
+              richtig.
+            </p>
+          </details>
+          <details class="more" id="keine-wlan-verbindung">
+            <summary>„Keine WLAN-Verbindung“ oder die Verbindung bricht ab</summary>
+            <p>
+              Das Display verbindet sich alle 30 Sekunden neu, solange das WLAN weg ist. Nach einem Stromausfall wartet
+              es auf den Router und startet nach 5 Minuten ohne WLAN selbst neu. Bricht die Verbindung trotzdem immer
+              wieder ab, stehen in der <a href="#fehler-melden">Diagnose</a> Signalstärke, Zahl der Trennungen und der
+              letzte Grund vom Router. Werte unter etwa −75 dBm deuten auf schwachen Empfang am Montageort hin.
+            </p>
+          </details>
+          <details class="more" id="adresse-display">
+            <summary>evcc-garage.local öffnet sich nicht</summary>
+            <p>
+              Nicht jedes Gerät und nicht jeder Router lösen <code>.local</code>-Namen auf. Dann die IP-Adresse des
+              Displays nehmen: Sie steht in der Geräteliste des Routers unter dem Namen <b>evcc-garage</b>. Im Browser
+              <code>http://&lt;IP des Displays&gt;:8080</code> aufrufen. Wichtig ist der Port <code>8080</code>.
+            </p>
+          </details>
+          <details class="more" id="mehrere-displays">
+            <summary>Ich habe mehrere Displays</summary>
+            <p>
+              Alle Displays heißen im Netz <b>evcc-garage</b>. Rufe ihre Einstellungen deshalb über die IP-Adresse aus
+              dem Router auf, am besten mit fester IP-Zuweisung im Router. Ein einstellbarer Name ist geplant
+              (<a href="https://github.com/tobymarks/evcc-garage-display/issues/47">#47</a>).
+            </p>
+          </details>
+          <details class="more" id="mehrere-ladepunkte">
+            <summary>Ein Display für mehrere Ladepunkte</summary>
+            <p>
+              In den Einstellungen unter „Ladepunkte“ die Nummern mit Komma eintragen, z. B. <code>1,2,3</code>,
+              höchstens sechs. Am Display wischst du zwischen ihnen, Punkte unten zeigen, welcher zu sehen ist. Wird an
+              einem anderen Ladepunkt ein Auto angesteckt oder beginnt dort das Laden, springt das Display hin, außer
+              jemand hat es in der letzten Minute bedient.
+            </p>
+          </details>
+          <details class="more" id="evcc-version">
+            <summary>Welche evcc-Version brauche ich? Muss ich ein Passwort eintragen?</summary>
+            <p>
+              evcc ab Version <b>0.316</b>. Den Tagesverlauf auf der Solarseite gibt es ab 0.319. Ein evcc-Passwort
+              braucht das Display nicht: Status und Lademodus nutzt auch die evcc-Oberfläche ohne Anmeldung. Das
+              Passwort von evcc schützt die Konfiguration.
+            </p>
+          </details>
+        </div>
+
+        <div class="faq-group">
+          <h3>Anzeige verstehen</h3>
+          <details class="more" id="modi">
+            <summary>Was machen Smart, Langsam und Schnell in evcc?</summary>
+            <table>
+              <tr><th>Smart</th><td>evcc-Modus <code>smart</code>, „Immer laden“ aus: lädt nur mit Sonnenüberschuss, günstigem Tarif oder nach Ladeplan</td></tr>
+              <tr><th>Langsam</th><td><code>smart</code>, „Immer laden“ an: lädt sofort mit Mindestleistung, bei Sonne mehr</td></tr>
+              <tr><th>Schnell</th><td><code>now</code>: volle Leistung, egal woher der Strom kommt</td></tr>
+            </table>
+            <p>
+              „Aus“ gibt es am Display bewusst nicht: Wer einsteckt, will laden. Steht der Ladepunkt in evcc auf Aus,
+              zeigt das Display „Ladepunkt ist aus – Modus wählen“. Ein neuer Modus ist erst voll zu sehen, wenn evcc
+              ihn bestätigt hat, bis dahin ist die Taste halb durchsichtig.
+            </p>
+          </details>
+          <details class="more" id="statustexte">
+            <summary>Was bedeuten die Texte in der Statuszeile?</summary>
+            <table>
+              <tr><th>Wartet auf Sonnenüberschuss</th><td>Smart: Die Sonne reicht noch nicht für die Mindestleistung des Autos</td></tr>
+              <tr><th>Genug Sonne – Start in 0:45</th><td>Der Überschuss reicht. evcc wartet zur Sicherheit eine Weile, ob er anhält, dann geht es los</td></tr>
+              <tr><th>Wartet auf günstigen Zeitpunkt</th><td>evcc lädt nach Tarif oder Ladeplan später</td></tr>
+              <tr><th>Ladelimit erreicht</th><td>Das in evcc eingestellte Limit ist erreicht</td></tr>
+              <tr><th>Limit im Fahrzeug erreicht</th><td>Das Auto stoppt an seinem eigenen Limit, sofern evcc es auslesen kann</td></tr>
+              <tr><th>Verbunden · lädt gerade nicht</th><td>Eingesteckt, aber es fließt gerade kein Strom, ohne dass evcc einen der Gründe oben nennt. Oft pausiert das Auto selbst</td></tr>
+              <tr><th>evcc nicht erreichbar · Stand 14:05</th><td>Die Werte sind von 14:05 und nicht mehr aktuell, siehe <a href="#evcc-nicht-erreichbar">oben</a></td></tr>
+            </table>
+          </details>
+          <details class="more" id="balken">
+            <summary>Was zeigt der farbige Balken?</summary>
+            <p>
+              Den Energiefluss wie in evcc, die Werte stehen im Balken: <b>grau</b> Netzbezug, <b>grün</b> Sonne,
+              <b>dunkelgrün</b> Hausakku entlädt, <b>gelb</b> Einspeisung. Beim Laden steht der Sonnenanteil der
+              Ladung in der Statuszeile. Liefert evcc keine Netzleistung, zeigt der Balken nur Sonnen- und Netzanteil
+              der Ladeleistung.
+            </p>
+          </details>
+          <details class="more" id="ueberschuss">
+            <summary>Ohne Auto: Was ist mit „Überschuss“ gemeint?</summary>
+            <p>
+              Was gerade ins Netz geht, und dazu, was in den Hausakku fließt, sobald er seinen Vorrang in evcc erreicht
+              hat. Das ist der Strom, den ein Auto jetzt bekommen könnte. „Überschuss reicht für Smart“ heißt: Würdest
+              du jetzt einstecken, würde im Modus Smart geladen.
+            </p>
+          </details>
+          <details class="more" id="prognose">
+            <summary>Die Solarprognose weicht von evcc ab</summary>
+            <p>
+              „REST HEUTE“ ist, was heute laut Prognose noch kommt, „MORGEN“ der ganze nächste Tag. Ist in evcc „PV-Vorhersage
+              anhand der realen Erzeugungsdaten anpassen“ eingeschaltet, rechnet das Display mit demselben Faktor wie
+              evcc. Das gilt seit der Version vom 14.11.2026. Abends, wenn heute nichts mehr kommt, stehen nur noch
+              „HEUTE“ und „MORGEN“. Weichen die Werte trotzdem ab, schick gern die <a href="#fehler-melden">Diagnose</a>.
+            </p>
+          </details>
+          <details class="more" id="hausakku">
+            <summary>Lädt oder entlädt der Hausakku gerade?</summary>
+            <p>
+              In der Kopfzeile steht sein Ladestand. Die Kachel für die Akku-Leistung nennt die Richtung: „IN AKKU“
+              beim Laden, „AUS AKKU“ beim Entladen. Im Balken ist Entladen dunkelgrün.
+            </p>
+          </details>
+          <details class="more" id="waermepumpe">
+            <summary>Wärmepumpe oder Heizstab statt Auto</summary>
+            <p>
+              Ist der Ladepunkt in evcc ein Heizgerät, zeigt das Display die Temperatur statt des Ladestands, etwa
+              „43,3 °C“, und „Zieltemperatur erreicht“ statt „Ladelimit erreicht“.
+            </p>
+          </details>
+          <details class="more" id="fahrzeug-limit">
+            <summary>Fahrzeug wechseln und Ladelimit am Display</summary>
+            <p>
+              Antippen der Fahrzeugzeile wechselt durch die Fahrzeuge aus evcc und „Gastfahrzeug“. Das Ladelimit
+              lässt sich unter „Ladepunktseite“ zuschalten. Dann steht es neben dem Fahrzeug, und Antippen öffnet die
+              Auswahl. Ohne bekannten Ladestand begrenzt es wie in evcc die Energie in kWh. evcc setzt das Limit beim
+              Abstecken zurück.
+            </p>
+          </details>
+        </div>
+
+        <div class="faq-group">
+          <h3>Bildschirm und Helligkeit</h3>
+          <details class="more" id="helligkeit-dunkel">
+            <summary>Unter 90 % Helligkeit bleibt das Display dunkel oder flackert</summary>
+            <p>
+              Manche Boards dimmen nur, wenn die Hintergrundbeleuchtung langsamer getaktet wird. Schalte in den
+              Einstellungen unter „Bildschirm“ <b>„Dimmen mit langsamer Taktung“</b> ein. Das Display startet dabei
+              neu. Bei 100 % Helligkeit spielt der Schalter keine Rolle.
+            </p>
+          </details>
+          <details class="more" id="bildschirm-aus">
+            <summary>Wann geht der Bildschirm aus und wieder an?</summary>
+            <p>
+              Wird nicht geladen und nichts bedient, geht er nach 2 Minuten aus. Die Zeit lässt sich unter „Bildschirm“
+              einstellen, mit <code>0</code> bleibt er immer an. Antippen weckt ihn, ohne eine Taste auszulösen. Beim
+              Einstecken und beim Start oder Ende des Ladens geht er von selbst an. Eine Nachtdimmung gibt es bewusst
+              nicht: Wer vor dem Display steht, hat in der Garage Licht an.
+            </p>
+          </details>
+          <details class="more" id="bewegungsmelder">
+            <summary>Bildschirm per Bewegungsmelder oder Home Assistant schalten</summary>
+            <p>
+              <code>http://evcc-garage.local:8080/wake</code> wirkt wie eine Berührung, <code>/sleep</code> schaltet
+              den Bildschirm sofort aus, bis zur nächsten Berührung oder bis sich am Ladepunkt etwas tut. Ist ein
+              Passwort gesetzt, gilt es auch hier (Benutzer <code>admin</code>). Für Home Assistant:
+            </p>
+            <pre><code>rest_command:
+  garagendisplay_an:
+    url: "http://evcc-garage.local:8080/wake"
+  garagendisplay_aus:
+    url: "http://evcc-garage.local:8080/sleep"</code></pre>
+          </details>
+        </div>
+
+        <div class="faq-group">
+          <h3>Updates</h3>
+          <details class="more" id="wie-updates">
+            <summary>Wie kommen neue Versionen aufs Display?</summary>
+            <p>
+              Von selbst: Alle 6 Stunden fragt das Display nach einer neuen Version. Installiert wird sie erst, wenn
+              nicht geladen wird und 10 Minuten niemand das Display bedient hat. Startet die neue Version nicht sauber,
+              kehrt das Display zur alten zurück. Deine Einstellungen bleiben erhalten, neue Funktionen kommen als
+              Schalter, die ab Werk aus sind.
+            </p>
+          </details>
+          <details class="more" id="update-fehlgeschlagen">
+            <summary>Das Update schlägt fehl oder das Display bleibt auf einer alten Version</summary>
+            <p>
+              Ältere Versionen hatten Fehler im Update selbst. Solche Displays holen die Korrektur nicht zuverlässig
+              von allein. Die Wege dafür stehen unter <a href="#update-von-hand">Update von Hand</a>. Was zuletzt
+              passiert ist, zeigt <code>evcc-garage.local:8080/update</code>.
+            </p>
+          </details>
+          <details class="more" id="updates-aus">
+            <summary>Kann ich automatische Updates abschalten?</summary>
+            <p>
+              Ja, in den Einstellungen unter „System“. Mit „Jetzt aktualisieren“ holst du dir dann neue Versionen,
+              wann du willst.
+            </p>
+          </details>
+        </div>
+
+        <div class="faq-group">
+          <h3>Sonstiges</h3>
+          <details class="more" id="sprache">
+            <summary>Display auf Deutsch oder Englisch umstellen</summary>
+            <p>
+              In den Einstellungen unter „System“ → „Sprache / Language“ oder im Einrichtungs-WLAN. Das Display
+              startet danach neu. Neu installierte Displays beginnen englisch, bestehende bleiben deutsch. Diagnose und
+              diese Hilfe gibt es nur auf Deutsch.
+            </p>
+          </details>
+          <details class="more" id="passwort">
+            <summary>Einstellungsseite mit Passwort schützen</summary>
+            <p>
+              Unter „System“ lässt sich ein Passwort setzen. Danach fragen alle Seiten des Displays nach der Anmeldung
+              als <code>admin</code>. Das Passwort wird unverschlüsselt im Heimnetz übertragen, nimm also keins, das du
+              anderswo verwendest. <a href="#wlan-wechseln">Vergessen?</a>
+            </p>
+          </details>
+          <details class="more" id="fehler-melden">
+            <summary>Etwas funktioniert nicht – wie melde ich es?</summary>
+            <p>
+              Ganz unten auf der Einstellungsseite auf <b>„Diagnose herunterladen“</b> tippen und die Datei an ein
+              <a href="https://github.com/tobymarks/evcc-garage-display/issues">Issue auf GitHub</a> hängen. Sie
+              enthält keine Passwörter, WLAN-Namen, Netzwerkadressen, keinen Standort und keine Namen von Ladepunkten
+              oder Fahrzeugen. Ein Foto vom Display hilft oft zusätzlich.
+            </p>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <p>
+          <a href="./">Startseite</a> · MIT-Lizenz ·
+          <a href="https://github.com/tobymarks/evcc-garage-display">github.com/tobymarks/evcc-garage-display</a> ·
+          <a href="https://buymeacoffee.com/tobymarks" target="_blank" rel="noopener">Kaffee spendieren</a>
+        </p>
+        <p class="small">Kein offizielles evcc-Projekt.</p>
+      </div>
+    </footer>
+
+    <script src="hilfe.js"></script>
+  </body>
+</html>
