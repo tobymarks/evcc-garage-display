@@ -406,7 +406,7 @@ static const char* checkPending(Command command, uint8_t i, bool reached, const 
 }
 
 static void updateState() {
-  static bool lastConnected[MAX_LOADPOINTS], lastCharging[MAX_LOADPOINTS];
+  static bool lastConnected[MAX_LOADPOINTS], lastCharging[MAX_LOADPOINTS], stateKnown[MAX_LOADPOINTS];
   static bool lastWifi = false, lastStale = true;
   static char lastClock[6] = "";
 
@@ -415,10 +415,15 @@ static void updateState() {
     solarShown = false;
     dirty = true;
   }
-  if (solarFirst() && !solarShown && millis() - display::lastTouchMs() > SOLAR_RETURN_MS) {
-    solarShown = true;  // zurück zur Startseite
-    flashMsg = nullptr;
-    dirty = true;
+  // Eine gewählte Ladepunktseite bleibt stehen, bis der Bildschirm ausgeht (#53). Bleibt er an (immer an, Ladung),
+  // geht es nach der eingestellten Zeit zurück zur Startseite, frühestens nach SOLAR_RETURN_MS.
+  if (solarFirst() && !solarShown) {
+    const uint32_t timeoutMs = settings::get().screenTimeoutMin * 60000UL;
+    if (brightness == 0 || millis() - lastActivity > (timeoutMs > SOLAR_RETURN_MS ? timeoutMs : SOLAR_RETURN_MS)) {
+      solarShown = true;
+      flashMsg = nullptr;
+      dirty = true;
+    }
   }
 
   const uint32_t touched = display::lastTouchMs();
@@ -466,6 +471,13 @@ static void updateState() {
     if (error) {
       if (i == current) flash(error);
       dirty = true;
+    }
+
+    // Die ersten Daten nach dem Start sind keine Änderung: Das Display beginnt auf der ersten Seite (#54)
+    if (st.valid && !stateKnown[i]) {
+      stateKnown[i] = true;
+      lastConnected[i] = st.connected;
+      lastCharging[i] = st.charging;
     }
 
     // Bildschirm wecken, wenn ein Auto angesteckt wird oder das Laden beginnt/endet
@@ -1736,6 +1748,7 @@ void loop() {
 
   if (portalActive && !wm.getConfigPortalActive()) {
     portalActive = false;
+    lastActivity = millis();  // Das Portal kann länger offen gewesen sein als die Zeit bis zum Ausschalten
     // Portal ohne WLAN abgelaufen (z. B. Router nach Stromausfall noch nicht bereit) → neu versuchen
     if (WiFi.status() != WL_CONNECTED) restartNow();
     ui::showMain();

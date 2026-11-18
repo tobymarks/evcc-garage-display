@@ -221,6 +221,10 @@ Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktione
 - **18.11.2026**
   - Installation per USB: Ohne Haken bei „Erase device“ bleiben WLAN und Einstellungen jetzt wirklich erhalten. Bisher
     gingen sie bei jeder Installation über die Projektseite verloren.
+  - Ist die Solarseite die Startseite, bleibt eine gewählte Ladepunktseite stehen, bis der Bildschirm ausgeht (#53).
+  - Das Display beginnt nach dem Start immer auf der ersten Seite, auch wenn an einem anderen Ladepunkt ein Auto
+    angesteckt ist (#54).
+  - Nach der WLAN-Einrichtung bleibt der Bildschirm an, statt sofort auszugehen.
 - **16.11.2026**
   - Name im Heimnetz einstellbar (#47): Unter `/settings` → System oder im WLAN-Portal bekommt jedes Display einen
     eigenen Namen, z. B. `evcc-kueche` → `http://evcc-kueche.local:8080`. Ab Werk bleibt es `evcc-garage`.
