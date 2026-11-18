@@ -116,8 +116,9 @@ evcc ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
 
 Am einfachsten im Browser (Chrome/Edge): **[tobymarks.github.io/evcc-garage-display](https://tobymarks.github.io/evcc-garage-display/)** –
 die Seite wird bei jedem Push auf `main` von GitHub Actions mit frisch gebauter Firmware neu erstellt (`site/`, `.github/workflows/pages.yml`).
-Beim ersten Mal „Erase device“ anhaken (löscht die Demo-Software ab Werk); am zuverlässigsten klappt es mit einem
-Kabel von USB-A auf USB-C. Eine BOOT-Taste ist nicht nötig.
+Beim ersten Mal „Erase device“ anhaken (löscht die Demo-Software ab Werk); ohne den Haken bleiben WLAN und
+Einstellungen bei einer erneuten Installation erhalten. Am zuverlässigsten klappt es mit einem Kabel von USB-A auf
+USB-C. Eine BOOT-Taste ist nicht nötig.
 
 Mit PlatformIO, erstes Mal per USB-C:
 
@@ -217,6 +218,9 @@ Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
 Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktionen sind Schalter unter
 `/settings`.
 
+- **18.11.2026**
+  - Installation per USB: Ohne Haken bei „Erase device“ bleiben WLAN und Einstellungen jetzt wirklich erhalten. Bisher
+    gingen sie bei jeder Installation über die Projektseite verloren.
 - **16.11.2026**
   - Name im Heimnetz einstellbar (#47): Unter `/settings` → System oder im WLAN-Portal bekommt jedes Display einen
     eigenen Namen, z. B. `evcc-kueche` → `http://evcc-kueche.local:8080`. Ab Werk bleibt es `evcc-garage`.
