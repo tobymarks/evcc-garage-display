@@ -178,6 +178,17 @@ static lv_obj_t* lblMsgTitle;
 static lv_obj_t* lblMsgText;
 static lv_obj_t* lblMsgVersion;
 
+// Gleiche Vorschubbreite für die Ziffern in Uhr und Hausakku-Anzeige.
+static bool headerGlyph(const lv_font_t*, lv_font_glyph_dsc_t* glyph, uint32_t letter, uint32_t next) {
+  if (!font_26.get_glyph_dsc(&font_26, glyph, letter, next)) return false;
+  if (letter >= '0' && letter <= '9') {
+    constexpr int digitWidth = 20;
+    glyph->ofs_x += (digitWidth - glyph->adv_w) / 2;
+    glyph->adv_w = digitWidth;
+  }
+  return true;
+}
+
 static lv_obj_t* makeLabel(lv_obj_t* parent, const lv_font_t* font) {
   lv_obj_t* l = lv_label_create(parent);
   lv_obj_set_style_text_font(l, font, 0);
@@ -394,7 +405,9 @@ static void buildMain() {
   lblTitle = makeLabel(header, TITLE_FONT);
   lv_obj_align(lblTitle, LV_ALIGN_LEFT_MID, MARGIN + 4, 4);
 
-  lblClock = makeLabel(scrMain, &font_26);
+  static lv_font_t headerFont = font_26;
+  headerFont.get_glyph_dsc = headerGlyph;
+  lblClock = makeLabel(scrMain, &headerFont);
   lv_obj_align(lblClock, LV_ALIGN_TOP_RIGHT, -MARGIN - 4, 0);
   lv_obj_set_style_pad_top(lblClock, (HEADER_H - font_26.line_height) / 2 + 4, 0);
   lblIcons = makeLabel(scrMain, &font_26);
@@ -405,7 +418,7 @@ static void buildMain() {
   lv_obj_set_style_radius(btnBattery, LV_RADIUS_CIRCLE, 0);
   lv_obj_set_ext_click_area(btnBattery, 16);
   lv_obj_add_event_cb(btnBattery, onBatteryClicked, LV_EVENT_CLICKED, nullptr);
-  lblBattery = makeLabel(btnBattery, &font_26);
+  lblBattery = makeLabel(btnBattery, &headerFont);
 
   // Mittelteil: Inhalt vertikal zentriert zwischen Kopfzeile und Modusumschalter,
   // ausgeblendete Elemente nehmen keinen Platz ein

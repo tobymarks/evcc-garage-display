@@ -50,7 +50,7 @@ Ladepunktseite ohne Fahrzeug: Einspeisung und, sobald der Hausakku seinen Vorran
 Ladeleistung – für ein Display im Haus: Lohnt es sich gerade, die Spülmaschine einzuschalten?
 
 Der Schalter **„Als Startseite“** macht die Solarseite zur ersten Seite: Das Display startet dort, springt nicht
-zum Ladepunkt und kehrt zwei Minuten nach der letzten Berührung zu ihr zurück. Die Balken unter den einzelnen
+zum Ladepunkt und behält bei Bildschirm-Timeout „nie“ die gewählte Seite bei. Die Balken unter den einzelnen
 Anlagen zeigen deren Leistung im Verhältnis zur gerade stärksten Anlage.
 
 **Design:** angelehnt an die evcc-Weboberfläche (ab 0.317): gleiche Farben, Schrift (Montserrat) und Icons –
@@ -180,6 +180,12 @@ WLAN auswählen und Passwort eingeben. Schritt für Schritt steht das in der
   evcc erreicht. Das WLAN bleibt unverändert.
 - **Bildschirm bleibt beim Dimmen dunkel oder flackert:** Schalter „Dimmen mit langsamer Taktung" unter „Bildschirm"
   (150 Hz statt 20 000 Hz, ab Werk aus), siehe [Hilfe](https://tobymarks.github.io/evcc-garage-display/hilfe.html#helligkeit-dunkel).
+- **Streifen oder Schatten nach dem Aufwecken:** Solange der Fehler sichtbar ist, ein Foto machen und
+  gleichzeitig auf der Einstellungsseite unter „Bildschirm“ die aktuelle Anzeige laden. Foto und
+  Bildschirmaufnahme zusammen zeigen, ob die Streifen schon im Bildspeicher zu sehen sind.
+- **Bildschirm kurz nach dem Start dunkel:** Während er dunkel ist, auf Port 8080 zuerst
+  `/diag?download=1` sichern, dann `/wake` öffnen. Festhalten, ob das Bild zurückkommt und wie lange
+  es sichtbar bleibt. Die Diagnose enthält den Startgrund und die von der Firmware eingestellte Helligkeit.
 - **Mehrere Displays:** Jedes bekommt unter „System“ → „Name im Heimnetz“ (oder im WLAN-Portal) einen eigenen
   Namen, z. B. `evcc-kueche`. Es ist dann unter `http://evcc-kueche.local:8080` erreichbar und steht so in der
   Geräteliste des Routers; auch die Adressen für `/wake` und `/sleep` und der Upload per PlatformIO nutzen ihn.

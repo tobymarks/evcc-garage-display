@@ -189,10 +189,10 @@ static const lang::Pair PAIRS[] = {
     {"Inhalt", "Content"},
     {"Große Zahl, Diagramm und Kacheln selbst auswählen.", "Choose the large number, chart and tiles yourself."},
     {"Als Startseite", "As start page"},
-    {"Etwa für ein Display im Haus: Es bleibt auf der Solarseite, auch wenn ein Auto angesteckt wird, und "
-     "kehrt zwei Minuten nach der letzten Berührung zu ihr zurück.",
-     "For a display indoors, for example: it stays on the solar page even when a car is plugged in, and returns to "
-     "it two minutes after the last touch."},
+    {"Etwa für ein Display im Haus: Es bleibt auf der Solarseite, auch wenn ein Auto angesteckt wird. "
+     "Bei Bildschirm-Timeout „nie“ bleibt die gewählte Seite stehen.",
+     "For a display indoors, for example: it stays on the solar page even when a car is plugged in. "
+     "With the screen timeout set to Never, the selected page stays open."},
     {"Bildschirm", "Screen"},
     {"Aktuelle Anzeige des Displays", "Current screen of the display"},
     {"Aktuelle Anzeige laden", "Load current screen"},

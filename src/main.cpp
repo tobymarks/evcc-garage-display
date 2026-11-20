@@ -415,11 +415,11 @@ static void updateState() {
     solarShown = false;
     dirty = true;
   }
-  // Eine gewählte Ladepunktseite bleibt stehen, bis der Bildschirm ausgeht (#53). Bleibt er an (immer an, Ladung),
+  // Eine gewählte Ladepunktseite bleibt stehen, bis der Bildschirm ausgeht (#53). Bleibt er trotz Timeout wegen einer Ladung an,
   // geht es nach der eingestellten Zeit zurück zur Startseite, frühestens nach SOLAR_RETURN_MS.
   if (solarFirst() && !solarShown) {
     const uint32_t timeoutMs = settings::get().screenTimeoutMin * 60000UL;
-    if (brightness == 0 || millis() - lastActivity > (timeoutMs > SOLAR_RETURN_MS ? timeoutMs : SOLAR_RETURN_MS)) {
+    if (brightness == 0 || (timeoutMs && millis() - lastActivity > max(timeoutMs, SOLAR_RETURN_MS))) {
       solarShown = true;
       flashMsg = nullptr;
       dirty = true;
@@ -745,6 +745,10 @@ static String diagDevice() {
   snprintf(buf, sizeof(buf), "Bildschirm %s, Helligkeit %d von 255, Taktung %lu Hz (gespeichert für den Start: %lu Hz)\n",
            brightness == 0 ? (forcedSleep ? "aus (per /sleep)" : "aus") : "an", brightness,
            (unsigned long)display::backlightHz(), (unsigned long)settings::get().backlightHz);
+  s += buf;
+  snprintf(buf, sizeof(buf), "Letzte Aktivität vor %lu s, Timeout %u min, /sleep %s, Ladebetrieb %s\n",
+           (unsigned long)((millis() - lastActivity) / 1000), settings::get().screenTimeoutMin,
+           forcedSleep ? "aktiv" : "inaktiv", anyCharging() ? "ja" : "nein");
   s += buf;
   snprintf(buf, sizeof(buf), "Interner RAM frei %u, minimal %u, größter Block %u\nPSRAM frei %u\n",
            heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
@@ -1194,8 +1198,8 @@ static void handleSettings() {
   h += String("<label>") + tr("Inhalt") + "<small>" + tr("Große Zahl, Diagramm und Kacheln selbst auswählen.") +
        "</small></label><a class=\"plain\" href=\"/solar\" id=\"tosolar\">" + tr("Solarseite einrichten") + "</a>";
   h += toggle("solar1st", s.solarFirst, tr("Als Startseite"),
-              tr("Etwa für ein Display im Haus: Es bleibt auf der Solarseite, auch wenn ein Auto angesteckt wird, und "
-                 "kehrt zwei Minuten nach der letzten Berührung zu ihr zurück."));
+              tr("Etwa für ein Display im Haus: Es bleibt auf der Solarseite, auch wenn ein Auto angesteckt wird. "
+                 "Bei Bildschirm-Timeout „nie“ bleibt die gewählte Seite stehen."));
   h += "</fieldset>";
 
   h += String("<h2>") + tr("Bildschirm") + "</h2><figure><img id=\"shot\" alt=\"" + tr("Aktuelle Anzeige des Displays") +
