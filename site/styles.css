@@ -220,6 +220,15 @@ h3 {
   background: var(--navy-box);
 }
 
+.cta .btn {
+  padding-inline: 20px;
+  text-align: center;
+}
+
+.cta .btn.ghost {
+  border-color: var(--muted-dark);
+}
+
 .btn.big {
   width: 100%;
   padding: 18px 28px;
@@ -660,15 +669,13 @@ code {
 .buy {
   display: inline-block;
   margin-top: 10px;
-  font-size: 14px;
   font-weight: 600;
   color: var(--green-text);
-  text-decoration: none;
+  text-underline-offset: 3px;
 }
 
 .buy:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
 }
 
 .steps b {
