@@ -57,7 +57,7 @@ static EvccState states[MAX_LOADPOINTS];
 static uint8_t current = 0;  // angezeigter Ladepunkt (Position in den Einstellungen)
 static EvccVehicles vehicles;  // in evcc angelegte Fahrzeuge
 static EvccSolar solar;          // Stundenwerte und Anlagen für die Solarseite
-static bool solarShown = false;  // Solarseite (hinter oder vor den Ladepunkten) statt eines Ladepunkts
+static bool solarShown = false;  // Solarseite statt eines Ladepunkts
 // Ist die Solarseite die Startseite, kehrt das Display so lange nach der letzten Berührung zu ihr zurück
 static constexpr uint32_t SOLAR_RETURN_MS = 120000;
 // Angefragte Änderung (Modus, Boost, Fahrzeug), bis evcc sie bestätigt
@@ -143,12 +143,24 @@ static bool applySettings(std::function<String(const char*)> value) {
   }
   const String chargeLimit = value("limit");
   if (!chargeLimit.isEmpty()) s.chargeLimit = chargeLimit.toInt() != 0;
+  for (int i = 0; i < 3; i++) {
+    const String tile = value(LP_TILE_KEYS[i]);
+    if (tile.length() == 1 && tile[0] >= '0' && tile[0] < '0' + LP_TILE_COUNT)
+      s.loadpointTile[i] = tile[0] - '0';
+  }
   const String vehicleSwitch = value("vehsw");
   if (!vehicleSwitch.isEmpty()) s.vehicleSwitch = vehicleSwitch.toInt() != 0;
   const String solarPage = value("solar");
   if (!solarPage.isEmpty()) s.solarPage = solarPage.toInt() != 0;
-  const String solarFirst = value("solar1st");
-  if (!solarFirst.isEmpty()) s.solarFirst = solarFirst.toInt() != 0;
+  const String startPage = value("startpage"), solarPosition = value("solarpos");
+  if (startPage.length()) s.startPage = constrain(startPage.toInt(), 0, START_SOLAR);
+  if (solarPosition.length()) s.solarPosition = constrain(solarPosition.toInt(), 0, SOLAR_LAST);
+  // Ein noch geöffnetes Formular der alten Firmware hat nur diesen einen Schalter.
+  const String legacyFirst = value("solar1st");
+  if (legacyFirst.length() && !startPage.length() && !solarPosition.length()) {
+    s.startPage = legacyFirst.toInt() ? START_SOLAR : 0;
+    s.solarPosition = legacyFirst.toInt() ? 0 : SOLAR_LAST;
+  }
   // Sprache: im Formular die Nummer, im WLAN-Portal das Kürzel ("de", "en")
   String language = value("lang");
   language.trim();
@@ -326,21 +338,45 @@ static void showLoadpoint(uint8_t index) {
   dirty = true;
 }
 
-// Die Solarseite liegt hinter den Ladepunkten oder – Einstellung "Solarseite zuerst" – davor
-static bool solarFirst() { return settings::get().solarPage && settings::get().solarFirst; }
+static bool startsOnSolar() {
+  const Settings& s = settings::get();
+  return s.solarPage && s.startPage == START_SOLAR;
+}
 
-// Wischen nach links → nächste Seite: die Ladepunkte, davor oder dahinter die Solarseite (Einstellung)
+static void showStartPage() {
+  const Settings& s = settings::get();
+  uint8_t index = 0;  // auch wenn der gespeicherte Ladepunkt aus der Liste entfernt wurde
+  for (uint8_t i = 0; i < s.loadpointCount; ++i)
+    if (s.loadpoints[i] == s.startPage) index = i;
+  const bool solar = startsOnSolar();
+  if (solarShown == solar && (solar || current == index)) return;
+  solarShown = solar;
+  current = index;
+  flashMsg = nullptr;
+  dirty = true;
+}
+
+static int solarPosition() {
+  return min(settings::get().solarPosition, evcc::count());
+}
+
+static int pagePosition(bool solar) {
+  const int pos = solarPosition();
+  return solar ? pos : current + (settings::get().solarPage && current >= pos);
+}
+
 static void onSwipe(int delta) {
   lastActivity = millis();
-  const int first = solarFirst() ? 1 : 0;  // Seite des ersten Ladepunkts
-  const int solarPos = solarFirst() ? 0 : evcc::count();
-  const int next = (solarShown ? solarPos : current + first) + delta;
-  if (next == solarPos && settings::get().solarPage) {
+  const bool withSolar = settings::get().solarPage;
+  const int pos = solarPosition();
+  const int next = pagePosition(solarShown) + delta;
+  if (next < 0 || next >= evcc::count() + withSolar) return;
+  if (withSolar && next == pos) {
     solarShown = true;
     flashMsg = nullptr;
     dirty = true;
-  } else if (next >= first) {
-    showLoadpoint(next - first);
+  } else {
+    showLoadpoint(next - (withSolar && next > pos));
   }
 }
 
@@ -411,19 +447,12 @@ static void updateState() {
   static char lastClock[6] = "";
 
   if (evcc::latest(states, vehicles, solar)) dirty = true;
-  if (solarShown && !settings::get().solarPage) {  // in den Einstellungen ausgeschaltet
-    solarShown = false;
-    dirty = true;
-  }
-  // Eine gewählte Ladepunktseite bleibt stehen, bis der Bildschirm ausgeht (#53). Bleibt er trotz Timeout wegen einer Ladung an,
-  // geht es nach der eingestellten Zeit zurück zur Startseite, frühestens nach SOLAR_RETURN_MS.
-  if (solarFirst() && !solarShown) {
+  if (solarShown && !settings::get().solarPage) showStartPage();
+  // Bleibt der Bildschirm wegen einer Ladung an, gilt für die Solar-Startseite
+  // ebenfalls der eingestellte Timeout (#53).
+  if (startsOnSolar() && !solarShown) {
     const uint32_t timeoutMs = settings::get().screenTimeoutMin * 60000UL;
-    if (brightness == 0 || (timeoutMs && millis() - lastActivity > max(timeoutMs, SOLAR_RETURN_MS))) {
-      solarShown = true;
-      flashMsg = nullptr;
-      dirty = true;
-    }
+    if (timeoutMs && millis() - lastActivity > max(timeoutMs, SOLAR_RETURN_MS)) showStartPage();
   }
 
   const uint32_t touched = display::lastTouchMs();
@@ -473,11 +502,16 @@ static void updateState() {
       dirty = true;
     }
 
-    // Die ersten Daten nach dem Start sind keine Änderung: Das Display beginnt auf der ersten Seite (#54)
-    if (st.valid && !stateKnown[i]) {
+    // Ein fehlender Ladepunkt und sein erster gültiger Zustand sind keine Ladeereignisse (#54).
+    if (!st.valid) {
+      stateKnown[i] = false;
+      continue;
+    }
+    if (!stateKnown[i]) {
       stateKnown[i] = true;
       lastConnected[i] = st.connected;
       lastCharging[i] = st.charging;
+      continue;
     }
 
     // Bildschirm wecken, wenn ein Auto angesteckt wird oder das Laden beginnt/endet
@@ -492,7 +526,7 @@ static void updateState() {
   }
   // Nicht wegspringen, solange jemand das Display bedient – und nicht von der Solarseite, wenn sie
   // die Startseite ist (das Display soll dann den Überblick zeigen, nicht das Auto)
-  if (jumpTo >= 0 && !inUse && !(solarShown && solarFirst())) showLoadpoint(jumpTo);
+  if (jumpTo >= 0 && !inUse && !(solarShown && startsOnSolar())) showLoadpoint(jumpTo);
   if (flashMsg && (int32_t)(millis() - flashUntil) > 0) {
     flashMsg = nullptr;
     dirty = true;
@@ -551,10 +585,10 @@ static void updateState() {
     v.hasVehicles = vehicles.count > 0;
     v.vehicleSwitch = settings::get().vehicleSwitch;
     v.limitButton = settings::get().chargeLimit || (preview && previewLimit);
+    memcpy(v.loadpointTile, settings::get().loadpointTile, sizeof(v.loadpointTile));
     v.pendingLimit = !preview && pending(Command::Limit, current).active ? limitTarget[current] : -1;
     strlcpy(v.pendingVehicleTitle, vehicleTargetTitle[current], sizeof(v.pendingVehicleTitle));
-    // Die Solarseite ist die letzte oder die erste Seite; in der Vorschau auch, wenn sie ausgeschaltet ist
-    v.page = solarFirst() ? (v.solar ? 0 : current + 1) : (v.solar ? evcc::count() : current);
+    v.page = pagePosition(v.solar);
     v.pageCount = evcc::count() + (settings::get().solarPage || v.solar ? 1 : 0);
     v.flash = flashMsg;
     strlcpy(v.clock, clock, sizeof(v.clock));
@@ -593,6 +627,10 @@ static void updateBacklight() {
     // weich überblenden
     brightness += constrain(target - brightness, -12, 12);
     display::setBrightness(brightness);
+    // Nur eine ausdrücklich gewählte Startseite löst den Rücksprung aus. In der
+    // Standardeinstellung bleibt die vor dem Einschlafen sichtbare Seite erhalten.
+    const uint8_t home = settings::get().startPage;
+    if (brightness == 0 && (startsOnSolar() || (home > 0 && home < START_SOLAR))) showStartPage();
   }
 }
 
@@ -855,10 +893,10 @@ static String diagDetails() {
            st.screenTimeoutMin ? "" : " (immer an)");
   s += buf;
   snprintf(buf, sizeof(buf),
-           "Battery Boost %s, Fahrzeugwechsel %s, Ladelimit %s, Solarseite %s (Bausteine %u/%u/%u-%u-%u, zuerst %s), "
+           "Battery Boost %s, Fahrzeugwechsel %s, Ladelimit %s, Solarseite %s (Bausteine %u/%u/%u-%u-%u, Position %d), "
            "Passwort gesetzt %s, Standort gesetzt %s, Sprache %s, eigener Name im Heimnetz %s\n",
            yesNo(st.boostButton), yesNo(st.vehicleSwitch), yesNo(st.chargeLimit), yesNo(st.solarPage),
-           st.solarBig, st.solarMid, st.solarTile[0], st.solarTile[1], st.solarTile[2], yesNo(st.solarFirst),
+           st.solarBig, st.solarMid, st.solarTile[0], st.solarTile[1], st.solarTile[2], solarPosition() + 1,
            yesNo(!st.password.isEmpty()), yesNo(st.latitude != 0 || st.longitude != 0), lang::code(),
            yesNo(st.hostname != HOSTNAME));
   s += buf;
@@ -965,6 +1003,7 @@ background:#fff;box-shadow:0 1px 2px #0006;transition:transform .15s}
 .sw input:checked{background:var(--a)}.sw input:checked::after{transform:translateX(1.25rem)}
 .sw input:focus-visible{outline:2px solid;outline-offset:2px}
 fieldset{border:0;margin:0;padding:0 0 0 1rem;border-left:2px solid #8884;min-width:0}fieldset:disabled{opacity:.45}
+summary{margin-top:1rem;padding:.6rem 0;font-weight:600;cursor:pointer}
 .check{font-weight:400;display:flex;align-items:center;gap:.5rem;margin:.6rem 0 0}
 .check input{width:1.15rem;min-height:0;height:1.15rem;margin:0}
 .note{padding:.6rem .8rem;border-radius:.5rem;background:#0fdd8d33}
@@ -1054,6 +1093,19 @@ i.onerror=()=>{b.textContent='{{Erneut versuchen}}'};i.src='/screenshot.bmp?'+Da
 b.onclick=l;if(location.search.includes('saved'))setTimeout(l,800)</script>
 <script>{const f=document.forms[0],$=s=>document.querySelector(s),bt=$('.bar button'),dn=$('#dirty');
 const sync=()=>{$('#solarsub').disabled=!$('input[name=solar]').checked;$('#loc').hidden=$('#theme').value!='0'};
+const home=$('#startpage'),pos=$('#solarpos'),lp=$('#lp'),originalPos=pos.value;
+function pageChoices(homeValue,posValue){
+  const last=Number(pos.options[0].value);
+  const points=[...new Set((lp.value.match(/[0-9]+/g)||[]).map(Number).filter(n=>n>=1&&n<=99))].slice(0,last);
+  while(home.options.length>2)home.remove(2);
+  while(pos.options.length>1)pos.remove(1);
+  points.forEach((n,i)=>{
+    home.add(new Option('{{Ladepunkt %u}}'.replace('%u',n),n));
+    pos.add(new Option('{{Vor Ladepunkt %u}}'.replace('%u',n),i));
+  });
+  home.value=homeValue;if(home.selectedIndex<0)home.selectedIndex=0;
+  pos.value=posValue;if(pos.selectedIndex<0)pos.selectedIndex=0;
+}
 const snap=()=>new URLSearchParams(new FormData(f)).toString();sync();const s0=snap(),f0=new FormData(f);let sub=0;
 const ts=$('#tosolar');
 const upd=()=>{sync();const fd=new FormData(f);dn.hidden=snap()==s0;
@@ -1061,7 +1113,8 @@ ts.textContent=dn.hidden?'{{Solarseite einrichten}}':'{{Speichern und Solarseite
 bt.textContent=['host','port','lp','rot','pw','pwclear','slowbl','lang','name'].some(k=>(fd.get(k)||'')!=(f0.get(k)||''))
 ?'{{Speichern und neu starten}}':'{{Speichern}}'};
 f.addEventListener('input',upd);f.addEventListener('change',upd);
-$('#undo').onclick=e=>{e.preventDefault();f.reset();$('#pw').type='password';upd()};
+lp.addEventListener('change',()=>pageChoices(home.value,pos.value));
+$('#undo').onclick=e=>{e.preventDefault();f.reset();pageChoices(f0.get('startpage'),originalPos);$('#pw').type='password';upd()};
 $('#pwshow').onchange=e=>{$('#pw').type=e.target.checked?'text':'password'};
 f.onsubmit=()=>{sub=1};
 ts.onclick=e=>{if(dn.hidden)return;e.preventDefault();const n=document.createElement('input');
@@ -1114,9 +1167,12 @@ static void handleSettings() {
     // „Solarseite einrichten“ mit offenen Änderungen: erst speichern, dann weiter zur Seite
     const bool toSolar = web.arg("next") == "solar";
     const String oldHostname = settings::get().hostname;
+    const uint8_t oldStart = settings::get().startPage;
+    const bool wasSolarHome = startsOnSolar();
     if (!applySettings([](const char* key) { return web.arg(key); })) {
       // Wirkt sofort: neu zeichnen und zurück zur Seite, die dann die neue Anzeige lädt
       lastActivity = millis();
+      if (oldStart != settings::get().startPage || wasSolarHome != startsOnSolar()) showStartPage();
       dirty = true;
       web.sendHeader("Location", toSolar ? "/solar?saved=2" : "/settings?saved=1");
       web.send(303);
@@ -1173,7 +1229,7 @@ static void handleSettings() {
        "</label><input id=\"port\" name=\"port\" type=\"number\" required "
        "min=\"1\" max=\"65535\" value=\"" + String(s.evccPort) + "\"></div></div>";
   h += field("lp", tr("Ladepunkte"),
-             tr("Nummer wie in evcc, 1 ist der erste. Mehrere mit Komma: 1,2,3 – am Display wechselt Wischen.")) +
+             tr("Die Nummern aus evcc in Wischreihenfolge eingeben, z. B. 2,1.")) +
        "<input id=\"lp\" name=\"lp\" required inputmode=\"numeric\" pattern=\"[0-9 ,]*\" value=\"" +
        settings::loadpointsText(s) + "\">";
   for (uint8_t i = 0; i < evcc::count(); i++) {
@@ -1189,6 +1245,18 @@ static void handleSettings() {
               tr("Steht neben dem Fahrzeug; antippen stellt es für diese Ladung ein."));
   h += toggle("boost", s.boostButton, "Battery Boost",
               tr("Im Modus Smart die Akku-Anzeige antippen, um den Hausakku dazuzuschalten."));
+  h += String("<details><summary>") + tr("Kacheln bei angestecktem Fahrzeug") + "</summary>";
+  static const char* const tileSlots[] = {TR_KEY("Kachel links"), TR_KEY("Kachel Mitte"), TR_KEY("Kachel rechts")};
+  static const char* const tileChoices[LP_TILE_COUNT] = {
+      TR_KEY("Geladene Energie"), TR_KEY("Dauer"), TR_KEY("Ø Sonnenanteil"), TR_KEY("Fahrzeug-Ladestand"), TR_KEY("Keine Kachel")};
+  for (int i = 0; i < 3; i++) {
+    const char* id = LP_TILE_KEYS[i];
+    h += field(id, tr(tileSlots[i])) + "<select id=\"" + id + "\" name=\"" + id + "\">";
+    for (int choice = 0; choice < LP_TILE_COUNT; choice++)
+      h += option(choice, s.loadpointTile[i], tr(tileChoices[choice]));
+    h += "</select>";
+  }
+  h += "</details>";
 
   h += String("<h2>") + tr("Solarseite") + "</h2>";
   h += toggle("solar", s.solarPage, tr("Solarseite anzeigen"),
@@ -1197,12 +1265,22 @@ static void handleSettings() {
   h += "<fieldset id=\"solarsub\">";
   h += String("<label>") + tr("Inhalt") + "<small>" + tr("Große Zahl, Diagramm und Kacheln selbst auswählen.") +
        "</small></label><a class=\"plain\" href=\"/solar\" id=\"tosolar\">" + tr("Solarseite einrichten") + "</a>";
-  h += toggle("solar1st", s.solarFirst, tr("Als Startseite"),
-              tr("Etwa für ein Display im Haus: Es bleibt auf der Solarseite, auch wenn ein Auto angesteckt wird. "
-                 "Bei Bildschirm-Timeout „nie“ bleibt die gewählte Seite stehen."));
+  h += field("solarpos", tr("Position der Solarseite")) + "<select id=\"solarpos\" name=\"solarpos\">" +
+       option(SOLAR_LAST, s.solarPosition, tr("Nach allen Ladepunkten"));
+  for (uint8_t i = 0; i < s.loadpointCount; i++)
+    h += option(i, s.solarPosition, fmt(tr("Vor Ladepunkt %u"), (unsigned)s.loadpoints[i]).c_str());
+  h += "</select>";
   h += "</fieldset>";
 
-  h += String("<h2>") + tr("Bildschirm") + "</h2><figure><img id=\"shot\" alt=\"" + tr("Aktuelle Anzeige des Displays") +
+  h += String("<h2>") + tr("Bildschirm") + "</h2>";
+  h += field("startpage", tr("Startseite"),
+             tr("Mit einem festen Ladepunkt oder der Solarseite kehrt das Display beim Ausschalten dorthin zurück. "
+                "Bei „Erster Ladepunkt der Liste“ bleibt beim Aufwecken die letzte Seite stehen.")) +
+       "<select id=\"startpage\" name=\"startpage\">" + option(0, s.startPage, tr("Erster Ladepunkt der Liste")) +
+       option(START_SOLAR, s.startPage, tr("Solarseite"));
+  for (uint8_t i = 0; i < s.loadpointCount; i++)
+    h += option(s.loadpoints[i], s.startPage, fmt(tr("Ladepunkt %u"), (unsigned)s.loadpoints[i]).c_str());
+  h += "</select><figure><img id=\"shot\" alt=\"" + String(tr("Aktuelle Anzeige des Displays")) +
        "\" width=\"480\" height=\"480\" hidden><button type=\"button\" class=\"plain\" id=\"load\">" +
        tr("Aktuelle Anzeige laden") + "</button></figure>";
   h += field("bright", tr("Helligkeit")) + "<select id=\"bright\" name=\"bright\">";
@@ -1636,7 +1714,6 @@ void setup() {
 
   recordBoot();
   settings::load();
-  solarShown = settings::get().solarPage && settings::get().solarFirst;
   display::begin(settings::get().rotation, settings::get().backlightHz);
   brightness = settings::backlight();
   lastActivity = millis();
@@ -1669,6 +1746,7 @@ void setup() {
       ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
   evcc::begin();
+  showStartPage();
   updater::begin();
 }
 

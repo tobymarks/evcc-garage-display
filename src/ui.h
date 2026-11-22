@@ -1,6 +1,7 @@
 #pragma once
 
 #include "evcc_client.h"
+#include "config.h"
 
 struct UiView {
   EvccState state;
@@ -19,8 +20,9 @@ struct UiView {
   bool hasVehicles = false;             // in evcc sind Fahrzeuge angelegt – die Fahrzeugzeile lässt sich antippen
   bool vehicleSwitch = true;            // Fahrzeugwechsel per Antippen erlaubt (Einstellung)
   bool limitButton = false;             // Ladelimit neben dem Fahrzeug zeigen und einstellen (Einstellung)
+  uint8_t loadpointTile[3] = {LP_TILE_ENERGY, LP_TILE_DURATION, LP_TILE_SOLAR};
   float pendingLimit = -1;              // angefragtes Ladelimit (% bzw. kWh), bis evcc es bestätigt; -1 = keins
-  // Solarseite hinter den Ladepunkten (Einstellung): state liefert dann nur die Hausdaten
+  // Auf der Solarseite liefert state nur die Hausdaten
   bool solar = false;
   uint8_t solarBig = 0;                 // Bausteine der Solarseite (Einstellung): SOLAR_BIG_…, SOLAR_MID_…, SOLAR_TILE_…
   uint8_t solarMid = 0;

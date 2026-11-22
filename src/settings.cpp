@@ -26,9 +26,15 @@ void settings::load() {
   s.brightnessPct = prefs.getUChar("bright", DEFAULT_BRIGHTNESS_PCT);
   s.vehicleSwitch = prefs.getBool("vehsw", true);
   s.chargeLimit = prefs.getBool("limit", false);
+  for (int i = 0; i < 3; i++) {
+    const uint8_t tile = prefs.getUChar(LP_TILE_KEYS[i], LP_TILE_DEFAULTS[i]);
+    s.loadpointTile[i] = tile < LP_TILE_COUNT ? tile : LP_TILE_DEFAULTS[i];
+  }
   s.solarPage = prefs.getBool("solar", false);
   s.solarSurplus = prefs.getBool("solarsur", false);
-  s.solarFirst = prefs.getBool("solar1st", false);
+  const bool solarFirst = prefs.getBool("solar1st", false);
+  s.startPage = prefs.getUChar("startpage", solarFirst ? START_SOLAR : 0);
+  s.solarPosition = prefs.getUChar("solarpos", solarFirst ? 0 : SOLAR_LAST);
   s.solarBig = prefs.getUChar("sbig", s.solarSurplus ? SOLAR_BIG_SURPLUS : SOLAR_BIG_PV);
   s.solarMid = prefs.getUChar("smid", SOLAR_MID_AUTO);
   s.solarTile[0] = prefs.getUChar("st1", SOLAR_TILE_TODAY);
@@ -69,6 +75,7 @@ void settings::save() {
   prefs.putUChar("bright", s.brightnessPct);
   prefs.putBool("vehsw", s.vehicleSwitch);
   prefs.putBool("limit", s.chargeLimit);
+  for (int i = 0; i < 3; i++) prefs.putUChar(LP_TILE_KEYS[i], s.loadpointTile[i]);
   prefs.putBool("solar", s.solarPage);
   prefs.putBool("solarsur", s.solarBig == SOLAR_BIG_SURPLUS);  // für ältere Firmware nach einem Zurückrollen
   prefs.putUChar("sbig", s.solarBig);
@@ -76,7 +83,9 @@ void settings::save() {
   prefs.putUChar("st1", s.solarTile[0]);
   prefs.putUChar("st2", s.solarTile[1]);
   prefs.putUChar("st3", s.solarTile[2]);
-  prefs.putBool("solar1st", s.solarFirst);
+  prefs.putUChar("startpage", s.startPage);
+  prefs.putUChar("solarpos", s.solarPosition);
+  prefs.putBool("solar1st", s.startPage == START_SOLAR);  // Rückfall auf ältere Firmware
   prefs.putUInt("blhz", s.backlightHz);
   prefs.putString("name", s.hostname);
   prefs.putString("pw", s.password);

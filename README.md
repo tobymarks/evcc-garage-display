@@ -22,16 +22,18 @@ Diese README beschreibt Funktionen und Technik.
 | Mitte | Angestecktes Fahrzeug mit Ladestand (antippen wechselt durch die in evcc angelegten Fahrzeuge und „Gastfahrzeug"), darunter die Ladeleistung in kW mit grünem Blitz beim Laden. Ohne Fahrzeug der aktuelle Sonnenüberschuss (was gerade in den Akku und ins Netz geht) mit Kacheln für Haus, Akku und Solarprognose (Rest heute, abends für morgen) – und ob der Überschuss für Smart reicht. Ohne PV-Anlage nur „Kein Fahrzeug" |
 | Statuszeile | z. B. „Lädt · 3-phasig", „Wartet auf Sonnenüberschuss", „Genug Sonne – Start in 0:45" |
 | Balken | Energiefluss wie in evcc, die Werte stehen im Balken: Netzbezug (grau), Sonne (grün), Hausakku entlädt (dunkelgrün), Einspeisung (gelb). Beim Laden steht der Sonnenanteil der Ladung in der Statuszeile. Ohne Netzleistung in evcc nur Sonnen- und Netzanteil der Ladeleistung |
-| Kacheln | Geladene Energie, Dauer und durchschnittlicher Sonnenanteil der Sitzung |
+| Kacheln | Ab Werk geladene Energie, Dauer und durchschnittlicher Sonnenanteil der Sitzung. Unter `/settings` → „Ladepunktseite“ → „Kacheln bei angestecktem Fahrzeug“ lässt sich jede Position belegen oder ausblenden. Die Kachel „Fahrzeug-Ladestand“ zeigt den Ladestand des angesteckten Autos auch bei eingeblendetem Ladelimit und vor Ladebeginn. Bei Heizgeräten zeigt sie die Temperatur, bei fehlendem Wert einen Strich. |
 | Unten | Modustasten Smart · Langsam · Schnell, jeweils mit kurzer Beschreibung |
 
 **Mehrere Ladepunkte:** In den Einstellungen mehrere Nummern mit Komma eintragen (z. B. `1,2,3`, höchstens 6).
-Dann wechselt man durch Wischen nach links und rechts, Punkte unter den Modustasten zeigen, welcher Ladepunkt
-gerade zu sehen ist. Wird an einem anderen Ladepunkt ein Auto angesteckt oder beginnt/endet dort das Laden,
+Die Reihenfolge der Nummern bestimmt die Wischreihenfolge. Unter „Bildschirm“ wählt man die Startseite.
+Ab Werk startet das Display mit dem ersten Ladepunkt der Liste, bei `2,1` also mit Ladepunkt 2, und behält beim
+Aufwecken die zuletzt gezeigte Seite. Wer einen festen Ladepunkt oder die Solarseite auswählt, kehrt beim Ausschalten
+dorthin zurück. Punkte unter den Modustasten zeigen die aktuelle Seite. Wird an einem anderen Ladepunkt ein Auto angesteckt oder beginnt/endet dort das Laden,
 springt das Display dorthin – außer jemand hat es in der letzten Minute bedient. Alle Ladepunkte kommen mit
 einer einzigen Abfrage.
 
-**Solarseite (Schalter unter `/settings`, ab Werk aus):** eine zusätzliche Seite hinter den Ladepunkten, erreichbar
+**Solarseite (Schalter unter `/settings`, ab Werk aus):** eine zusätzliche Seite an wählbarer Position, erreichbar
 durch Wischen. Sie zeigt die aktuelle Erzeugung, darunter den Tag je Stunde – grün, was erzeugt wurde, grau die
 Prognose für die kommenden Stunden – und in Kacheln den Ertrag von heute, was heute noch kommt und die Prognose
 für morgen. Kommt heute nichts mehr, entfällt die mittlere Kachel. Kennt
@@ -49,7 +51,7 @@ echte Bild vom Display. Was evcc nicht liefert, ist dort nicht wählbar. Der Üb
 Ladepunktseite ohne Fahrzeug: Einspeisung und, sobald der Hausakku seinen Vorrang erreicht hat, auch seine
 Ladeleistung – für ein Display im Haus: Lohnt es sich gerade, die Spülmaschine einzuschalten?
 
-Der Schalter **„Als Startseite“** macht die Solarseite zur ersten Seite: Das Display startet dort, springt nicht
+Mit der **Solarseite als Startseite** startet das Display dort, springt nicht
 zum Ladepunkt und behält bei Bildschirm-Timeout „nie“ die gewählte Seite bei. Die Balken unter den einzelnen
 Anlagen zeigen deren Leistung im Verhältnis zur gerade stärksten Anlage.
 
@@ -224,6 +226,14 @@ Screenshots der Website in `site/img`. Braucht clang und einmal `pio run`.
 Bestehende Displays zeigen nach einem Update dasselbe wie vorher; neue Funktionen sind Schalter unter
 `/settings`.
 
+- **22.11.2026**
+  - Startseite und Wischreihenfolge sind unabhängig wählbar. So können zwei Displays dieselben Ladepunkte
+    in derselben Reihenfolge zeigen und jeweils mit einem anderen Ladepunkt starten (#54).
+  - Auf der Ladepunktseite lässt sich die Dauer durch den Fahrzeug-Ladestand ersetzen. Alle drei Kacheln
+    lassen sich einzeln belegen. Das Ladelimit bleibt separat bedienbar (#55).
+  - Die Fahrzeugzeile sitzt mittiger zwischen Titel und Ladeleistung (#51). Uhr und Hausakku haben etwas engere
+    Ziffernabstände und behalten beim Wechsel der Zahlen ihre Position.
+  - Fehlt zum Prüfzeitpunkt das WLAN, holt das Display die Update-Prüfung nach dem Wiederverbinden nach.
 - **18.11.2026**
   - Installation per USB: Ohne Haken bei „Erase device“ bleiben WLAN und Einstellungen jetzt wirklich erhalten. Bisher
     gingen sie bei jeder Installation über die Projektseite verloren.

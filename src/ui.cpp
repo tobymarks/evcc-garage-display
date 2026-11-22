@@ -140,8 +140,6 @@ static lv_obj_t* tile[3];
 static lv_obj_t* tileLabel[3];
 static lv_obj_t* tileValue[3];
 // Beschriftungen wie in evcc: klein, grau, in Großbuchstaben
-static const char* TILE_TEXT[3] = {TR_KEY("GELADEN"), TR_KEY("DAUER"), TR_KEY("Ø SONNE")};
-static const char* HEATING_TILE_TEXT[3] = {TR_KEY("ENERGIE"), TR_KEY("DAUER"), TR_KEY("Ø SONNE")};
 static lv_obj_t* segBg;
 static lv_obj_t* seg[3];
 static lv_obj_t* segLbl[3];
@@ -182,7 +180,7 @@ static lv_obj_t* lblMsgVersion;
 static bool headerGlyph(const lv_font_t*, lv_font_glyph_dsc_t* glyph, uint32_t letter, uint32_t next) {
   if (!font_26.get_glyph_dsc(&font_26, glyph, letter, next)) return false;
   if (letter >= '0' && letter <= '9') {
-    constexpr int digitWidth = 20;
+    constexpr int digitWidth = 18;  // breiteste Ziffer der 26er-Schrift („4“)
     glyph->ofs_x += (digitWidth - glyph->adv_w) / 2;
     glyph->adv_w = digitWidth;
   }
@@ -393,6 +391,16 @@ static void onPlantsDraw(lv_event_t* e) {
   }
 }
 
+static void centerVehicleRow(lv_event_t*) {
+  if (lastView.solar || lv_obj_has_flag(rowVehicle, LV_OBJ_FLAG_HIDDEN)) return;
+  // Im freien Raum zwischen Titel und Leistungszahl zentrieren. Die Zeile bleibt
+  // mit ihrer gesamten Tastenhöhe unter der berührbaren Kopfzeile.
+  const int titleBottom = lv_obj_get_y2(lblTitle) - HEADER_H;
+  const int targetY = LV_MAX(0, (titleBottom + lv_obj_get_y(contPower) - lv_obj_get_height(rowVehicle)) / 2);
+  const int delta = targetY - lv_obj_get_y(rowVehicle);
+  if (delta) lv_obj_set_style_translate_y(rowVehicle, lv_obj_get_style_translate_y(rowVehicle, 0) + delta, 0);
+}
+
 static void buildMain() {
   scrMain = lv_obj_create(nullptr);
   lv_obj_remove_flag(scrMain, LV_OBJ_FLAG_SCROLLABLE);
@@ -592,6 +600,7 @@ static void buildMain() {
     lv_obj_set_style_radius(dot[i], LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(dot[i], LV_OPA_COVER, 0);
   }
+  lv_obj_add_event_cb(mid, centerVehicleRow, LV_EVENT_LAYOUT_CHANGED, nullptr);
 }
 
 static void buildPicker() {
@@ -1259,6 +1268,7 @@ static void renderSolar(const UiView& v, bool live) {
 
   closePicker();
   const bool data = s.valid && s.pvPower >= 0;
+  lv_obj_set_style_translate_y(rowVehicle, 0, 0);
   lv_obj_remove_flag(btnVehicle, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_style_text_opa(lblVehicle, LV_OPA_COVER, 0);
   setVisible(btnLimit, false);
@@ -1427,6 +1437,51 @@ static void renderSolar(const UiView& v, bool live) {
   }
 }
 
+static void renderLoadpointTiles(const UiView& v, bool live) {
+  const EvccState& s = v.state;
+  const bool session = s.charging || s.chargedEnergy > 0;
+  int n = 0;
+  for (uint8_t choice : v.loadpointTile) {
+    if (!session && choice != LP_TILE_SOC) continue;
+    const char* label;
+    char value[32];
+    switch (choice) {
+      case LP_TILE_ENERGY:
+        label = s.heating ? tr("ENERGIE") : tr("GELADEN");
+        formatTileEnergy(value, sizeof(value), s.chargedEnergy / 1000.0f);
+        break;
+      case LP_TILE_DURATION:
+        label = tr("DAUER");
+        formatDuration(value, sizeof(value), s.chargeDuration);
+        break;
+      case LP_TILE_SOLAR:
+        label = tr("Ø SONNE");
+        snprintf(value, sizeof(value), tr("%d %%"), (int)lroundf(s.sessionSolarPct));
+        break;
+      case LP_TILE_SOC:
+        label = s.heating ? tr("TEMP.") : tr("AUTO-AKKU");
+        if (v.pendingVehicle || s.vehicleSoc <= 0) {
+          strcpy(value, "–");
+        } else if (s.heating) {
+          char num[16];
+          formatDecimal(num, sizeof(num), s.vehicleSoc);
+          snprintf(value, sizeof(value), "%s °C", num);
+        } else {
+          snprintf(value, sizeof(value), tr("%d %%"), (int)lroundf(s.vehicleSoc));
+        }
+        break;
+      default:
+        continue;
+    }
+    lv_label_set_text(tileLabel[n], label);
+    lv_label_set_text(tileValue[n], value);
+    lv_obj_set_style_text_color(tileValue[n], live ? theme->text : theme->muted, 0);
+    n++;
+  }
+  for (int i = 0; i < 3; i++) setVisible(tile[i], i < n);
+  setVisible(tiles, n > 0);
+}
+
 void ui::render(const UiView& v) {
   const bool pageChanged = hasLastView && v.page != lastView.page;
   if (pageChanged) slideIn(v.page > lastView.page ? 1 : -1);
@@ -1548,26 +1603,15 @@ void ui::render(const UiView& v) {
   setVisible(barBlock, ((house && s.hasGrid) || chargeBar) && renderFlow(s, live));
 
   // Kacheln: Werte der laufenden bzw. letzten Sitzung, ohne Fahrzeug Haus, Akku und Prognose
-  char num[16];
-  const bool showTiles = showPower && (s.charging || s.chargedEnergy > 0);
-  setVisible(tiles, showTiles || house);
   if (house) {
+    setVisible(tiles, true);
     renderHouseTiles(s, live);
-  } else if (showTiles) {
-    for (int i = 0; i < 3; i++) {
-      lv_label_set_text(tileLabel[i], tr((s.heating ? HEATING_TILE_TEXT : TILE_TEXT)[i]));
-      setVisible(tile[i], true);
-    }
-    formatDecimal(num, sizeof(num), s.chargedEnergy / 1000.0f);
-    snprintf(buf, sizeof(buf), "%s kWh", num);
-    lv_label_set_text(tileValue[0], buf);
-    formatDuration(buf, sizeof(buf), s.chargeDuration);
-    lv_label_set_text(tileValue[1], buf);
-    snprintf(buf, sizeof(buf), tr("%d %%"), (int)lroundf(s.sessionSolarPct));
-    lv_label_set_text(tileValue[2], buf);
-    for (int i = 0; i < 3; i++) lv_obj_set_style_text_color(tileValue[i], live ? t.text : t.muted, 0);
+  } else if (showPower) {
+    renderLoadpointTiles(v, live);
+  } else {
+    setVisible(tiles, false);
   }
-  if (house || showTiles) fitTileLabels();
+  if (house || showPower) fitTileLabels();
 
   lv_label_set_text(segSub[1], s.heating ? tr("heizt immer") : tr(SEG_SUB[1]));
   const bool pending = v.pendingMode != ChargeMode::None;

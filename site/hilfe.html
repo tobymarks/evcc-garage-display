@@ -88,7 +88,7 @@
         <article class="guide" id="solarseite">
           <h3>Solarseite einrichten</h3>
           <p class="guide-sub">
-            Eine zusätzliche Seite hinter den Ladepunkten: aktuelle Erzeugung, der Tag je Stunde und die Prognose. Gut
+            Eine zusätzliche Seite mit aktueller Erzeugung, dem Tag je Stunde und der Prognose. Gut
             für ein zweites Display im Haus.
           </p>
           <ol>
@@ -98,9 +98,9 @@
               das Diagramm und die drei Kacheln. Die Vorschau zeigt jede Änderung sofort, „Echtes Bild vom Display laden“
               zeigt, wie es wirklich aussieht.
             </li>
-            <li>Speichern. Am Display wischst du vom Ladepunkt nach links zur Solarseite.</li>
+            <li>Unter „Position der Solarseite“ den Platz in der Wischreihenfolge wählen und speichern.</li>
             <li>
-              Optional: <b>„Als Startseite“</b> einschalten. Dann beginnt das Display mit der Solarseite, springt nicht
+              Optional unter „Bildschirm“ die <b>„Solarseite“ als Startseite</b> wählen. Dann beginnt das Display dort, springt nicht
               zum Ladepunkt und behält bei Bildschirm-Timeout „nie“ die gewählte Seite bei.
             </li>
           </ol>
@@ -128,13 +128,12 @@
               und das automatische Update kann dort scheitern.
             </li>
             <li>
-              <b>Steht dort „Prüfung fehlgeschlagen (HTTP -1)“:</b> Dem Display fehlt für die Prüfung Speicher. Das kam
-              vor der Version vom 16.11.2026 bei mehreren Ladepunkten mit Solarseite vor. Vorübergehend nur einen
-              Ladepunkt eintragen und die Solarseite ausschalten, speichern, dann Schritt 1 oder 2 wiederholen. Danach
-              die Einstellungen zurückstellen.
+              <b>Bei „Prüfung fehlgeschlagen (HTTP -1)“:</b> Auf älterer Firmware konnte bei mehreren Ladepunkten
+              der Speicher für die Verbindung fehlen. Wenn die Prüfung trotz WLAN wiederholt fehlschlägt,
+              per USB aktualisieren. Die eingetragenen Ladepunkte können so bleiben.
             </li>
             <li>
-              <b>Per USB, klappt immer:</b> Wie bei der <a href="#einrichten">Erstinstallation</a> über die Startseite
+              <b>Per USB:</b> Wie bei der <a href="#einrichten">Erstinstallation</a> über die Startseite
               installieren, aber <b>ohne</b> Haken bei „Erase device“. Dann bleiben WLAN und alle Einstellungen
               erhalten.
             </li>
@@ -285,7 +284,9 @@
             <summary>Ein Display für mehrere Ladepunkte</summary>
             <p>
               In den Einstellungen unter „Ladepunkte“ die Nummern mit Komma eintragen, z. B. <code>1,2,3</code>,
-              höchstens sechs. Am Display wischst du zwischen ihnen, Punkte unten zeigen, welcher zu sehen ist. Wird an
+              höchstens sechs. Die Liste bestimmt die Wischreihenfolge. Unter „Bildschirm“ lässt sich die Startseite unabhängig davon
+              wählen. Mit der Liste <code>2,1</code> und „Erster Ladepunkt der Liste“ beginnt das Display bei Ladepunkt 2.
+              Die Punkte unten zeigen, welche Seite zu sehen ist. Wird an
               einem anderen Ladepunkt ein Auto angesteckt oder beginnt dort das Laden, springt das Display hin, außer
               jemand hat es in der letzten Minute bedient.
             </p>
@@ -374,6 +375,11 @@
               lässt sich unter „Ladepunktseite“ zuschalten. Dann steht es neben dem Fahrzeug, und Antippen öffnet die
               Auswahl. Ohne bekannten Ladestand begrenzt es wie in evcc die Energie in kWh. evcc setzt das Limit beim
               Abstecken zurück.
+            </p>
+            <p>
+              Für Ladestand und Ladelimit gleichzeitig öffne unter „Ladepunktseite“ den Abschnitt
+              <b>„Kacheln bei angestecktem Fahrzeug“</b>. Wähle zum Beispiel für die mittlere Kachel
+              „Fahrzeug-Ladestand“. Oben rechts steht weiterhin der Ladestand des Hausakkus.
             </p>
           </details>
         </div>

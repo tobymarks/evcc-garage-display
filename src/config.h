@@ -50,6 +50,10 @@
 // Display
 #define DEFAULT_BRIGHTNESS_PCT 100        // fest eingestellt, keine Nachtdimmung (die Garage ist hell, wenn jemand drin ist)
 #define MIN_BRIGHTNESS_PCT 10
+// Reihenfolge der Werte im Gerätespeicher beibehalten.
+enum : uint8_t { LP_TILE_ENERGY, LP_TILE_DURATION, LP_TILE_SOLAR, LP_TILE_SOC, LP_TILE_NONE, LP_TILE_COUNT };
+constexpr const char* LP_TILE_KEYS[] = {"lt1", "lt2", "lt3"};
+constexpr uint8_t LP_TILE_DEFAULTS[] = {LP_TILE_ENERGY, LP_TILE_DURATION, LP_TILE_SOLAR};
 // Bausteine der Solarseite (Einstellungsseite /solar). Die Zahlen stehen so im Speicher: nicht umsortieren.
 enum : uint8_t { SOLAR_BIG_PV, SOLAR_BIG_SURPLUS, SOLAR_BIG_HOME, SOLAR_BIG_GRID, SOLAR_BIG_BATTERY, SOLAR_BIG_COUNT };
 // AUTO = wie vor dem Editor: bei mehreren Anlagen die Anlagen, sonst der Tagesverlauf; mit Überschuss der Energiebalken

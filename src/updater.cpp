@@ -197,8 +197,13 @@ static void task(void*) {
   }
 }
 
+static void createTask() {
+  if (xTaskCreatePinnedToCore(task, "update", 16384, nullptr, 1, &taskHandle, 0) != pdPASS) {
+    snprintf(lastResult, sizeof(lastResult), "Nicht genug Speicher für den Update-Task");
+  }
+}
+
 static void start(Job j) {
-  if (busy || restartPending || WiFi.status() != WL_CONNECTED) return;
   busy = true;
   job = j;
   xTaskNotifyGive(taskHandle);
@@ -207,7 +212,7 @@ static void start(Job j) {
 void updater::begin() {
   // TLS braucht viel Stack; Kern 0 wie das evcc-Polling, damit die Oberfläche flüssig bleibt
   loadAttempts();
-  xTaskCreatePinnedToCore(task, "update", 16384, nullptr, 1, &taskHandle, 0);
+  createTask();
   log_i("Firmware %s", FW_VERSION);
 }
 
@@ -231,9 +236,16 @@ updater::Event updater::loop(bool idle) {
     nextCheck = millis() + UPDATE_CHECK_INTERVAL_MS;
     return Event::Failed;
   }
-  if (busy || restartPending) return Event::None;
+  if (busy || restartPending || WiFi.status() != WL_CONNECTED) return Event::None;
 
   if ((int32_t)(millis() - nextCheck) >= 0) {
+    if (!taskHandle) {
+      createTask();
+      if (!taskHandle) {
+        nextCheck = millis() + UPDATE_FIRST_CHECK_MS;
+        return Event::None;
+      }
+    }
     nextCheck = millis() + UPDATE_CHECK_INTERVAL_MS;
     start(Job::Check);
     return Event::None;
