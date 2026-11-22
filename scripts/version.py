@@ -1,7 +1,10 @@
-"""Firmware-Version aus Git: Datum des Commits und Kurz-Hash, z. B. 2026-10-15-f4f97ad.
+"""Firmware-Version aus Git: Datum und Kurz-Hash des letzten Commits, der die Firmware ändert, z. B. 2026-10-15-f4f97ad.
 
-Lokal und in GitHub Actions entsteht für denselben Commit dieselbe Version – ein Display mit
-dieser Version holt sich dann kein Update. Ungespeicherte Änderungen hängen "-dirty" an.
+Maßgeblich sind nur die Dateien in FIRMWARE_PATHS. Ein Push, der nur Website, README oder Doku ändert,
+behält dadurch die bisherige Version, und die Displays installieren nichts neu.
+Lokal und in GitHub Actions entsteht für denselben Stand dieselbe Version – ein Display mit
+dieser Version holt sich dann kein Update. Ungespeicherte Änderungen an der Firmware hängen "-dirty" an.
+In GitHub Actions braucht das den ganzen Verlauf (actions/checkout mit fetch-depth: 0).
 
 Wird als PlatformIO-Skript (extra_scripts) und vom Website-Skript genutzt.
 """
@@ -19,12 +22,18 @@ def _git(*args: str) -> str:
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
+# Alles, was in die Firmware eingeht. Änderungen woanders (site/, README.md, Doku) erzeugen keine neue Version.
+FIRMWARE_PATHS = ("src", "include", "platformio.ini", "partitions.csv", "scripts/version.py")
+
+
 def firmware_version() -> str:
     try:
-        date = _git("log", "-1", "--format=%cd", "--date=format:%Y-%m-%d")
-        sha = _git("rev-parse", "--short=7", "HEAD")
-        dirty = _git("status", "--porcelain", "--untracked-files=no")
-    except (OSError, subprocess.CalledProcessError):
+        last = _git("log", "-1", "--format=%cd %h", "--abbrev=7", "--date=format:%Y-%m-%d", "--", *FIRMWARE_PATHS)
+        if not last:  # Verlauf ohne passenden Commit (z. B. flacher Checkout): wie bisher HEAD nehmen
+            last = _git("log", "-1", "--format=%cd %h", "--abbrev=7", "--date=format:%Y-%m-%d")
+        date, sha = last.split()
+        dirty = _git("status", "--porcelain", "--untracked-files=no", "--", *FIRMWARE_PATHS)
+    except (OSError, subprocess.CalledProcessError, ValueError):
         return "dev"
     return f"{date}-{sha}" + ("-dirty" if dirty else "")
 

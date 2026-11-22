@@ -149,7 +149,7 @@ Firmware, auf manchen Displays jedes Mal. Solche Displays kommen so auf den aktu
 starten und innerhalb von 10 Minuten `/update?check=1&install=1` aufrufen (oder einmal per USB neu aufspielen).
 
 - Abschalten in den Einstellungen: „Automatische Updates“ auf `0`
-- Version: [scripts/version.py](scripts/version.py) – Commit-Datum und Kurz-Hash, lokal und in GitHub Actions gleich.
+- Version: [scripts/version.py](scripts/version.py) – Datum und Kurz-Hash des letzten Commits, der die Firmware ändert (`src/`, `include/`, `platformio.ini`, `partitions.csv`, `scripts/version.py`), lokal und in GitHub Actions gleich. Reine Website- oder Doku-Änderungen lösen dadurch kein Update auf den Displays aus.
   Ein lokal gebauter, sauberer Stand von `main` wird deshalb nicht erneut installiert; Builds mit ungespeicherten
   Änderungen (`-dirty`) ersetzt das Display beim nächsten Update durch den veröffentlichten Stand
 
