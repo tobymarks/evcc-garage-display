@@ -1,0 +1,43 @@
+name: Firmware-Build (Pull Request)
+
+# Baut die Firmware für jeden Pull Request, damit Fehler vor dem Merge auffallen.
+# Nichts wird veröffentlicht: kein Deploy, keine Secrets, nur Lesezugriff.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Gleicher Cache wie in pages.yml; ein Pull Request liest den Cache von main mit
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: pio-${{ hashFiles('platformio.ini') }}
+
+      - name: PlatformIO installieren
+        # wie in pages.yml: pioarduino 6.2.0 vorab festhalten
+        run: |
+          pip install platformio
+          ~/.platformio/penv/bin/python -c "" 2>/dev/null || { rm -rf ~/.platformio/penv; python -m venv ~/.platformio/penv; }
+          ~/.platformio/penv/bin/pip install "pioarduino==6.2.0"
+
+      - name: Firmware bauen
+        run: pio run -e panel
