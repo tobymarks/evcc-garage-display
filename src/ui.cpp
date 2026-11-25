@@ -53,6 +53,7 @@ static ui::SwipeCallback swipeCb;
 static ui::Callback boostCb;
 static ui::Callback vehicleCb;
 static ui::LimitCallback limitCb;
+static ui::Co2Callback co2Cb;
 
 // Raster für 480x480
 static constexpr int MARGIN = 24;
@@ -108,6 +109,8 @@ static lv_obj_t* lblVehicle;
 static lv_obj_t* btnLimit;    // Ladelimit; antippen öffnet die Auswahl
 static lv_obj_t* lblLimit;
 static lv_obj_t* lblStatus;
+static lv_obj_t* btnCo2;
+static lv_obj_t* lblCo2;
 static lv_obj_t* barBlock;
 static lv_obj_t* barBg;
 // Abschnitte wie im Energiefluss von evcc: Netzbezug, Sonne, Akku entlädt, Einspeisung
@@ -169,6 +172,12 @@ static lv_obj_t* lblPickCancel;
 static lv_timer_t* pickTimer;
 static bool pickerOpen = false;
 static bool pickerEnergy = false;  // Auswahl in kWh statt in Prozent
+static bool pickerCo2 = false;
+static double co2Before;
+static int co2Draft;
+static bool co2Edited;
+static constexpr int CO2_STEPS[] = {-100, -10, -1, 100, 10, 1};
+static constexpr int CO2_SAVE = sizeof(CO2_STEPS) / sizeof(CO2_STEPS[0]);
 
 static lv_obj_t* scrMsg;
 static lv_obj_t* lblMsgIcon;
@@ -301,10 +310,22 @@ static void closePicker() {
   lv_timer_pause(pickTimer);
 }
 
-static void openPicker() {
+static bool canEditCo2(const UiView& v) {
+  return v.co2Button && v.state.co2Limit.supported && v.wifiConnected && !v.stale && !v.solar &&
+         v.pendingMode == ChargeMode::None && !v.pendingCo2;
+}
+
+static void openPicker(bool forCo2 = false) {
   if (!hasLastView) return;
+  if (forCo2 && !canEditCo2(lastView)) return;
   pickerOpen = true;
+  pickerCo2 = forCo2;
   pickerEnergy = !lastView.state.socBased;
+  if (forCo2) {
+    co2Before = lastView.state.co2Limit.value;
+    co2Draft = co2Before == co2::UNSET ? 0 : (int)lround(co2Before);
+    co2Edited = false;
+  }
   renderPicker();
   lv_obj_remove_flag(picker, LV_OBJ_FLAG_HIDDEN);
   lv_timer_reset(pickTimer);
@@ -312,11 +333,25 @@ static void openPicker() {
 }
 
 static void onLimitClicked(lv_event_t*) { openPicker(); }
+static void onCo2Clicked(lv_event_t*) { openPicker(true); }
 
 static void onPickCancel(lv_event_t*) { closePicker(); }
 
 static void onPick(lv_event_t* e) {
   const int i = (int)(intptr_t)lv_event_get_user_data(e);
+  if (pickerCo2) {
+    if (!canEditCo2(lastView) || lastView.state.co2Limit.value != co2Before) return closePicker();
+    if (i == CO2_SAVE) {
+      closePicker();
+      if (co2Cb && co2Edited && co2Draft != co2Before) co2Cb(co2Before, co2Draft);
+    } else if (i >= 0 && i < CO2_SAVE) {
+      co2Draft = LV_MAX(0, LV_MIN(co2::MAX_VALUE, co2Draft + CO2_STEPS[i]));
+      co2Edited = true;
+      lv_timer_reset(pickTimer);
+      renderPicker();
+    }
+    return;
+  }
   const bool energy = pickerEnergy;
   closePicker();
   if (limitCb) limitCb(energy, (energy ? PICK_ENERGY : PICK_SOC)[i]);
@@ -497,6 +532,17 @@ static void buildMain() {
   lv_label_set_long_mode(lblStatus, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_align(lblStatus, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_pad_top(lblStatus, 4, 0);
+
+  btnCo2 = makeBox(mid);
+  lv_obj_set_size(btnCo2, LV_SIZE_CONTENT, 42);
+  lv_obj_set_style_pad_hor(btnCo2, 16, 0);
+  lv_obj_set_style_radius(btnCo2, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_border_width(btnCo2, 1, 0);
+  lv_obj_set_style_bg_opa(btnCo2, LV_OPA_COVER, 0);
+  lv_obj_add_flag(btnCo2, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(btnCo2, onCo2Clicked, LV_EVENT_CLICKED, nullptr);
+  lblCo2 = makeLabel(btnCo2, &font_18);
+  lv_obj_center(lblCo2);
 
   // Energiebalken wie in evcc: woher der Strom gerade kommt und was ins Netz geht
   barBlock = makeBox(mid);
@@ -703,6 +749,10 @@ static void applyTheme() {
   lv_obj_set_style_border_color(btnPickCancel, t.border, 0);
   lv_obj_set_style_bg_color(btnPickCancel, t.pressed, LV_STATE_PRESSED);
   lv_obj_set_style_text_color(lblPickCancel, t.text, 0);
+  lv_obj_set_style_border_color(btnCo2, t.border, 0);
+  lv_obj_set_style_bg_color(btnCo2, t.box, 0);
+  lv_obj_set_style_bg_color(btnCo2, t.pressed, LV_STATE_PRESSED);
+  lv_obj_set_style_text_color(lblCo2, t.text, 0);
   for (int i = 0; i < 3; i++) {
     lv_obj_set_style_bg_color(tile[i], t.box, 0);
     lv_obj_set_style_text_color(tileLabel[i], t.muted, 0);
@@ -1022,6 +1072,8 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
     snprintf(buf, len, tr("Fahrzeug wird gewechselt …"));
   } else if (v.pendingLimit >= 0) {
     snprintf(buf, len, tr("Ladelimit wird gesetzt …"));
+  } else if (v.pendingCo2) {
+    snprintf(buf, len, tr("CO2-Grenze wird gesetzt …"));
   } else if (!s.connected && house && s.minChargePower > 0) {
     // Hilft bei der Entscheidung: reicht die Sonne gerade für Smart?
     if (surplus(s) >= s.minChargePower) {
@@ -1111,7 +1163,45 @@ static int renderLimit(const UiView& v) {
   return size.x + 2 * LIMIT_PAD + 2 + LIMIT_GAP;
 }
 
+static void renderCo2Picker() {
+  const Theme& t = *theme;
+  lv_label_set_text(lblPickTitle, tr("CO2-Grenze"));
+  if (!co2Edited && co2Before == co2::UNSET)
+    lv_label_set_text(lblPickSub, tr("Kein Limit"));
+  else if (!co2Edited && co2Before != co2Draft) {
+    char value[24];
+    formatDecimal(value, sizeof(value), co2Before);
+    lv_label_set_text_fmt(lblPickSub, "%s g/kWh", value);
+  } else
+    lv_label_set_text_fmt(lblPickSub, "%d g/kWh", co2Draft);
+  for (int i = 0; i < PICK_MAX; i++) {
+    setVisible(pickBtn[i], i <= CO2_SAVE);
+    if (i > CO2_SAVE) continue;
+    const int w = (CONTENT_W - 2 * PICK_GAP) / 3;
+    const bool save = i == CO2_SAVE;
+    const bool enabled = !save || (co2Edited && co2Draft != co2Before);
+    lv_obj_set_size(pickBtn[i], save ? CONTENT_W : w, 72);
+    lv_obj_set_pos(pickBtn[i], MARGIN + (i % 3) * (w + PICK_GAP), PICK_TOP + (i / 3) * (72 + PICK_GAP));
+    lv_obj_set_style_text_font(pickLbl[i], &font_26, 0);
+    if (save)
+      lv_label_set_text(pickLbl[i], tr("Speichern"));
+    else
+      lv_label_set_text_fmt(pickLbl[i], "%+d", CO2_STEPS[i]);
+    if (enabled)
+      lv_obj_add_flag(pickBtn[i], LV_OBJ_FLAG_CLICKABLE);
+    else
+      lv_obj_remove_flag(pickBtn[i], LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(pickBtn[i], t.box, 0);
+    lv_obj_set_style_bg_color(pickBtn[i], t.pressed, LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(pickBtn[i], t.border, 0);
+    lv_obj_set_style_text_color(pickLbl[i], t.text, 0);
+    lv_obj_set_style_text_opa(pickLbl[i], enabled ? LV_OPA_COVER : LV_OPA_30, 0);
+  }
+}
+
 static void renderPicker() {
+  if (pickerCo2) return renderCo2Picker();
+  lv_label_set_text(lblPickTitle, tr("Ladelimit"));
   const UiView& v = lastView;
   const EvccState& s = v.state;
   const Theme& t = *theme;
@@ -1492,6 +1582,25 @@ void ui::render(const UiView& v) {
   const bool live = s.valid && !v.stale;
   char buf[64];
 
+  const bool co2Shown = v.co2Button && s.co2Limit.supported && v.wifiConnected && live && !v.solar;
+  setVisible(btnCo2, co2Shown);
+  if (co2Shown) {
+    if (s.co2Limit.value == co2::UNSET)
+      lv_label_set_text(lblCo2, tr("CO2-Grenze"));
+    else {
+      char value[24];
+      if (s.co2Limit.value == lround(s.co2Limit.value))
+        snprintf(value, sizeof(value), "%ld", lround(s.co2Limit.value));
+      else
+        formatDecimal(value, sizeof(value), s.co2Limit.value);
+      lv_label_set_text_fmt(lblCo2, "%s: %s g/kWh", tr("CO2-Grenze"), value);
+    }
+    lv_obj_set_style_text_opa(lblCo2, canEditCo2(v) ? LV_OPA_COVER : LV_OPA_50, 0);
+  }
+  if (pickerOpen && (pageChanged || v.solar ||
+                     (pickerCo2 && (!canEditCo2(v) || co2Before != s.co2Limit.value))))
+    closePicker();
+
   renderDots(v);
   lv_label_set_text(lblClock, v.clock);
   lv_label_set_text(lblIcons, !v.wifiConnected ? ICON_WIFI_OFF : v.stale ? ICON_ALERT : "");
@@ -1533,7 +1642,7 @@ void ui::render(const UiView& v) {
   const int limitW = limit ? renderLimit(v) : 0;
   setVisible(btnLimit, limit);
   // Die Auswahl gehört zu diesem Ladepunkt und dieser Art von Limit
-  if (pickerOpen && (!limit || pageChanged || pickerEnergy == s.socBased || v.stale))
+  if (pickerOpen && !pickerCo2 && (!limit || pickerEnergy == s.socBased || v.stale))
     closePicker();
   else if (pickerOpen)
     renderPicker();
@@ -1627,8 +1736,9 @@ void ui::setNight(bool value) {
 }
 
 void ui::begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback onSwipe, Callback onBoost,
-               Callback onVehicle, LimitCallback onLimit) {
+               Callback onVehicle, LimitCallback onLimit, Co2Callback onCo2) {
   limitCb = onLimit;
+  co2Cb = onCo2;
   modeCb = onMode;
   boostCb = onBoost;
   vehicleCb = onVehicle;
@@ -1643,6 +1753,7 @@ void ui::begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback 
 }
 
 void ui::showMessage(const char* icon, const char* title, const char* text) {
+  closePicker();
   lv_label_set_text(lblMsgIcon, icon);
   lv_label_set_text(lblMsgTitle, title);
   lv_label_set_text(lblMsgText, text);

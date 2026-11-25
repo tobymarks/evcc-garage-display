@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "co2_limit.h"
+
 // Die drei Modi am Display. evcc ab 0.316 kennt intern nur off/smart/now:
 //   Smart  = smart + "immer laden" aus  → nur Sonnenüberschuss (heißt in evcc genauso)
 //   Slow   = smart + "immer laden" an   → mindestens Mindestleistung, mehr bei Sonne
@@ -43,6 +45,7 @@ struct EvccState {
   uint32_t pvRemaining = 0;   // s
   bool planActive = false;
   bool smartCostActive = false;
+  co2::Limit co2Limit;       // g/kWh, -1 = nicht gesetzt; 0 ist ein gültiger Wert
   bool hasBoost = false;      // evcc kennt Battery Boost
   bool batteryBoost = false;  // Hausakku hilft im Modus Smart beim Laden
 
@@ -85,7 +88,7 @@ struct EvccVehicles {
 };
 
 enum class CommandResult : uint8_t { None, Ok, Failed };
-enum class Command : uint8_t { Mode, Boost, Vehicle, Limit, Count };
+enum class Command : uint8_t { Mode, Boost, Vehicle, Limit, Co2, Count };
 
 // Zuletzt ausgeführter Befehl einer Art an einem Ladepunkt
 struct CommandStatus {
@@ -121,6 +124,7 @@ uint32_t requestBoost(uint8_t index, bool on);
 uint32_t requestVehicle(uint8_t index, const char* name);
 // Ladelimit setzen: in Prozent (limitsoc) oder als Energie dieser Ladung in kWh (limitenergy, 0 = keins)
 uint32_t requestLimit(uint8_t index, bool energy, float value);
+uint32_t requestCo2(uint8_t index, double before, int value);
 CommandStatus status(Command command, uint8_t index);
 // Kleinster bisher freier Stack des Netzwerk-Tasks in Byte (für /diag)
 uint32_t stackFree();
