@@ -17,9 +17,12 @@ inline Limit parse(JsonObjectConst root, JsonObjectConst lp) {
   if (!optimizer.isUnbound()) {
     if (!optimizer.is<bool>() || optimizer.as<bool>()) return {};
   } else {
-    // Nur die geprüften älteren Versionen kennen dieses Feld noch nicht.
+    // Die offiziellen Releases 0.316.0–0.317.3 haben noch keinen Ladepunkt-Optimierer.
     const char* version = root["ver"] | "";
-    if (strcmp(version, "0.316.0") && strcmp(version, "0.317.0")) return {};
+    constexpr const char* legacy[] = {"0.316.0", "0.316.1", "0.316.2", "0.317.0", "0.317.1", "0.317.2", "0.317.3"};
+    bool known = false;
+    for (const char* release : legacy) known |= !strcmp(version, release);
+    if (!known) return {};
   }
 
   const auto value = lp["smartCostLimit"];

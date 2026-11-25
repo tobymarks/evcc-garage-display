@@ -16,6 +16,8 @@ int main() {
   assert(zero.supported && zero.value == 0);
   auto legacy = read(R"({"ver":"0.316.0","smartCostType":"co2","smartCostAvailable":true,"lp":{"mode":"smart","alwaysCharge":"off","smartCostLimit":159.5}})");
   assert(legacy.supported && legacy.value == 159.5);
+  auto legacyPatch = read(R"({"ver":"0.317.3","smartCostType":"co2","smartCostAvailable":true,"lp":{"mode":"smart","alwaysCharge":"off","smartCostLimit":200}})");
+  assert(legacyPatch.supported && legacyPatch.value == 200);
 
   const char* rejected[] = {
     R"({"smartCostType":"priceforecast","smartCostAvailable":true,"lp":{"mode":"smart","alwaysCharge":"off","optimizerControlled":false,"smartCostLimit":0.1}})",
