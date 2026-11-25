@@ -7,6 +7,7 @@ struct UiView {
   EvccState state;
   bool wifiConnected = false;
   bool stale = true;                    // keine aktuellen Daten von evcc
+  bool readOnly = false;                // Vorschau, keine reale Bedienung
   ChargeMode pendingMode = ChargeMode::None;
   const char* flash = nullptr;          // kurzzeitige Fehlermeldung
   char clock[6] = "";
