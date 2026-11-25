@@ -141,6 +141,7 @@ static void parseVehicles(JsonObject root, EvccVehicles& out) {
 // die ersten einzeln, der Rest zusammen als "Weitere".
 static void parsePlants(JsonObject root, EvccSolar& out) {
   out.plantCount = 0;
+  memset(out.plantId, 0, sizeof(out.plantId));
   JsonArray pvs = root["pvs"];
   const size_t total = pvs.size();
   out.plantTotal = total;
@@ -156,6 +157,8 @@ static void parsePlants(JsonObject root, EvccSolar& out) {
       out.plantPower[MAX_PV_PLANTS - 1] += power;
     } else {
       strlcpy(out.plantTitle[i], pv["t"] | "Anlage", sizeof(out.plantTitle[0]));
+      const JsonString id = pv["n"].as<JsonString>();
+      pv::copyId(out.plantId[i], id.c_str(), id.size());
       out.plantPower[i] = power;
       out.plantCount = i + 1;
     }
@@ -261,6 +264,7 @@ static bool fetchSolar() {
   solar.plantTotal = sharedSolar.plantTotal;
   solar.plantCount = sharedSolar.plantCount;
   memcpy(solar.plantTitle, sharedSolar.plantTitle, sizeof(solar.plantTitle));
+  memcpy(solar.plantId, sharedSolar.plantId, sizeof(solar.plantId));
   memcpy(solar.plantPower, sharedSolar.plantPower, sizeof(solar.plantPower));
   sharedSolar = solar;
   sharedVersion++;
@@ -328,6 +332,7 @@ static void poll() {
   sharedSolar.plantTotal = plants.plantTotal;
   sharedSolar.plantCount = plants.plantCount;
   memcpy(sharedSolar.plantTitle, plants.plantTitle, sizeof(plants.plantTitle));
+  memcpy(sharedSolar.plantId, plants.plantId, sizeof(plants.plantId));
   memcpy(sharedSolar.plantPower, plants.plantPower, sizeof(plants.plantPower));
   sharedVersion++;
   xSemaphoreGive(lock);
@@ -461,7 +466,7 @@ void evcc::begin() {
            "grid:((try .grid.power catch null) // .gridPower),prio:.prioritySoc,"
            "fc:(try [.forecast.solar.today.energy,.forecast.solar.tomorrow.energy,"
            "(if .solarAdjusted then .forecast.solar.scale else null end)] catch null),"
-           "pvs:(try [.pv[]|{t:.title,p:.power}] catch null),"
+           "pvs:(try [.pv[]|{n:.name,t:.title,p:.power}] catch null),"
            "veh:(try [.vehicles|to_entries[]|{n:.key,t:.value.title,o:any(.value.features[]?;.==\"Offline\")}] catch []),"
            "ver:.version}",
            lps.c_str());

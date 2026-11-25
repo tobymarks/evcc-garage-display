@@ -53,7 +53,11 @@ Ladeleistung – für ein Display im Haus: Lohnt es sich gerade, die Spülmaschi
 
 Mit der **Solarseite als Startseite** startet das Display dort, springt nicht
 zum Ladepunkt und behält bei Bildschirm-Timeout „nie“ die gewählte Seite bei. Die Balken unter den einzelnen
-Anlagen zeigen deren Leistung im Verhältnis zur gerade stärksten Anlage.
+Anlagen zeigen standardmäßig deren Leistung im Verhältnis zur gerade stärksten Anlage. Unter „Solarseite einrichten“
+→ **PV-Nennleistung (kWp)** lässt sich für jede Anlage ein Bezugswert eintragen. Sind alle Anlagen über ihre evcc-Zählernamen
+eindeutig zugeordnet und alle Werte gesetzt, zeigen die Balken den Anteil an der jeweiligen Nennleistung (z. B. rund 14 %
+bei 1,3 kW von 9 kWp). Fehlt ein Wert oder ein eindeutiger Zählername, oder werden Anlagen zusammengefasst, bleiben alle
+Balken relativ. Die Vorschau im Browser verwendet Beispielbalken; das echte Bild zeigt die gespeicherte Skalierung.
 
 **Design:** angelehnt an die evcc-Weboberfläche (ab 0.317): gleiche Farben, Schrift (Montserrat) und Icons –
 hell, dunkel oder automatisch nach Sonnenstand. Die Helligkeit ist fest (ab Werk 100 %, unter

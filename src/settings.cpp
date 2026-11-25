@@ -40,6 +40,9 @@ void settings::load() {
   s.solarTile[0] = prefs.getUChar("st1", SOLAR_TILE_TODAY);
   s.solarTile[1] = prefs.getUChar("st2", SOLAR_TILE_REST);
   s.solarTile[2] = prefs.getUChar("st3", SOLAR_TILE_TOMORROW);
+  // Eigener, versionierter Schlüssel; ohne gespeicherten Wert bleiben alle Balken relativ.
+  if (prefs.getBytesLength("pvpeaks1") == sizeof(s.solarPeaks))
+    prefs.getBytes("pvpeaks1", s.solarPeaks, sizeof(s.solarPeaks));
   s.backlightHz = prefs.getUInt("blhz", LCD_BACKLIGHT_HZ);
   s.hostname = cleanHostname(prefs.getString("name", HOSTNAME));
   if (s.hostname.isEmpty()) s.hostname = HOSTNAME;
@@ -83,6 +86,7 @@ void settings::save() {
   prefs.putUChar("st1", s.solarTile[0]);
   prefs.putUChar("st2", s.solarTile[1]);
   prefs.putUChar("st3", s.solarTile[2]);
+  prefs.putBytes("pvpeaks1", s.solarPeaks, sizeof(s.solarPeaks));
   prefs.putUChar("startpage", s.startPage);
   prefs.putUChar("solarpos", s.solarPosition);
   prefs.putBool("solar1st", s.startPage == START_SOLAR);  // Rückfall auf ältere Firmware
