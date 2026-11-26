@@ -23,6 +23,8 @@ struct UiView {
   bool limitButton = false;             // Ladelimit neben dem Fahrzeug zeigen und einstellen (Einstellung)
   uint8_t loadpointTile[3] = {LP_TILE_ENERGY, LP_TILE_DURATION, LP_TILE_SOLAR};
   float pendingLimit = -1;              // angefragtes Ladelimit (% bzw. kWh), bis evcc es bestätigt; -1 = keins
+  bool co2Button = false;
+  bool pendingCo2 = false;
   // Auf der Solarseite liefert state nur die Hausdaten
   bool solar = false;
   uint8_t solarBig = 0;                 // Bausteine der Solarseite (Einstellung): SOLAR_BIG_…, SOLAR_MID_…, SOLAR_TILE_…
@@ -39,9 +41,10 @@ using Callback = void (*)();
 using SwipeCallback = void (*)(int delta);  // +1 = nächster, -1 = vorheriger Ladepunkt
 // Ladelimit gewählt: in Prozent oder (energy) als Energie dieser Ladung in kWh, 0 = kein Limit
 using LimitCallback = void (*)(bool energy, float value);
+using Co2Callback = void (*)(double before, int value);
 
 void begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback onSwipe, Callback onBoost = nullptr,
-           Callback onVehicle = nullptr, LimitCallback onLimit = nullptr);
+           Callback onVehicle = nullptr, LimitCallback onLimit = nullptr, Co2Callback onCo2 = nullptr);
 // Auswahl des Ladelimits öffnen bzw. schließen (öffnet sich sonst per Antippen des Limits)
 void showLimitPicker(bool show);
 void setNight(bool night);

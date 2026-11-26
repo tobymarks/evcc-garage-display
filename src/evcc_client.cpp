@@ -5,6 +5,7 @@
 #include <WiFi.h>
 
 #include "config.h"
+#include "co2_state.h"
 #include "settings.h"
 
 static SemaphoreHandle_t lock;
@@ -16,6 +17,11 @@ static EvccDiagnostics diag;  // geschützt durch lock
 static uint32_t readVersion = 0;
 static EvccVehicles sharedVehicles;
 static EvccSolar sharedSolar;
+struct Co2Request {
+  double before;
+  int value;
+  uint32_t requestedMs;
+};
 // Je Art und Ladepunkt nur der zuletzt angefragte Befehl
 struct Slot {
   uint32_t wantedId = 0;  // 0 = nichts zu tun
@@ -24,6 +30,7 @@ struct Slot {
   char vehicle[VEHICLE_NAME_LEN] = "";
   bool limitEnergy = false;  // Limit in kWh statt in Prozent
   float limit = 0;
+  Co2Request co2{};
   CommandStatus done;
 };
 static Slot slots[(int)Command::Count][MAX_LOADPOINTS];
@@ -100,6 +107,7 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   s.pvRemaining = (uint32_t)(lp["pvRemaining"] | 0.0f);
   s.planActive = lp["planActive"] | false;
   s.smartCostActive = lp["smartCostActive"] | false;
+  s.co2Limit = co2::parse(root, lp);
   s.hasBoost = lp["batteryBoost"].is<bool>();
   s.batteryBoost = lp["batteryBoost"] | false;
   if (root["pv"].is<float>()) s.pvPower = root["pv"];
@@ -271,7 +279,7 @@ static bool fetchSolar() {
   return true;
 }
 
-static void poll() {
+static bool poll() {
   const uint32_t started = millis();
   String body;
   const int code = httpRequest(stateUrl, "GET", &body);
@@ -287,6 +295,7 @@ static void poll() {
     if (ok) diag.lastOkMs = millis() | 1;
     if (version) strlcpy(diag.version, version, sizeof(diag.version));
     xSemaphoreGive(lock);
+    return ok;
   };
   if (code != HTTP_CODE_OK) return record(false, nullptr);
 
@@ -335,6 +344,7 @@ static void poll() {
   memcpy(sharedSolar.plantPower, plants.plantPower, sizeof(plants.plantPower));
   sharedVersion++;
   xSemaphoreGive(lock);
+  return true;
 }
 
 // HTTP-Status der Antwort, negativ bei Netzwerkfehlern
@@ -388,6 +398,17 @@ static bool setLimit(uint8_t index, bool energy, float value) {
   return post(index, path) == HTTP_CODE_OK;
 }
 
+static bool setCo2(uint8_t index, Co2Request request) {
+  // Derselbe Endpunkt setzt auch Preisgrenzen. Niemals auf Basis eines alten Zustands schreiben.
+  if (millis() - request.requestedMs >= MODE_CONFIRM_TIMEOUT_MS || !poll() ||
+      millis() - request.requestedMs >= MODE_CONFIRM_TIMEOUT_MS)
+    return false;
+  const EvccState& s = shared[index];  // nur dieser Task schreibt shared
+  char path[32];
+  return co2::prepareWrite(path, sizeof(path), s.co2Limit, request.before, request.value) &&
+         post(index, path) == HTTP_CODE_OK;
+}
+
 static void task(void*) {
   uint32_t lastPoll = 0;
   uint32_t nextSolar = 0;  // 0 = beim nächsten Durchlauf
@@ -403,6 +424,7 @@ static void task(void*) {
         strlcpy(vehicle, slot.vehicle, sizeof(vehicle));
         const bool limitEnergy = slot.limitEnergy;
         const float limit = slot.limit;
+        const Co2Request co2 = slot.co2;
         slot.wantedId = 0;
         xSemaphoreGive(lock);
         if (!id) continue;
@@ -414,6 +436,7 @@ static void task(void*) {
             case Command::Boost: ok = setBoost(i, on); break;
             case Command::Vehicle: ok = setVehicle(i, vehicle); break;
             case Command::Limit: ok = setLimit(i, limitEnergy, limit); break;
+            case Command::Co2: ok = setCo2(i, co2); break;
             default: break;
           }
           lastPoll = 0;  // sofort neuen Zustand holen
@@ -455,13 +478,15 @@ void evcc::begin() {
   }
   // Ältere evcc-Versionen liefern Akku und Netz als batterySoc, batteryPower und gridPower,
   // neuere unter battery.soc, battery.power und grid.power
-  char jq[1536];
+  char jq[1664];
   const int jqLen = snprintf(jq, sizeof(jq),
            "{lps:[.loadpoints[%s]|if . then {title,mode,alwaysCharge,chargePower,charging,connected,chargedEnergy,"
            "chargeDuration,phasesActive,sessionSolarPercentage,vehicleName,vehicleTitle,vehicleSoc,"
            "limitSoc:(.effectiveLimitSoc // .limitSoc),vehicleLimitSoc,limitEnergy,pvAction,pvRemaining,"
            "planActive,smartCostActive,batteryBoost,minCurrent:(.effectiveMinCurrent // .minCurrent),phasesConfigured,"
-           "chargerPhases1p3p,chargerFeatureHeating} else null end],green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
+           "chargerPhases1p3p,chargerFeatureHeating} + "
+           "with_entries(select(.key==\"smartCostLimit\" or .key==\"optimizerControlled\")) else null end],"
+           "smartCostType,smartCostAvailable,green:.greenShareLoadpoints,pv:.pvPower,home:.homePower,"
            "bat:((try (if (.battery.devices|length)>0 then .battery.soc else null end) catch null) // .batterySoc),"
            "batp:((try (if (.battery.devices|length)>0 then .battery.power else null end) catch null) // .batteryPower),"
            "grid:((try .grid.power catch null) // .gridPower),prio:.prioritySoc,"
@@ -532,6 +557,12 @@ uint32_t evcc::requestLimit(uint8_t index, bool energy, float value) {
         s.limit = ((const Limit*)v)->value;
       },
       &limit);
+}
+
+uint32_t evcc::requestCo2(uint8_t index, double before, int value) {
+  const Co2Request change{before, value, millis()};
+  return request(Command::Co2, index, [](Slot& s, const void* v) { s.co2 = *static_cast<const Co2Request*>(v); },
+                 &change);
 }
 
 CommandStatus evcc::status(Command command, uint8_t index) {

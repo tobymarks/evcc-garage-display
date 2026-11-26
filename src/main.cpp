@@ -72,6 +72,7 @@ static bool boostTarget[MAX_LOADPOINTS];
 static char vehicleTargetName[MAX_LOADPOINTS][VEHICLE_NAME_LEN];
 static char vehicleTargetTitle[MAX_LOADPOINTS][32];
 static float limitTarget[MAX_LOADPOINTS];
+static int co2Target[MAX_LOADPOINTS];
 static bool limitTargetEnergy[MAX_LOADPOINTS];  // Limit in kWh statt in Prozent
 static uint32_t vehicleSendAt[MAX_LOADPOINTS];  // erst abschicken, wenn nicht weitergetippt wird
 static const char* flashMsg = nullptr;
@@ -338,6 +339,17 @@ static void onLimitSelected(bool energy, float value) {
   startPending(Command::Limit, current, evcc::requestLimit(current, energy, value));
 }
 
+static void onCo2Selected(double before, int value) {
+  lastActivity = millis();
+  const EvccState& st = states[current];
+  if (previewActive() || solarShown || !st.valid || !st.co2Limit.supported ||
+      millis() - st.updatedMs > STALE_AFTER_MS || pending(Command::Mode, current).active ||
+      pending(Command::Co2, current).active || st.co2Limit.value != before || before == value)
+    return;
+  co2Target[current] = value;
+  startPending(Command::Co2, current, evcc::requestCo2(current, before, value));
+}
+
 static void showLoadpoint(uint8_t index) {
   if (index >= evcc::count() || (index == current && !solarShown)) return;
   current = index;
@@ -505,6 +517,9 @@ static void updateState() {
     if ((e = checkPending(Command::Limit, i, limitReached, TR_KEY("Ladelimit konnte nicht gesetzt werden"),
                           TR_KEY("evcc hat das Ladelimit nicht übernommen"))))
       error = e;
+    if ((e = checkPending(Command::Co2, i, co2::confirmed(st.co2Limit, co2Target[i]),
+                          TR_KEY("CO2-Grenze nicht bestätigt"), TR_KEY("CO2-Grenze nicht bestätigt"))))
+      error = e;
     if (error) {
       if (i == current) flash(error);
       dirty = true;
@@ -597,6 +612,8 @@ static void updateState() {
     v.limitButton = settings::get().chargeLimit || (preview && previewLimit);
     memcpy(v.loadpointTile, settings::get().loadpointTile, sizeof(v.loadpointTile));
     v.pendingLimit = !preview && pending(Command::Limit, current).active ? limitTarget[current] : -1;
+    v.co2Button = !preview;
+    v.pendingCo2 = !preview && pending(Command::Co2, current).active;
     strlcpy(v.pendingVehicleTitle, vehicleTargetTitle[current], sizeof(v.pendingVehicleTitle));
     v.page = pagePosition(v.solar);
     v.pageCount = evcc::count() + (settings::get().solarPage || v.solar ? 1 : 0);
@@ -1804,7 +1821,7 @@ void setup() {
   brightness = settings::backlight();
   lastActivity = millis();
 
-  ui::begin(onModeSelected, openSettings, onSwipe, onBoostTapped, onVehicleTapped, onLimitSelected);
+  ui::begin(onModeSelected, openSettings, onSwipe, onBoostTapped, onVehicleTapped, onLimitSelected, onCo2Selected);
   ui::onMessageTap(closeSettings);
   ui::showMessage(ICON_SETTINGS, tr("Verbinde …"), tr("WLAN-Verbindung wird aufgebaut"));
   lv_refr_now(nullptr);

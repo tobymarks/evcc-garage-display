@@ -118,6 +118,12 @@ richtest du weiterhin in evcc ein. Ältere evcc-Versionen werden erkannt (dann `
   je Stunde zusammengefasst – nur, wenn die Seite eingeschaltet ist
 - Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}`, `POST /api/loadpoints/<n>/mode/{smart|now|off}` sowie `POST /api/loadpoints/<n>/vehicle/<name>` bzw. `DELETE /api/loadpoints/<n>/vehicle`; Ladelimit: `POST /api/loadpoints/<n>/limitsoc/<Prozent>` bzw. `POST /api/loadpoints/<n>/limitenergy/<kWh>`
 - Netzwerk läuft in einem eigenen Task auf Kern 0, die Oberfläche bleibt dadurch flüssig
+- CO₂-Grenze: Im Modus „Smart“ erscheint „CO2-Grenze“, wenn evcc einen CO₂-Tarif für die Ladeplanung meldet
+  und der Ladepunkt nicht vom automatischen Optimierer gesteuert wird. Antippen, Wert in g/kWh wählen und
+  speichern. Das Display setzt die Grenze nur am angezeigten Ladepunkt und zeigt den von evcc gemeldeten Wert.
+  Die Funktion setzt die Smart-Modus-API ab evcc 0.316 voraus; fehlen notwendige Angaben, bleibt sie ausgeblendet.
+  Die Grenze lässt sich in der evcc-Oberfläche wieder entfernen. Eine sehr niedrige Grenze kann das Netzladen
+  verzögern. Das Display zeigt dafür keine Ladeprognose.
 - Eine Taste zeigt den neuen Modus erst voll an, wenn evcc ihn bestätigt hat (vorher halbtransparent)
 
 ## Flashen
