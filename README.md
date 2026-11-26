@@ -95,8 +95,10 @@ evcc ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
 | Langsam | `smart` + „Immer laden" an (∞) | lädt sofort und ohne Pause mit Mindestleistung, mehr bei Sonne |
 | Schnell | `now` | volle Leistung |
 
-„Aus" gibt es am Display bewusst nicht. Steht der Ladepunkt in evcc auf Aus, zeigt das Display
-„Ladepunkt ist aus – Modus wählen". Ältere evcc-Versionen werden erkannt (dann `pv` / `minpv`).
+**Laden stoppen:** Am gewünschten Ladepunkt die separate Taste **„Laden stoppen“** unter den
+Modustasten 3 Sekunden halten. Erst wenn evcc „Aus“ meldet, zeigt das Display „Ladepunkt ist aus –
+Modus wählen“. Mit Smart, Langsam oder Schnell lässt sich das Laden wieder freigeben. Ladepläne
+richtest du weiterhin in evcc ein. Ältere evcc-Versionen werden erkannt (dann `pv` / `minpv`).
 
 ## Technik
 
@@ -114,7 +116,7 @@ evcc ab Version 0.316 kennt nur noch `off`, `smart` und `now`. Das Display bilde
 - Solarseite: alle 5 min `GET /api/history/energy?from=…&to=…&aggregate=hour` für den laufenden Tag (Erzeugung und
   Prognose je Stunde) und die Prognose der kommenden Stunden aus `forecast.solar.timeseries`, von evcc per jq
   je Stunde zusammengefasst – nur, wenn die Seite eingeschaltet ist
-- Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}`, `POST /api/loadpoints/<n>/mode/{smart|now}` sowie `POST /api/loadpoints/<n>/vehicle/<name>` bzw. `DELETE /api/loadpoints/<n>/vehicle`; Ladelimit: `POST /api/loadpoints/<n>/limitsoc/<Prozent>` bzw. `POST /api/loadpoints/<n>/limitenergy/<kWh>`
+- Umschalten: `POST /api/loadpoints/<n>/alwayscharge/{on|off}`, `POST /api/loadpoints/<n>/mode/{smart|now|off}` sowie `POST /api/loadpoints/<n>/vehicle/<name>` bzw. `DELETE /api/loadpoints/<n>/vehicle`; Ladelimit: `POST /api/loadpoints/<n>/limitsoc/<Prozent>` bzw. `POST /api/loadpoints/<n>/limitenergy/<kWh>`
 - Netzwerk läuft in einem eigenen Task auf Kern 0, die Oberfläche bleibt dadurch flüssig
 - Eine Taste zeigt den neuen Modus erst voll an, wenn evcc ihn bestätigt hat (vorher halbtransparent)
 
