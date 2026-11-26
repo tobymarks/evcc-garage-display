@@ -457,11 +457,13 @@ static void onPlantsDraw(lv_event_t* e) {
 }
 
 static void centerVehicleRow(lv_event_t*) {
-  if (lastView.solar || lv_obj_has_flag(rowVehicle, LV_OBJ_FLAG_HIDDEN)) return;
-  // Im freien Raum zwischen Titel und Leistungszahl zentrieren. Die Zeile bleibt
-  // mit ihrer gesamten Tastenhöhe unter der berührbaren Kopfzeile.
+  if (lv_obj_has_flag(rowVehicle, LV_OBJ_FLAG_HIDDEN)) return;
+  // Die reine Solar-Beschriftung darf den freien Rand der Kopfzeile nutzen;
+  // Fahrzeug- und Ladelimit-Tasten bleiben vollständig unter der Kopfzeile.
+  const bool solar = lastView.solar;
   const int titleBottom = lv_obj_get_y2(lblTitle) - HEADER_H;
-  const int targetY = LV_MAX(0, (titleBottom + lv_obj_get_y(contPower) - lv_obj_get_height(rowVehicle)) / 2);
+  const int minY = solar ? titleBottom + 1 : 0;
+  const int targetY = LV_MAX(minY, (titleBottom + lv_obj_get_y(contPower) - lv_obj_get_height(rowVehicle)) / 2);
   const int delta = targetY - lv_obj_get_y(rowVehicle);
   if (delta) lv_obj_set_style_translate_y(rowVehicle, lv_obj_get_style_translate_y(rowVehicle, 0) + delta, 0);
 }
@@ -1313,6 +1315,8 @@ static void renderDots(const UiView& v) {
     lv_obj_align(dots, LV_ALIGN_TOP_LEFT, MARGIN, FOOTER_Y + (STOP_H - DOT) / 2);
   // Die Solarseite hat keine Modustasten: ihre Mitte reicht bis dorthin, wo sie sonst enden
   setVisible(segBg, !v.solar);
+  if (v.solar) lv_obj_add_flag(mid, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  else lv_obj_remove_flag(mid, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
   lv_obj_set_height(mid, (v.solar ? segY + SEG_H : SEG_Y - DOTS_SHIFT) - HEADER_H);
   for (int i = 0; i < MAX_PAGES; i++) {
     setVisible(dot[i], i < v.pageCount);
@@ -1410,7 +1414,6 @@ static void renderSolar(const UiView& v, bool live) {
 
   closePicker();
   const bool data = s.valid && s.pvPower >= 0;
-  lv_obj_set_style_translate_y(rowVehicle, 0, 0);
   lv_obj_remove_flag(btnVehicle, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_style_text_opa(lblVehicle, LV_OPA_COVER, 0);
   setVisible(btnLimit, false);
