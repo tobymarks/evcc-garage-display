@@ -64,8 +64,8 @@ static int httpRequest(const String& url, const char* method, String* body) {
   return code;
 }
 
-static ChargeMode deriveMode(const char* mode, const char* alwaysCharge, bool& off) {
-  off = false;
+static ChargeMode deriveMode(const char* mode, const char* alwaysCharge) {
+  if (!strcmp(mode, "off")) return ChargeMode::Off;
   if (!strcmp(mode, "now")) return ChargeMode::Fast;
   if (!strcmp(mode, "minpv")) return ChargeMode::Slow;  // evcc vor 0.316
   if (!strcmp(mode, "pv")) return ChargeMode::Smart;    // evcc vor 0.316
@@ -73,7 +73,6 @@ static ChargeMode deriveMode(const char* mode, const char* alwaysCharge, bool& o
     return (!strcmp(alwaysCharge, "on") || !strcmp(alwaysCharge, "once")) ? ChargeMode::Slow
                                                                            : ChargeMode::Smart;
   }
-  off = !strcmp(mode, "off");
   return ChargeMode::None;
 }
 
@@ -81,7 +80,7 @@ static void parseLoadpoint(JsonObject root, JsonObject lp, EvccState& s) {
   s.valid = true;
   s.updatedMs = millis();
   strlcpy(s.title, lp["title"] | "Ladepunkt", sizeof(s.title));
-  s.mode = deriveMode(lp["mode"] | "", lp["alwaysCharge"] | "", s.modeOff);
+  s.mode = deriveMode(lp["mode"] | "", lp["alwaysCharge"] | "");
   s.chargePower = lp["chargePower"] | 0.0f;
   s.charging = lp["charging"] | false;
   s.connected = lp["connected"] | false;
@@ -342,6 +341,8 @@ static int post(uint8_t index, const char* path) {
 
 static bool setMode(uint8_t index, ChargeMode mode) {
   switch (mode) {
+    case ChargeMode::Off:
+      return post(index, "/mode/off") == HTTP_CODE_OK;
     case ChargeMode::Fast:
       return post(index, "/mode/now") == HTTP_CODE_OK;
     case ChargeMode::Smart:

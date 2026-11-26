@@ -275,7 +275,13 @@ static void startPending(Command command, uint8_t index, uint32_t id) {
 static void onModeSelected(ChargeMode mode) {
   lastActivity = millis();
   if (previewActive()) return;  // die Vorschau zeigt nicht den echten Ladepunkt
-  const ChargeMode shown = pending(Command::Mode, current).active ? modeTarget[current] : states[current].mode;
+  const bool changingMode = pending(Command::Mode, current).active;
+  const EvccState& state = states[current];
+  if (mode == ChargeMode::Off &&
+      (solarShown || changingMode || WiFi.status() != WL_CONNECTED || !state.valid || !state.updatedMs ||
+       millis() - state.updatedMs > STALE_AFTER_MS || state.mode == ChargeMode::None))
+    return;
+  const ChargeMode shown = changingMode ? modeTarget[current] : state.mode;
   if (mode == shown) return;
   modeTarget[current] = mode;
   startPending(Command::Mode, current, evcc::requestMode(current, mode));
@@ -568,6 +574,7 @@ static void updateState() {
     v.wifiConnected = example || wifi;
     v.stale = example ? previewStale : stale;
     v.solar = preview ? previewSolar : solarShown;
+    v.readOnly = preview;
     v.solarData = example && previewSolar ? previewSolarData : solar;
     {
       const Settings& st = settings::get();
@@ -914,7 +921,7 @@ static String diagDetails() {
   else
     snprintf(buf, sizeof(buf), "Noch keine brauchbare Antwort\n");
   s += buf;
-  static const char* const MODES[] = {"keiner", "Smart", "Langsam", "Schnell"};
+  static const char* const MODES[] = {"keiner", "Smart", "Langsam", "Schnell", "Aus"};
   for (uint8_t i = 0; i < evcc::count(); i++) {
     const EvccState& e = states[i];
     if (!e.valid) {
@@ -922,9 +929,9 @@ static String diagDetails() {
                e.missing ? "in evcc nicht vorhanden" : "noch keine Daten");
     } else {
       snprintf(buf, sizeof(buf),
-               "Ladepunkt %u: Modus %s%s, angesteckt %s, lädt %s, %.0f W, Phasen %d, Heizgerät %s, Fahrzeug zugeordnet %s, "
+               "Ladepunkt %u: Modus %s, angesteckt %s, lädt %s, %.0f W, Phasen %d, Heizgerät %s, Fahrzeug zugeordnet %s, "
                "Ladestand %.0f, Limit %.0f, Limit in Prozent %s\n",
-               st.loadpoints[i], MODES[(uint8_t)e.mode % 4], e.modeOff ? " (aus)" : "", yesNo(e.connected),
+               st.loadpoints[i], MODES[(uint8_t)e.mode], yesNo(e.connected),
                yesNo(e.charging), e.chargePower, e.phasesActive, yesNo(e.heating), yesNo(e.vehicleName[0]),
                e.vehicleSoc, e.limitSoc, yesNo(e.socBased));
     }

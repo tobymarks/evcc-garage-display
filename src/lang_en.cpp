@@ -44,6 +44,7 @@ static const lang::Pair PAIRS[] = {
     {"Verbinde mit evcc …", "Connecting to evcc …"},
     {"Diese Nummer gibt es in evcc nicht", "This number does not exist in evcc"},
     {"Modus wird gesetzt …", "Setting mode …"},
+    {"Laden stoppen · 3 s halten", "Stop charging · hold 3 s"},
     {"Boost wird eingeschaltet …", "Turning boost on …"},
     {"Boost wird ausgeschaltet …", "Turning boost off …"},
     {"Fahrzeug wird gewechselt …", "Switching vehicle …"},
