@@ -31,6 +31,7 @@ struct UiView {
   uint8_t solarMid = 0;
   uint8_t solarTile[3] = {0, 1, 2};
   EvccSolar solarData;
+  const pv::Peaks* solarPeaks = nullptr;
   int8_t hour = -1;                     // aktuelle Stunde in Ortszeit, -1 = Uhrzeit unbekannt
 };
 

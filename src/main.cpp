@@ -179,6 +179,8 @@ static bool applySettings(std::function<String(const char*)> value) {
     s.password = "";
   else if (!password.isEmpty())
     s.password = password.substring(0, MAX_PASSWORD_LEN);
+  // Zählernamen gelten nur innerhalb einer evcc-Installation.
+  if (s.evccHost != oldHost || s.evccPort != oldPort) memset(s.solarPeaks, 0, sizeof(s.solarPeaks));
   settings::save();
   return s.evccHost != oldHost || s.evccPort != oldPort || settings::loadpointsText(s) != oldLps ||
          s.rotation != oldRotation || s.password != oldPassword || s.backlightHz != oldBacklightHz ||
@@ -599,6 +601,7 @@ static void updateState() {
       v.solarBig = cfg[0];
       v.solarMid = cfg[1];
       memcpy(v.solarTile, cfg + 2, 3);
+      if (!example) v.solarPeaks = &st.solarPeaks;
     }
     v.pendingMode = pending(Command::Mode, current).active ? modeTarget[current] : ChargeMode::None;
     v.boostButton = settings::get().boostButton || (preview && previewBoost);
@@ -1462,6 +1465,10 @@ h1{font-size:1.4rem;margin:0 0 .3rem}.lead{margin:0 0 1.3rem;opacity:.65}
 .opt input:focus-visible{outline:2px solid var(--a);outline-offset:2px}
 .opt .n{flex:1;min-width:0}.opt small{display:block;opacity:.65;font-size:.85rem}
 .opt .x{opacity:.65;font-size:.9rem;white-space:nowrap}.opt:has(input:checked){background:#0fdd8d24}
+.peaks{margin-top:1rem;padding:.7rem .9rem;border:1px solid #8886;border-radius:.6rem;overflow-wrap:anywhere}
+.peaks h2{font-size:1rem;margin:0}.peaks p{font-size:.9rem;margin:.5rem 0}
+.peaks label{display:block;margin-top:.5rem}.peaks input{box-sizing:border-box;display:block;width:100%;min-height:2.75rem;
+font:inherit;padding:.5rem;border:1px solid #8888;border-radius:.5rem}
 .bar{position:sticky;bottom:0;margin-top:1.1rem;padding:.75rem 0;background:Canvas}
 .bar small{display:block;margin-bottom:.5rem;font-weight:600;font-size:.85rem}.bar a{color:inherit;font-weight:400}
 .act{display:flex;gap:.6rem;flex-wrap:wrap}
@@ -1483,7 +1490,9 @@ button.plain{flex:none;background:none;border:1px solid #8888;color:inherit;font
 <button type="button" class="area mid" data-slot="mid" id="aMid"></button><div class="tiles" id="aTiles"></div></div>
 <div class="dots"><i></i><i class="on"></i></div></div><img id="shot" alt="{{Echtes Bild vom Display}}" hidden></div>
 <p class="cap" id="cap"></p><p class="cen"><button type="button" class="plain" id="real">{{Echtes Bild vom Display laden}}</button></p></div>
-<div><div id="slots"></div>
+<div><div id="slots"></div>)HTML";
+
+static const char SOLAR_EDITOR_FORM_END[] PROGMEM = R"HTML(
 <div class="bar"><small id="dirty" hidden>{{Ungespeicherte Änderungen}} · <a href="#" id="undo">{{Verwerfen}}</a></small>
 <div class="act"><button>{{Speichern}}</button><button type="button" class="plain" id="reset">{{Zurück auf Standard}}</button></div></div>
 <input type="hidden" name="big"><input type="hidden" name="mid"><input type="hidden" name="t1"><input type="hidden" name="t2"><input type="hidden" name="t3">
@@ -1492,6 +1501,7 @@ button.plain{flex:none;background:none;border:1px solid #8888;color:inherit;font
 
 static const char SOLAR_EDITOR_TAIL[] PROGMEM = R"HTML(;
 {const $=i=>document.getElementById(i),f=document.forms[0];
+const peaks=[...f.querySelectorAll('.peaks input[type=text]')];
 const I=p=>'<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">'+p+'</svg>';
 const SUN=I('<circle cx="32" cy="32" r="11"/><circle cx="32" cy="32" r="25" stroke-width="8" stroke-dasharray="6.2 6.9" stroke-linecap="butt"/>'),
 HOUSE=I('<path d="M8 30 32 9l24 21"/><path d="M15 26v28h34V26"/><path d="M27 54V38h10v16"/>'),
@@ -1543,8 +1553,10 @@ $('aTiles').innerHTML=['t1','t2','t3'].map(k=>{const t={...TILE[st[k]]};if(three
 ?'<button type="button" class="area tile empty" data-slot="'+k+'" aria-label="{{Leere Kachel}}">+</button>'
 :'<button type="button" class="area tile" data-slot="'+k+'"><span class="l">'+t.l+'</span><span class="w">'+t.w+'</span></button>'}).join('');
 document.querySelectorAll('.area').forEach(a=>{a.classList.toggle('sel',a.dataset.slot==cur);a.onclick=()=>pick(a.dataset.slot,1)});
-for(const k in st)f.elements[k].value=st[k];
-const d=Object.keys(st).some(k=>st[k]!=S0[k]);$('dirty').hidden=!d;if(!d)$('leave').hidden=true}
+for(const k in st)f.elements[k].value=st[k];markDirty()}
+function markDirty(){const d=Object.keys(st).some(k=>st[k]!=S0[k])||peaks.some(i=>i.value!==i.defaultValue);
+$('dirty').hidden=!d;if(!d)$('leave').hidden=true}
+peaks.forEach(i=>i.oninput=markDirty);
 function list(){$('slots').innerHTML=SLOTS.map(s=>'<section class="slot'+(s.id==cur?' open':'')+'" id="s_'+s.id+'"><button type="button" class="sh" data-slot="'+s.id+
 '" aria-expanded="'+(s.id==cur)+'"><b>'+s.t+'</b><span>'+s.o[st[s.id]].n+'</span></button><div class="opts">'+(s.ord||s.o.map((o,k)=>k)).map(k=>{const o=s.o[k];return !o?'':
 '<label class="opt'+(ok(o)?'':' off')+'"><input type="radio" name="r_'+s.id+'" value="'+k+'"'+(st[s.id]==k?' checked':'')+(ok(o)||st[s.id]==k?'':' disabled')+
@@ -1555,8 +1567,8 @@ document.querySelectorAll('.opt input').forEach(i=>i.onchange=()=>{const k=i.nam
 i.closest('.slot').querySelector('.sh span').textContent=SLOTS.find(s=>s.id==k).o[st[k]].n})}
 function pick(id,scroll){cur=id;list();draw();
 if(scroll&&id&&matchMedia('(max-width:620px)').matches)$('s_'+id).scrollIntoView({behavior:'smooth',block:'nearest'})}
-$('reset').onclick=()=>{st={...DEF};list();draw()};
-$('undo').onclick=e=>{e.preventDefault();st={...S0};list();draw()};
+$('reset').onclick=()=>{st={...DEF};peaks.forEach(i=>i.value='');list();draw()};
+$('undo').onclick=e=>{e.preventDefault();st={...S0};peaks.forEach(i=>i.value=i.defaultValue);list();draw()};
 f.onsubmit=()=>{sub=1};
 // Zurück mit offenen Änderungen: auf der Seite fragen statt mit der Meldung des Browsers
 document.querySelectorAll('a[href="/settings"]').forEach(a=>a.onclick=e=>{if($('dirty').hidden)return;e.preventDefault();$('leave').hidden=false;$('lsave').focus();$('leave').scrollIntoView({block:'nearest'})});
@@ -1576,9 +1588,74 @@ new ResizeObserver(()=>{$('s480').style.transform='scale('+$('screen').clientWid
 list();draw()}
 </script></body></html>)HTML";
 
+static bool solarMetersEditable(const Settings& st) {
+  const uint32_t updated = states[0].updatedMs;
+  return !restartAt && st.solarPage && updated && millis() - updated <= STALE_AFTER_MS && solar.plantCount >= 2 &&
+         pv::uniqueMeters(solar.plantId, solar.plantCount, solar.plantTotal);
+}
+
+static void addSolarPeakFields(String& h, const Settings& st) {
+  h += "<section class=\"peaks\"><h2>";
+  h += tr("PV-Nennleistung (kWp)");
+  h += "</h2><p>";
+  h += tr("Optional für „Anlagen einzeln“: Nur mit Nennleistung für jede Anlage zeigen die Balken den Anteil an ihrer Nennleistung. Fehlt ein Wert, bleiben alle Balken relativ. Ein leeres Feld entfernt den Wert.");
+  h += "</p>";
+  if (solarMetersEditable(st)) {
+    h += "<input type=\"hidden\" name=\"pvpeaks\" value=\"" + htmlEscape(st.evccHost) + ":" + st.evccPort + "\">";
+    for (uint8_t i = 0; i < solar.plantCount; i++) {
+      const String field = String("kwp") + i;
+      const String id = htmlEscape(solar.plantId[i]);
+      char value[32] = "";
+      const float kwp = pv::peakFor(st.solarPeaks, solar.plantId[i]);
+      if (kwp > 0) snprintf(value, sizeof(value), "%.9g", kwp);
+      h += "<label for=\"" + field + "\">" + htmlEscape(solar.plantTitle[i]) + " (" + id + ")</label>";
+      h += String("<input type=\"hidden\" name=\"meter") + i + "\" value=\"" + id + "\">";
+      h += "<input type=\"text\" inputmode=\"decimal\" maxlength=\"31\" name=\"" + field + "\" id=\"" + field +
+           "\" value=\"" + value + "\">";
+    }
+  } else {
+    h += "<p>";
+    h += tr("Zum Einstellen muss die Solarseite eingeschaltet sein und evcc muss zwei oder drei Anlagen mit eindeutigen Zählernamen melden. Sammelzeilen bleiben relativ.");
+    h += "</p>";
+  }
+  h += "</section>";
+}
+
 static void handleSolarEditor() {
   Settings& st = settings::get();
   if (web.method() == HTTP_POST) {
+    if (web.hasArg("pvpeaks")) {
+      pv::Peaks submitted = {};
+      pv::MeterId ids[MAX_PV_PLANTS] = {};
+      size_t count = 0;
+      for (size_t i = 0; i < MAX_PV_PLANTS; ++i) {
+        const String meterKey = String("meter") + i;
+        const String kwpKey = String("kwp") + i;
+        if (!web.hasArg(meterKey) && !web.hasArg(kwpKey)) continue;
+        const String id = web.arg(meterKey);
+        String kwp = web.arg(kwpKey);
+        kwp.trim();
+        if (!web.hasArg(kwpKey) || !pv::copyId(ids[count], id.c_str(), id.length()) ||
+            strlen(kwp.c_str()) != kwp.length() || !pv::parseKwp(kwp.c_str(), submitted[count].kwp)) {
+          web.send(400, "text/plain; charset=utf-8", tr("Bitte eine positive Nennleistung in kWp eingeben oder das Feld leer lassen."));
+          return;
+        }
+        memcpy(submitted[count].id, ids[count], sizeof(ids[count]));
+        ++count;
+      }
+      bool matching = web.arg("pvpeaks") == (st.evccHost + ":" + st.evccPort) &&
+                      solarMetersEditable(st) && pv::uniqueMeters(ids, count, solar.plantCount);
+      for (size_t i = 0; matching && i < count; ++i) {
+        bool found = false;
+        for (size_t j = 0; j < count; ++j) found |= strcmp(ids[i], solar.plantId[j]) == 0;
+        matching = found;
+      }
+      if (!matching) {
+        web.send(409, "text/plain; charset=utf-8", tr("Die PV-Anlagen sind nicht mehr dieselben oder gerade nicht verfügbar. Bitte die Solarseite neu laden."));
+        return;
+      }
+      memcpy(st.solarPeaks, submitted, sizeof(submitted));
+    }
     st.solarBig = constrain(web.arg("big").toInt(), 0L, (long)SOLAR_BIG_COUNT - 1);
     st.solarMid = constrain(web.arg("mid").toInt(), 1L, (long)SOLAR_MID_COUNT - 1);
     for (int i = 0; i < 3; i++)
@@ -1617,6 +1694,8 @@ static void handleSolarEditor() {
            !data || !st.solarPage || solar.valid, !data || s.solarToday >= 0, values);
   String h = page(SOLAR_EDITOR_HEAD);
   h.reserve(16384);
+  addSolarPeakFields(h, st);
+  h += page(SOLAR_EDITOR_FORM_END);
   h += json;
   h += page(SOLAR_EDITOR_TAIL);
   web.send(200, "text/html; charset=utf-8", h);

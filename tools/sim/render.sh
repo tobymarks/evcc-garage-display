@@ -24,7 +24,7 @@ if [ ! -f "$BUILD/liblvgl.a" ]; then
 fi
 # Schriften als C übersetzen (in C++ wären die const-Variablen nicht von außen sichtbar)
 for f in src/fonts/*.c; do clang -c "${FLAGS[@]}" "$f" -o "$BUILD/$(basename "$f" .c).o"; done
-clang++ -std=c++17 "${FLAGS[@]}" tools/sim/sim.cpp src/ui.cpp src/preview.cpp src/lang.cpp src/lang_en.cpp "$BUILD"/font_*.o \
+clang++ -std=c++17 "${FLAGS[@]}" tools/sim/sim.cpp src/ui.cpp src/preview.cpp src/lang.cpp src/lang_en.cpp src/pv_scaling.cpp "$BUILD"/font_*.o \
   "$BUILD/liblvgl.a" -o "$BUILD/sim"
 
 TMP=$(mktemp -d)
