@@ -71,11 +71,19 @@ davorsteht.
 (einstellbar, 0 = immer an). Antippen weckt es, ohne eine Taste auszulösen. Beim Einstecken des Autos
 und beim Start/Ende des Ladens geht es von selbst an.
 
+**Tägliches Einschalt-Zeitfenster:** Unter **Einstellungen → Bildschirm** lässt sich z. B. 08:00–22:00
+einstellen. Das Fenster ist standardmäßig aus. Die Zeiten folgen der Uhr des Displays (MEZ/MESZ), können
+über Mitternacht reichen und müssen verschieden sein. Im Fenster bleibt der Bildschirm an. Außerhalb
+weckt auch ein Ladestart ihn nicht: Antippen oder `/wake` weckt ihn für den eingestellten Timeout, maximal
+5 Minuten (bei „Nie“ für 1 Minute). Ohne gültige Uhrzeit gilt das bisherige Verhalten.
+
 **Bildschirm von außen schalten:** etwa per Bewegungs- oder Präsenzmelder aus Home Assistant oder ioBroker.
 `http://evcc-garage.local:8080/wake` wirkt wie eine Berührung: Der Bildschirm geht an und nach der
 eingestellten Zeit wieder aus. `/sleep` schaltet ihn sofort aus, auch während einer Ladung und bei
 „immer an" – bis zum nächsten Antippen, `/wake` oder bis ein Auto angesteckt wird bzw. das Laden beginnt
-oder endet. Ist ein Passwort gesetzt, gilt es auch hier (Benutzer `admin`). Beispiel für Home Assistant:
+oder endet. Bei aktivem Zeitfenster und gültiger Uhrzeit beenden nur Antippen oder `/wake` den manuellen
+Schlaf, auch wenn das nächste Zeitfenster schon begonnen hat. Ist ein Passwort gesetzt, gilt es auch hier
+(Benutzer `admin`). Beispiel für Home Assistant:
 
 ```yaml
 rest_command:

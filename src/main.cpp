@@ -81,9 +81,9 @@ static bool dirty = true;
 
 static uint32_t lastActivity = 0;
 static int brightness = 0;
-// Bildschirm über /sleep ausgeschaltet; gilt, bis sich lastActivity wieder ändert
-static bool forcedSleep = false;
-static uint32_t forcedSleepActivity = 0;
+static screen::Power screenPower;
+static uint32_t handledTouch = 0;
+static bool webWakeRequested = false;
 
 // Vorschau einzelner Zustände über http://evcc-garage.local/preview?s=…
 static EvccState previewState;
@@ -423,7 +423,7 @@ static void flash(const char* msg) {
 
 // ---------- Zustand aktualisieren ----------
 
-static bool timeValid() { return time(nullptr) > 1700000000; }
+static bool timeValid(time_t now = time(nullptr)) { return now > 1700000000; }
 
 static bool previewActive() { return previewUntil && (int32_t)(previewUntil - millis()) > 0; }
 
@@ -638,15 +638,20 @@ static void updateState() {
 }
 
 static void updateBacklight() {
-  if (display::takeWakeRequest()) lastActivity = millis();
-  if ((int32_t)(display::lastTouchMs() - lastActivity) > 0) lastActivity = display::lastTouchMs();
+  const uint32_t now = millis(), touched = display::lastTouchMs();
+  const bool touchWake = display::takeWakeRequest();
+  const bool deliberateWake = touchWake || touched != handledTouch || webWakeRequested;
+  handledTouch = touched;
+  webWakeRequested = false;
+  if (touchWake) lastActivity = now;
+  if ((int32_t)(touched - lastActivity) > 0) lastActivity = touched;
 
-  // Nach /sleep bleibt der Bildschirm aus, auch beim Laden und bei "immer an" – bis ihn jemand antippt,
-  // /wake kommt oder sich am Ladepunkt etwas tut (alles setzt lastActivity neu)
-  if (forcedSleep && lastActivity != forcedSleepActivity) forcedSleep = false;
-  const bool keepOn = portalActive ||
-                      (!forcedSleep && (anyCharging() || settings::get().screenTimeoutMin == 0 ||
-                                        millis() - lastActivity < settings::get().screenTimeoutMin * 60000UL));
+  const Settings& s = settings::get();
+  const time_t wallTime = s.screenWindow.enabled && timeStarted ? time(nullptr) : 0;
+  const auto mode = s.screenWindow.modeAt(wallTime, timeValid(wallTime));
+  // Nur echte Berührung und /wake zählen im Zeitplan. Ohne ihn bleibt das Portal sichtbar.
+  const bool keepOn = screenPower.keepOn(mode, now, lastActivity, s.screenTimeoutMin, anyCharging(), deliberateWake) ||
+                      (mode == screen::Mode::Legacy && portalActive);
   display::setSleeping(!keepOn);
 
   const int target = keepOn ? settings::backlight() : 0;
@@ -808,12 +813,12 @@ static String diagDevice() {
   s += "\n";
   // Hintergrundbeleuchtung als PWM-Wert: zeigt, ob /wake, /sleep und der Timeout gegriffen haben
   snprintf(buf, sizeof(buf), "Bildschirm %s, Helligkeit %d von 255, Taktung %lu Hz (gespeichert für den Start: %lu Hz)\n",
-           brightness == 0 ? (forcedSleep ? "aus (per /sleep)" : "aus") : "an", brightness,
+           brightness == 0 ? (screenPower.isForcedAsleep() ? "aus (per /sleep)" : "aus") : "an", brightness,
            (unsigned long)display::backlightHz(), (unsigned long)settings::get().backlightHz);
   s += buf;
   snprintf(buf, sizeof(buf), "Letzte Aktivität vor %lu s, Timeout %u min, /sleep %s, Ladebetrieb %s\n",
            (unsigned long)((millis() - lastActivity) / 1000), settings::get().screenTimeoutMin,
-           forcedSleep ? "aktiv" : "inaktiv", anyCharging() ? "ja" : "nein");
+           screenPower.isForcedAsleep() ? "aktiv" : "inaktiv", anyCharging() ? "ja" : "nein");
   s += buf;
   snprintf(buf, sizeof(buf), "Interner RAM frei %u, minimal %u, größter Block %u\nPSRAM frei %u\n",
            heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
@@ -1190,6 +1195,19 @@ static void handleSettings() {
         return;
       }
     }
+    // Ein altes Formular ohne Zeitplanfelder und das WLAN-Portal ändern das Fenster nicht.
+    screen::Window screenWindow = settings::get().screenWindow;
+    if ((web.hasArg("screenwin") || web.hasArg("screenfrom") || web.hasArg("screento")) &&
+        !screenWindow.fromForm(web.arg("screenwin").c_str(), web.arg("screenfrom").c_str(),
+                               web.arg("screento").c_str())) {
+      web.send(400, "text/html; charset=utf-8",
+               page(SETTINGS_HEAD) + "<p class=\"note\">" +
+                   tr("Nicht gespeichert: Bitte zwei unterschiedliche Uhrzeiten für das Zeitfenster eingeben.") +
+                   "</p><a class=\"plain\" href=\"javascript:history.back()\">" + tr("Zurück zum Formular") +
+                   "</a></body></html>");
+      return;
+    }
+    settings::get().screenWindow = screenWindow;
     updater::confirm();  // wer hier speichert, erreicht das Display – die Firmware läuft also
     // „Solarseite einrichten“ mit offenen Änderungen: erst speichern, dann weiter zur Seite
     const bool toSolar = web.arg("next") == "solar";
@@ -1332,6 +1350,18 @@ static void handleSettings() {
     h += option(minutes, s.screenTimeoutMin, timeoutLabel(minutes).c_str());
   }
   h += "</select>";
+  h += toggle("screenwin", s.screenWindow.enabled, tr("Tägliches Einschalt-Zeitfenster"),
+              tr("Im Zeitfenster bleibt der Bildschirm an. Außerhalb wecken Antippen oder /wake ihn für höchstens "
+                 "5 Minuten, bei „Nie“ für 1 Minute. Ohne gültige Uhrzeit bleibt das Verhalten unverändert."));
+  char screenFrom[8], screenTo[8];
+  snprintf(screenFrom, sizeof(screenFrom), "%02u:%02u", (unsigned)(s.screenWindow.start / 60),
+           (unsigned)(s.screenWindow.start % 60));
+  snprintf(screenTo, sizeof(screenTo), "%02u:%02u", (unsigned)(s.screenWindow.end / 60),
+           (unsigned)(s.screenWindow.end % 60));
+  h += String("<div class=\"row\"><div>") + field("screenfrom", tr("An ab (Ortszeit)")) +
+       "<input type=\"time\" id=\"screenfrom\" name=\"screenfrom\" required value=\"" + screenFrom + "\"></div><div>" +
+       field("screento", tr("Aus ab (Ortszeit)")) +
+       "<input type=\"time\" id=\"screento\" name=\"screento\" required value=\"" + screenTo + "\"></div></div>";
   h += field("theme", tr("Design")) + "<select id=\"theme\" name=\"theme\">" +
        option(0, s.theme, tr("Automatisch: tagsüber hell, nachts dunkel")) + option(1, s.theme, tr("Immer hell")) +
        option(2, s.theme, tr("Immer dunkel")) + "</select>";
@@ -1734,15 +1764,20 @@ static void startWebServer() {
   // /wake wirkt wie eine Berührung, /sleep schaltet aus bis zum nächsten Aufwecken.
   guarded("/wake", []() {
     lastActivity = millis();
+    webWakeRequested = true;
     web.send(200, "text/plain; charset=utf-8", "Bildschirm an\n");
   });
   guarded("/sleep", []() {
-    forcedSleep = true;
-    forcedSleepActivity = lastActivity;
+    // Frühere Berührungen und ein früheres /wake dürfen den neuen Befehl nicht überholen.
+    handledTouch = display::lastTouchMs();
+    if ((int32_t)(handledTouch - lastActivity) > 0) lastActivity = handledTouch;
+    display::takeWakeRequest();
+    webWakeRequested = false;
+    screenPower.sleep(lastActivity);
     web.send(200, "text/plain; charset=utf-8", "Bildschirm aus\n");
   });
   // Taktung der Hintergrundbeleuchtung ausprobieren (#21): manche Boards bleiben mit der schnellen Taktung
-  // unter 90 % Helligkeit dunkel. ?hz=… (100 bis 40000) gilt bis zum Neustart und schaltet den Bildschirm an.
+  // unter 90 % Helligkeit dunkel. ?hz=… (100 bis 40000) gilt bis zum Neustart; ohne aktiven Zeitplan weckt es auch den Bildschirm.
   // Mit &save=1 wird der Wert gespeichert und das Display startet neu: Dann gilt die Taktung schon ab dem
   // Start, ohne Umschalten im laufenden Betrieb.
   guarded("/backlight", []() {

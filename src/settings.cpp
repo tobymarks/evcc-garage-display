@@ -8,6 +8,7 @@
 
 static Settings s;
 static Preferences prefs;
+static constexpr char SCREEN_WINDOW_KEY[] = "screenwin1";
 
 void settings::load() {
   prefs.begin("evcc", false);  // schreibbar öffnen, legt den Namespace beim ersten Start an
@@ -21,6 +22,7 @@ void settings::load() {
   s.rotation = prefs.getUChar("rot", DEFAULT_ROTATION);
   s.theme = prefs.getUChar("theme", DEFAULT_THEME);
   s.screenTimeoutMin = prefs.getUChar("timeout", DEFAULT_SCREEN_TIMEOUT_MIN);
+  s.screenWindow = screen::Window::fromStored(prefs.getUInt(SCREEN_WINDOW_KEY, 0));
   s.autoUpdate = prefs.getBool("autoupd", DEFAULT_AUTO_UPDATE);
   s.boostButton = prefs.getBool("boost", false);
   s.brightnessPct = prefs.getUChar("bright", DEFAULT_BRIGHTNESS_PCT);
@@ -73,6 +75,7 @@ void settings::save() {
   prefs.putUChar("rot", s.rotation);
   prefs.putUChar("theme", s.theme);
   prefs.putUChar("timeout", s.screenTimeoutMin);
+  prefs.putUInt(SCREEN_WINDOW_KEY, s.screenWindow.store());
   prefs.putBool("autoupd", s.autoUpdate);
   prefs.putBool("boost", s.boostButton);
   prefs.putUChar("bright", s.brightnessPct);

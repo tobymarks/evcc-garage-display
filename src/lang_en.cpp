@@ -160,6 +160,15 @@ static const lang::Pair PAIRS[] = {
     {"Drehung", "Rotation"},
     {"Design", "Theme"},
     {"Bildschirm ausschalten", "Turn screen off"},
+    {"Tägliches Einschalt-Zeitfenster", "Daily screen-on window"},
+    {"An ab (Ortszeit)", "On from (local time)"},
+    {"Aus ab (Ortszeit)", "Off from (local time)"},
+    {"Im Zeitfenster bleibt der Bildschirm an. Außerhalb wecken Antippen oder /wake ihn für höchstens "
+     "5 Minuten, bei „Nie“ für 1 Minute. Ohne gültige Uhrzeit bleibt das Verhalten unverändert.",
+     "The screen stays on during the window. Outside it, tap or use /wake to turn it on for up to 5 minutes, "
+     "or 1 minute if the timeout is set to ‘Never’. Without a valid clock, the screen behaves as usual."},
+    {"Nicht gespeichert: Bitte zwei unterschiedliche Uhrzeiten für das Zeitfenster eingeben.",
+     "Not saved: Enter two different times for the screen-on window."},
     {"Automatische Updates", "Automatic updates"},
     {"Nicht gespeichert: Das Feld „%s“ ist leer.", "Not saved: the field “%s” is empty."},
     {"Zurück zum Formular", "Back to the form"},
