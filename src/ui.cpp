@@ -62,6 +62,9 @@ static constexpr int HEADER_MIN_W = 300;  // Mindestbreite der Titelfläche zum 
 static constexpr int TITLE_GAP = 16;      // Abstand des Titels zum nächsten Element rechts
 static constexpr int SEG_H = 84;
 static constexpr int SEG_Y = 480 - MARGIN - SEG_H;  // Modusumschalter unten
+static constexpr int LOADPOINT_SEG_H = 72;
+static constexpr int FOOTER_Y = 438;
+static constexpr int STOP_H = 38;
 static constexpr int CONTENT_W = 480 - 2 * MARGIN;
 static constexpr int BAR_H = 40;   // Energiebalken wie in evcc, Werte stehen im Balken
 static constexpr int BAR_PAD = 6;  // Mindestabstand des Werts zum Rand seines Abschnitts
@@ -147,6 +150,9 @@ static lv_obj_t* segBg;
 static lv_obj_t* seg[3];
 static lv_obj_t* segLbl[3];
 static lv_obj_t* segSub[3];
+static lv_obj_t* btnStop;
+static lv_obj_t* lblStop;
+static bool stopPressed = false;
 static const ChargeMode SEG_MODES[3] = {ChargeMode::Smart, ChargeMode::Slow, ChargeMode::Fast};
 // Nur Text wie in evcc, dazu eine Zeile, die sagt, was der Modus tut.
 // "Smart" heißt wie in evcc; "Langsam" ist Smart mit "Immer laden".
@@ -229,6 +235,29 @@ static void onSegment(lv_event_t* e) {
   if (modeCb) modeCb(SEG_MODES[i]);
 }
 
+static bool canStop(const UiView& v) {
+  return !v.readOnly && !v.solar && v.wifiConnected && !v.stale && v.state.valid &&
+         v.pendingMode == ChargeMode::None && v.state.mode != ChargeMode::None && v.state.mode != ChargeMode::Off;
+}
+
+static void onStop(lv_event_t* e) {
+  switch (lv_event_get_code(e)) {
+    case LV_EVENT_PRESSED:
+      stopPressed = canStop(lastView);
+      break;
+    case LV_EVENT_LONG_PRESSED:
+      if (stopPressed && canStop(lastView) && modeCb) modeCb(ChargeMode::Off);
+      stopPressed = false;
+      break;
+    case LV_EVENT_PRESS_LOST:
+    case LV_EVENT_RELEASED:
+      stopPressed = false;
+      break;
+    default:
+      break;
+  }
+}
+
 static void onHeaderLongPress(lv_event_t*) {
   if (settingsCb) settingsCb();
 }
@@ -270,6 +299,7 @@ static void bounce(int dir) {
 }
 
 static void onGesture(lv_event_t*) {
+  stopPressed = false;
   if (!hasLastView || lastView.pageCount < 2) return;
   lv_indev_t* indev = lv_indev_active();
   const lv_dir_t dir = lv_indev_get_gesture_dir(indev);
@@ -634,6 +664,19 @@ static void buildMain() {
   const int extra = (inner - sum) / 3;
   for (int i = 0; i < 3; i++) lv_obj_set_width(seg[i], textW[i] + extra);
 
+  // Eigene Aktion unter den Modustasten: Antippen genügt bewusst nicht.
+  btnStop = makeBox(scrMain);
+  lv_obj_set_size(btnStop, 248, STOP_H);
+  lv_obj_set_pos(btnStop, 480 - MARGIN - 248, FOOTER_Y);
+  lv_obj_set_style_radius(btnStop, STOP_H / 2, 0);
+  lv_obj_set_style_border_width(btnStop, 1, 0);
+  lv_obj_set_style_bg_opa(btnStop, LV_OPA_COVER, LV_STATE_PRESSED);
+  lv_obj_add_flag(btnStop, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(btnStop, onStop, LV_EVENT_ALL, nullptr);
+  lblStop = makeLabel(btnStop, &font_16);
+  lv_label_set_text(lblStop, tr("Laden stoppen · 3 s halten"));
+  lv_obj_center(lblStop);
+
   // Punkte unter dem Modusumschalter, nur bei mehreren Ladepunkten
   dots = makeBox(scrMain);
   lv_obj_set_size(dots, LV_SIZE_CONTENT, DOT);
@@ -759,6 +802,9 @@ static void applyTheme() {
   }
   lv_obj_set_style_bg_color(segBg, t.box, 0);
   lv_obj_set_style_border_color(segBg, t.border, 0);
+  lv_obj_set_style_border_color(btnStop, t.border, 0);
+  lv_obj_set_style_bg_color(btnStop, t.pressed, LV_STATE_PRESSED);
+  lv_obj_set_style_text_color(lblStop, t.text, 0);
   lv_obj_set_style_text_color(lblMsgIcon, t.muted, 0);
   lv_obj_set_style_text_color(lblMsgTitle, t.text, 0);
   lv_obj_set_style_text_color(lblMsgText, t.muted, 0);
@@ -1072,6 +1118,9 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
     snprintf(buf, len, tr("Fahrzeug wird gewechselt …"));
   } else if (v.pendingLimit >= 0) {
     snprintf(buf, len, tr("Ladelimit wird gesetzt …"));
+  } else if (s.mode == ChargeMode::Off) {
+    color = t.warn;
+    snprintf(buf, len, tr("Ladepunkt ist aus – Modus wählen"));
   } else if (v.pendingCo2) {
     snprintf(buf, len, tr("CO2-Grenze wird gesetzt …"));
   } else if (!s.connected && house && s.minChargePower > 0) {
@@ -1087,9 +1136,6 @@ static void renderStatus(const UiView& v, bool house, char* buf, size_t len, lv_
     snprintf(buf, len, tr("Sonnenüberschuss"));
   } else if (!s.connected) {
     snprintf(buf, len, tr("Modus für die nächste Ladung wählen"));
-  } else if (s.modeOff) {
-    color = t.warn;
-    snprintf(buf, len, tr("Ladepunkt ist aus – Modus wählen"));
   } else if (s.charging) {
     int n = append(buf, len, 0, s.heating ? tr("Heizt") : tr("Lädt"));
     if (s.phasesActive > 0) n = append(buf, len, n, tr(" · %d-phasig"), s.phasesActive);
@@ -1259,10 +1305,15 @@ static void renderDots(const UiView& v) {
   const bool multi = v.pageCount > 1;
   setVisible(dots, multi);
   const int segY = SEG_Y - (multi ? DOTS_SHIFT : 0);
-  lv_obj_set_y(segBg, segY);
+  lv_obj_set_y(segBg, SEG_Y - DOTS_SHIFT);
+  lv_obj_set_height(segBg, LOADPOINT_SEG_H);
+  if (v.solar)
+    lv_obj_align(dots, LV_ALIGN_BOTTOM_MID, 0, -(MARGIN + DOTS_SHIFT - DOT) / 2);
+  else
+    lv_obj_align(dots, LV_ALIGN_TOP_LEFT, MARGIN, FOOTER_Y + (STOP_H - DOT) / 2);
   // Die Solarseite hat keine Modustasten: ihre Mitte reicht bis dorthin, wo sie sonst enden
   setVisible(segBg, !v.solar);
-  lv_obj_set_height(mid, (v.solar ? segY + SEG_H : segY) - HEADER_H);
+  lv_obj_set_height(mid, (v.solar ? segY + SEG_H : SEG_Y - DOTS_SHIFT) - HEADER_H);
   for (int i = 0; i < MAX_PAGES; i++) {
     setVisible(dot[i], i < v.pageCount);
     lv_obj_set_style_bg_color(dot[i], i == v.page ? t.text : t.muted, 0);
@@ -1575,6 +1626,9 @@ static void renderLoadpointTiles(const UiView& v, bool live) {
 void ui::render(const UiView& v) {
   const bool pageChanged = hasLastView && v.page != lastView.page;
   if (pageChanged) slideIn(v.page > lastView.page ? 1 : -1);
+  const bool stopAvailable = canStop(v);
+  if (pageChanged || !stopAvailable) stopPressed = false;
+  setVisible(btnStop, stopAvailable);
   lastView = v;
   hasLastView = true;
   const EvccState& s = v.state;
@@ -1723,7 +1777,8 @@ void ui::render(const UiView& v) {
   if (house || showPower) fitTileLabels();
 
   lv_label_set_text(segSub[1], s.heating ? tr("heizt immer") : tr(SEG_SUB[1]));
-  const bool pending = v.pendingMode != ChargeMode::None;
+  // Beim Stoppen bleibt der zuletzt abgefragte Modus aktiv, bis evcc „off“ meldet.
+  const bool pending = v.pendingMode != ChargeMode::None && v.pendingMode != ChargeMode::Off;
   renderSegments(pending ? v.pendingMode : s.mode, pending);
 }
 
@@ -1754,6 +1809,7 @@ void ui::begin(ModeCallback onMode, Callback onSettingsRequested, SwipeCallback 
 
 void ui::showMessage(const char* icon, const char* title, const char* text) {
   closePicker();
+  stopPressed = false;
   lv_label_set_text(lblMsgIcon, icon);
   lv_label_set_text(lblMsgTitle, title);
   lv_label_set_text(lblMsgText, text);

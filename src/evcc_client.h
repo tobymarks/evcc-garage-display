@@ -4,11 +4,12 @@
 
 #include "co2_limit.h"
 
-// Die drei Modi am Display. evcc ab 0.316 kennt intern nur off/smart/now:
+// Die drei regulären Modustasten. evcc ab 0.316 kennt intern nur off/smart/now:
 //   Smart  = smart + "immer laden" aus  → nur Sonnenüberschuss (heißt in evcc genauso)
 //   Slow   = smart + "immer laden" an   → mindestens Mindestleistung, mehr bei Sonne
 //   Fast   = now                        → volle Leistung
-enum class ChargeMode : uint8_t { None, Smart, Slow, Fast };
+// Off steht für den separaten Stopp, None für einen unbekannten Modus.
+enum class ChargeMode : uint8_t { None, Smart, Slow, Fast, Off };
 
 #define VEHICLE_NAME_LEN 48  // interner Name eines Fahrzeugs in evcc, mit Abschluss
 #define MAX_VEHICLES 16      // mehr Fahrzeuge lassen sich nicht durchtippen
@@ -21,7 +22,6 @@ struct EvccState {
 
   char title[32] = "";
   ChargeMode mode = ChargeMode::None;
-  bool modeOff = false;
 
   float chargePower = 0;    // W
   bool charging = false;

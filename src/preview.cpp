@@ -168,8 +168,7 @@ bool preview::scene(const char* name, EvccState& p, bool& stale) {
       p.limitEnergy = 30;
     }
   } else if (!strcmp(name, "off")) {
-    p.mode = ChargeMode::None;
-    p.modeOff = true;
+    p.mode = ChargeMode::Off;
   } else {
     return false;
   }
