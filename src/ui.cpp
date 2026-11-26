@@ -1280,10 +1280,11 @@ static void renderChart(const UiView& v) {
   lv_obj_invalidate(chartBlock);
 }
 
-static void renderPlants(const EvccSolar& d) {
+static void renderPlants(const EvccSolar& d, const pv::Peaks* peaks) {
   static constexpr int NAME_W = CONTENT_W - 130;  // Platz für "12,4 kW" rechts
-  float max = 1;
-  for (int i = 0; i < d.plantCount; i++) max = LV_MAX(max, d.plantPower[i]);
+  static constexpr pv::Peaks noPeaks = {};
+  float fractions[MAX_PV_PLANTS];
+  pv::scaleBars(d.plantId, d.plantPower, d.plantCount, d.plantTotal, peaks ? *peaks : noPeaks, fractions);
   plantModel.count = d.plantCount;
   char num[16];
   for (int i = 0; i < d.plantCount; i++) {
@@ -1302,7 +1303,7 @@ static void renderPlants(const EvccSolar& d) {
     }
     formatDecimal(num, sizeof(num), power / 1000.0f);
     snprintf(plantModel.value[i], sizeof(plantModel.value[0]), "%s kW", num);
-    const int width = (int)lroundf(power / max * CONTENT_W);
+    const int width = (int)lroundf(fractions[i] * CONTENT_W);
     plantModel.filled[i] = width >= PLANT_TRACK_H ? width : 0;  // schmaler ließe sich die Rundung nicht zeichnen
   }
   lv_obj_set_height(plantsBlock, 16 + d.plantCount * plantRowH() + (d.plantCount - 1) * PLANT_GAP);
@@ -1391,7 +1392,7 @@ static void renderSolar(const UiView& v, bool live) {
   }
   setVisible(barBlock, data && midSel == SOLAR_MID_FLOW && s.hasGrid && renderFlow(s, live));
   setVisible(plantsBlock, rows);
-  if (rows) renderPlants(d);
+  if (rows) renderPlants(d, v.solarPeaks);
   const bool hours = data && live && !rows && d.valid;
   setVisible(chartBlock, hours);
   if (hours) renderChart(v);

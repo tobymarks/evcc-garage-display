@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "config.h"
+#include "pv_scaling.h"
 
 // Ladepunktnummern liegen in 1…99. 0 folgt dem ersten Eintrag der Ladepunktliste.
 constexpr uint8_t START_SOLAR = 100;
@@ -29,6 +30,7 @@ struct Settings {
   uint8_t solarBig;          // Solarseite, große Zahl: SOLAR_BIG_…
   uint8_t solarMid;          // Solarseite, Mitte: SOLAR_MID_…
   uint8_t solarTile[3];      // Solarseite, Kacheln von links: SOLAR_TILE_…
+  pv::Peaks solarPeaks = {}; // optionale Nennleistung je evcc-Zähler
   uint8_t startPage;         // 0, Ladepunktnummer oder START_SOLAR; unabhängig von der Wischreihenfolge
   uint8_t solarPosition;     // Anzahl Ladepunkte vor der Solarseite, SOLAR_LAST = immer am Ende
   uint32_t backlightHz;      // Taktung der Hintergrundbeleuchtung ab dem Start: Schalter „Dimmen mit langsamer Taktung“ oder /backlight?hz=…&save=1 (#21)

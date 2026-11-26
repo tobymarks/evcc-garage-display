@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include "pv_scaling.h"
 
 // Die drei regulären Modustasten. evcc ab 0.316 kennt intern nur off/smart/now:
 //   Smart  = smart + "immer laden" aus  → nur Sonnenüberschuss (heißt in evcc genauso)
@@ -63,16 +64,17 @@ struct EvccState {
 // Solarseite: Erzeugung je Stunde und je Anlage. Die Stundenwerte liefert evcc unter
 // /api/history/energy (neuere Versionen); ohne sie bleibt valid false und die Seite zeigt nur,
 // was der normale Zustand hergibt.
-#define MAX_PV_PLANTS 3
+constexpr size_t MAX_PV_PLANTS = pv::MAX_PLANTS;
 struct EvccSolar {
   bool valid = false;             // Stundenwerte von heute liegen vor
   float hourEnergy[24] = {};      // kWh, je Stunde heute erzeugt (alle Anlagen)
   float hourForecast[24] = {};    // kWh, Prognose je Stunde heute
   float today = 0;                // kWh, heute bisher erzeugt
   float forecastToday = 0;        // kWh, Prognose für den ganzen Tag
-  uint8_t plantTotal = 0;         // PV-Anlagen in evcc
+  unsigned plantTotal = 0;        // PV-Anlagen in evcc
   uint8_t plantCount = 0;         // Zeilen in plantTitle/plantPower; bei mehr Anlagen fasst die letzte den Rest zusammen
   char plantTitle[MAX_PV_PLANTS][24] = {};
+  pv::MeterId plantId[MAX_PV_PLANTS] = {};  // evcc-Zählername; leer bei fehlender ID bzw. Sammelzeile
   float plantPower[MAX_PV_PLANTS] = {};  // W
 };
 
