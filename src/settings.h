@@ -4,6 +4,7 @@
 
 #include "config.h"
 #include "pv_scaling.h"
+#include "screen_schedule.h"
 
 // Ladepunktnummern liegen in 1…99. 0 folgt dem ersten Eintrag der Ladepunktliste.
 constexpr uint8_t START_SOLAR = 100;
@@ -19,6 +20,7 @@ struct Settings {
   uint8_t rotation;   // 0–3 (× 90°)
   uint8_t theme;      // 0 = automatisch, 1 = hell, 2 = dunkel
   uint8_t screenTimeoutMin;  // 0 = Bildschirm immer an
+  screen::Window screenWindow;
   bool autoUpdate;           // neue Firmware selbst installieren
   bool boostButton;          // Akku-Anzeige oben schaltet im Modus Smart Battery Boost
   uint8_t brightnessPct;     // Helligkeit 10–100 %
