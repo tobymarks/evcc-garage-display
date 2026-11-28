@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <lvgl.h>
 
+#include "icons.h"
 #include "lang.h"
 #include "ui.h"
 
@@ -42,6 +43,49 @@ static void aimAt(lv_obj_t* obj) {
   point = {(bounds.x1 + bounds.x2) / 2, (bounds.y1 + bounds.y2) / 2};
 }
 
+static void testEnergyFlowOrder() {
+  UiView view;
+  view.wifiConnected = true;
+  view.stale = false;
+  auto& s = view.state;
+  s.valid = s.connected = s.charging = s.hasGrid = true;
+  s.chargePower = 7500;
+  s.pvPower = 2000;
+  s.batterySoc = 50;
+  s.batteryPower = 2500;
+  s.gridPower = 3000;
+  auto segment = [](const char* text, const char* withIcon = nullptr) {
+    auto* label = withIcon ? findLabel(lv_screen_active(), withIcon) : nullptr;
+    if (!label) label = findLabel(lv_screen_active(), text);
+    assert(label);
+    auto* part = lv_obj_get_parent(label);
+    assert(!lv_obj_has_flag(part, LV_OBJ_FLAG_HIDDEN));
+    lv_area_t bounds;
+    lv_obj_get_coords(part, &bounds);
+    return bounds;
+  };
+  ui::render(view);
+  lv_obj_update_layout(lv_screen_active());
+  const auto sun = segment("2,0 kW", ICON_SUN " 2,0 kW");
+  const auto battery = segment("2,5 kW", ICON_BATTERY " 2,5 kW");
+  const auto grid = segment("3,0 kW");
+  assert(sun.x2 + 1 == battery.x1 && battery.x2 + 1 == grid.x1);
+
+  s.gridPower = -1500;
+  s.pvPower = 6000;
+  s.batteryPower = 0;
+  ui::render(view);
+  lv_obj_update_layout(lv_screen_active());
+  assert(segment("4,5 kW", ICON_SUN " 4,5 kW").x2 + 1 == segment("1,5 kW").x1);
+
+  s.hasGrid = false;
+  s.chargePower = 5000;
+  s.greenShare = 0.4f;
+  ui::render(view);
+  lv_obj_update_layout(lv_screen_active());
+  assert(segment("2,0 kW", ICON_SUN " 2,0 kW").x2 + 1 == segment("3,0 kW").x1);
+}
+
 int main() {
   lang::set(Lang::De);
   lv_init();
@@ -55,6 +99,7 @@ int main() {
   lv_indev_set_read_cb(input, readTouch);
   lv_indev_set_long_press_time(input, SETTINGS_LONG_PRESS_MS);
   ui::begin([](ChargeMode mode) { selected = mode; ++selectionCount; }, [] {}, [](int) {});
+  testEnergyFlowOrder();
 
   UiView view;
   view.wifiConnected = true;
@@ -118,5 +163,5 @@ int main() {
     touch(false, 100);
     assert(selectionCount == 2);
   }
-  puts("Stop charging touch tests passed");
+  puts("Energy-flow layout and stop-charging touch tests passed");
 }

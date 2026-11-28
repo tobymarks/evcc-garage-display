@@ -18,5 +18,5 @@ for src in src/fonts/*.c; do
   fonts+=("$obj")
 done
 "${CXX:-c++}" -std=c++17 "${flags[@]}" tools/sim/test_stop.cpp src/ui.cpp src/lang.cpp src/lang_en.cpp \
-  "${fonts[@]}" "$BUILD/lvgl/lib/liblvgl.a" -o "$BUILD/test-stop"
+  src/pv_scaling.cpp "${fonts[@]}" "$BUILD/lvgl/lib/liblvgl.a" -o "$BUILD/test-stop"
 "$BUILD/test-stop"
