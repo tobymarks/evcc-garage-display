@@ -843,7 +843,7 @@ static float surplus(const EvccState& s) {
 
 float ui::surplusPower(const EvccState& s) { return surplus(s); }
 
-// Energiebalken wie in evcc: Netzbezug, selbst genutzte Sonne, Akku entlädt, Einspeisung – zusammen das,
+// Energiebalken wie in evcc: selbst genutzte Sonne, Akku entlädt, Netzbezug, Einspeisung – zusammen das,
 // was gerade erzeugt und bezogen wird. Werte stehen im Abschnitt, sofern sie hineinpassen.
 // false, wenn nichts darzustellen ist.
 static bool renderFlow(const EvccState& s, bool live) {
@@ -871,9 +871,11 @@ static bool renderFlow(const EvccState& s, bool live) {
   const lv_color_t dark = lv_color_hex(0x28293E);
   const lv_color_t fg[FLOW_COUNT] = {night ? t.bg : lv_color_white(), dark, dark, dark};
   static const char* const ICONS[FLOW_COUNT] = {"", ICON_SUN " ", ICON_BATTERY " ", ""};
+  // Eigene Quellen zuerst; Netzbezug und Einspeisung stehen dahinter.
+  static constexpr FlowPart ORDER[] = {FLOW_SUN, FLOW_BATTERY, FLOW_GRID, FLOW_FEEDIN};
   float acc = 0;
   int x = 0;
-  for (int i = 0; i < FLOW_COUNT; i++) {
+  for (FlowPart i : ORDER) {
     acc += w[i];
     const int x2 = (int)lroundf(acc / total * CONTENT_W);  // aufsummiert, damit keine Rundungslücken entstehen
     const int width = x2 - x;
